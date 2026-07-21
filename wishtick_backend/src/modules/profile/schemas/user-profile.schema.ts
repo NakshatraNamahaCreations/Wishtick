@@ -1,0 +1,107 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
+
+export type UserProfileDocument = HydratedDocument<UserProfile>;
+
+@Schema({ _id: false })
+export class ProfilePreferences {
+  /** All of these hold taxonomy *keys*, validated against the taxonomy on write. */
+  @Prop({ type: [String], default: [] })
+  interests!: string[];
+
+  @Prop({ type: [String], default: [] })
+  favouriteColors!: string[];
+
+  @Prop({ type: String, default: null })
+  clothingSize!: string | null;
+
+  /** Optional per the scope — plenty of people will not want to share it. */
+  @Prop({ type: String, default: null })
+  shoeSize!: string | null;
+
+  @Prop({ type: [String], default: [] })
+  giftCategories!: string[];
+
+  @Prop({ type: [String], default: [] })
+  lifestyle!: string[];
+
+  @Prop({ type: [String], default: [] })
+  occasions!: string[];
+}
+
+export const ProfilePreferencesSchema = SchemaFactory.createForClass(ProfilePreferences);
+
+@Schema({ _id: false })
+export class ProfileContact {
+  @Prop({ type: String, default: null, trim: true })
+  city!: string | null;
+
+  @Prop({ type: String, default: null, trim: true })
+  country!: string | null;
+
+  /**
+   * Free-text delivery address. Never exposed on a public wishlist projection
+   * (Sprint 3) — a gifter needs to know *what* to send, not where someone lives.
+   */
+  @Prop({ type: String, default: null, trim: true })
+  deliveryAddress!: string | null;
+}
+
+export const ProfileContactSchema = SchemaFactory.createForClass(ProfileContact);
+
+/**
+ * Split from `User` on purpose. `User` is the identity record read on every
+ * authenticated request (JwtStrategy), so it stays small; the profile is read
+ * only when someone actually looks at it.
+ */
+@Schema({ collection: 'user_profiles', timestamps: true })
+export class UserProfile {
+  _id!: Types.ObjectId;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'User', required: true })
+  userId!: Types.ObjectId;
+
+  @Prop({ type: String, trim: true, maxlength: 120, default: null })
+  displayName!: string | null;
+
+  @Prop({ type: String, default: null })
+  photoUrl!: string | null;
+
+  /** Media doc backing photoUrl, so an orphaned upload can be traced/cleaned. */
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'Media', default: null })
+  photoMediaId!: Types.ObjectId | null;
+
+  @Prop({ type: String, maxlength: 280, default: null, trim: true })
+  bio!: string | null;
+
+  /**
+   * Date-only, stored UTC-midnight. Drives the birthday reel release (Sprint 10),
+   * which is why the timezone lives beside it — "their birthday" is local to
+   * them, not to the server.
+   */
+  @Prop({ type: Date, default: null })
+  dateOfBirth!: Date | null;
+
+  @Prop({ type: String, default: 'UTC' })
+  timezone!: string;
+
+  @Prop({ type: ProfileContactSchema, default: () => ({}) })
+  contact!: ProfileContact;
+
+  @Prop({ type: ProfilePreferencesSchema, default: () => ({}) })
+  preferences!: ProfilePreferences;
+
+  /** Steps saved so far, so a client can resume a half-finished onboarding. */
+  @Prop({ type: [String], default: [] })
+  completedSteps!: string[];
+
+  @Prop({ type: Date, default: null })
+  onboardingCompletedAt!: Date | null;
+
+  createdAt!: Date;
+  updatedAt!: Date;
+}
+
+export const UserProfileSchema = SchemaFactory.createForClass(UserProfile);
+
+UserProfileSchema.index({ userId: 1 }, { unique: true });
