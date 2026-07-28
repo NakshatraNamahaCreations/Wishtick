@@ -15,7 +15,7 @@ import {
   Min,
 } from 'class-validator';
 import { UserStatus } from 'src/common/enums/user-role.enum';
-import { AdminRole } from '../admin.types';
+import { AdminRole, AdminStatus } from '../admin.types';
 import { ModerationAction, ReportStatus, ReportTargetType } from '../moderation.types';
 
 const trim = ({ value }: { value: unknown }): unknown =>
@@ -126,6 +126,21 @@ export class ModerationQueueQueryDto {
   @IsOptional()
   @IsEnum(ReportStatus)
   status?: ReportStatus;
+
+  @ApiPropertyOptional({ minimum: 1, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 200, default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
 }
 
 export class ModerationActionDto {
@@ -164,13 +179,75 @@ export class AuditQueryDto {
   @IsString()
   targetId?: string;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 500 })
+  @ApiPropertyOptional({ description: 'e.g. user.suspend, moderation.remove' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  action?: string;
+
+  @ApiPropertyOptional({ description: 'Filter to one admin actor.' })
+  @IsOptional()
+  @IsString()
+  actorAdminId?: string;
+
+  @ApiPropertyOptional({ description: 'Start day, YYYY-MM-DD (UTC), inclusive.' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'End day, YYYY-MM-DD (UTC), inclusive.' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  to?: string;
+
+  @ApiPropertyOptional({ minimum: 1, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 500, default: 50 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(500)
   limit?: number;
+}
+
+export class UpdateAdminDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Transform(trim)
+  name?: string;
+
+  @ApiPropertyOptional({ enum: AdminRole, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsEnum(AdminRole, { each: true })
+  roles?: AdminRole[];
+
+  @ApiPropertyOptional({ enum: AdminStatus })
+  @IsOptional()
+  @IsEnum(AdminStatus)
+  status?: AdminStatus;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  ipAllowlist?: string[];
+}
+
+export class ResetAdminPasswordDto {
+  @ApiProperty({ minLength: 12 })
+  @IsString()
+  @Length(12, 128)
+  password!: string;
 }
 
 export class CreateReportDto {

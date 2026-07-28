@@ -7,7 +7,7 @@ import { ErrorCode } from 'src/common/errors/error-codes';
 import type { AppConfig } from 'src/config/configuration';
 import { PasswordService } from 'src/modules/auth/services/password.service';
 import { AdminTokenService } from './admin-token.service';
-import { AdminRole, AdminStatus, permissionsFor } from './admin.types';
+import { AdminRole, AdminStatus, type AuthenticatedAdmin, permissionsFor } from './admin.types';
 import { Admin, type AdminDocument } from './schemas/admin.schema';
 import { TotpService } from './totp.service';
 
@@ -145,6 +145,120 @@ export class AdminService implements OnModuleInit {
         throw new AppException(ErrorCode.CONFLICT, 'An admin with this email already exists', 409);
       }
       throw err;
+    }
+  }
+
+  /**
+   * Update an admin's name, roles, status, or IP allowlist.
+   *
+   * Two lockout guards, both of which have to live here rather than in the UI:
+   * an operator must not be able to disable or demote *themselves* out of the
+   * panel, and the last active super-admin must not be removable — either one
+   * leaves nobody who can administer the platform, and the only recovery is a
+   * manual database write.
+   */
+  async update(
+    adminId: string,
+    input: {
+      name?: string;
+      roles?: AdminRole[];
+      status?: AdminStatus;
+      ipAllowlist?: string[];
+    },
+    actor: AuthenticatedAdmin,
+  ): Promise<AdminDocument> {
+    const admin = await this.findAny(adminId);
+    const isSelf = admin._id.toString() === actor.id;
+
+    if (isSelf && input.status === AdminStatus.DISABLED) {
+      throw new AppException(ErrorCode.ADMIN_FORBIDDEN, 'You cannot disable your own account', 403);
+    }
+    if (isSelf && input.roles && !input.roles.includes(AdminRole.SUPER_ADMIN)) {
+      throw new AppException(
+        ErrorCode.ADMIN_FORBIDDEN,
+        'You cannot remove your own super-admin role',
+        403,
+      );
+    }
+
+    const losesSuperAdmin =
+      (input.roles && !input.roles.includes(AdminRole.SUPER_ADMIN)) ||
+      input.status === AdminStatus.DISABLED;
+    if (admin.roles.includes(AdminRole.SUPER_ADMIN) && losesSuperAdmin) {
+      await this.assertNotLastSuperAdmin(admin._id.toString());
+    }
+
+    if (input.name !== undefined) admin.name = input.name;
+    if (input.roles !== undefined) admin.roles = input.roles;
+    if (input.ipAllowlist !== undefined) admin.ipAllowlist = input.ipAllowlist;
+    if (input.status !== undefined) {
+      admin.status = input.status;
+      // Disabling must end their live sessions, not just block the next login.
+      if (input.status === AdminStatus.DISABLED) admin.tokensInvalidBefore = new Date();
+    }
+
+    await admin.save();
+    return admin;
+  }
+
+  /**
+   * Set a new password for an admin, ending every session they hold.
+   *
+   * Leaving old tokens valid after a credential reset would mean a compromised
+   * session survives the very action taken to stop it.
+   */
+  async resetPassword(adminId: string, password: string): Promise<AdminDocument> {
+    const admin = await this.findAny(adminId);
+    admin.passwordHash = await this.passwords.hash(password);
+    admin.tokensInvalidBefore = new Date();
+    await admin.save();
+    return admin;
+  }
+
+  /**
+   * The auditable fields of an admin, before a mutation.
+   *
+   * The audit diff is computed over these snapshots, so an update records
+   * `roles: [moderator] -> [support]` rather than "something changed". Secrets
+   * (passwordHash, totpSecret) are deliberately absent — an audit log that
+   * quotes a credential is a credential leak with a timestamp.
+   */
+  async snapshot(adminId: string): Promise<Record<string, unknown>> {
+    const admin = await this.findAny(adminId);
+    return AdminService.snapshotOf(admin);
+  }
+
+  static snapshotOf(admin: AdminDocument): Record<string, unknown> {
+    return {
+      name: admin.name,
+      roles: [...admin.roles],
+      status: admin.status,
+      ipAllowlist: [...admin.ipAllowlist],
+    };
+  }
+
+  /** Unlike `findActive`, this returns disabled admins too — they are editable. */
+  private async findAny(adminId: string): Promise<AdminDocument> {
+    if (!Types.ObjectId.isValid(adminId)) {
+      throw new AppException(ErrorCode.ADMIN_NOT_FOUND, 'Admin not found', 404);
+    }
+    const admin = await this.adminModel.findById(adminId).exec();
+    if (!admin) throw new AppException(ErrorCode.ADMIN_NOT_FOUND, 'Admin not found', 404);
+    return admin;
+  }
+
+  private async assertNotLastSuperAdmin(excludingId: string): Promise<void> {
+    const others = await this.adminModel.countDocuments({
+      _id: { $ne: new Types.ObjectId(excludingId) },
+      roles: AdminRole.SUPER_ADMIN,
+      status: AdminStatus.ACTIVE,
+    });
+    if (others === 0) {
+      throw new AppException(
+        ErrorCode.ADMIN_FORBIDDEN,
+        'This is the last active super-admin. Promote another account first.',
+        409,
+      );
     }
   }
 

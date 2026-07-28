@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Ip,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -27,7 +28,9 @@ import {
   ListUsersQueryDto,
   ModerationActionDto,
   ModerationQueueQueryDto,
+  ResetAdminPasswordDto,
   SuspendUserDto,
+  UpdateAdminDto,
 } from './dto/admin.dto';
 
 const todayBucket = (): string => new Date().toISOString().slice(0, 10);
@@ -75,6 +78,53 @@ export class AdminController {
   @ApiOperation({ summary: 'List admins' })
   async listAdmins(): Promise<AdminView[]> {
     return (await this.admins.list()).map((a) => AdminService.toView(a));
+  }
+
+  @Patch('admins/:id')
+  @RequirePermission(AdminPermission.ADMINS_MANAGE)
+  @ApiOperation({ summary: 'Update name, roles, status, or IP allowlist' })
+  async updateAdmin(
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Param('id') id: string,
+    @Body() dto: UpdateAdminDto,
+    @Ip() ip: string,
+  ): Promise<AdminView> {
+    const before = await this.admins.snapshot(id);
+    const updated = await this.admins.update(id, dto, actor);
+    await this.audit.record({
+      actor,
+      action: 'admin.update',
+      targetType: 'admin',
+      targetId: id,
+      before,
+      after: AdminService.snapshotOf(updated),
+      ip: ip ?? null,
+    });
+    return AdminService.toView(updated);
+  }
+
+  @Post('admins/:id/password')
+  @RequirePermission(AdminPermission.ADMINS_MANAGE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set a new password, ending every session that admin holds' })
+  async resetAdminPassword(
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Param('id') id: string,
+    @Body() dto: ResetAdminPasswordDto,
+    @Ip() ip: string,
+  ): Promise<AdminView> {
+    const updated = await this.admins.resetPassword(id, dto.password);
+    await this.audit.record({
+      actor,
+      action: 'admin.password_reset',
+      targetType: 'admin',
+      targetId: id,
+      // The password itself is never recorded — only that it changed and that
+      // every session was invalidated as a result.
+      after: { sessionsInvalidated: true },
+      ip: ip ?? null,
+    });
+    return AdminService.toView(updated);
   }
 
   // ── Users ────────────────────────────────────────────────────────────────────
@@ -138,7 +188,19 @@ export class AdminController {
   @RequirePermission(AdminPermission.MODERATION_VIEW)
   @ApiOperation({ summary: 'The report queue, prioritized by severity then age' })
   moderationQueue(@Query() query: ModerationQueueQueryDto): Promise<unknown> {
-    return this.moderation.queue({ targetType: query.type, status: query.status });
+    return this.moderation.queue({
+      targetType: query.type,
+      status: query.status,
+      page: query.page,
+      limit: query.limit,
+    });
+  }
+
+  @Get('moderation/reports/:id/target')
+  @RequirePermission(AdminPermission.MODERATION_VIEW)
+  @ApiOperation({ summary: 'The reported content itself, normalized across types' })
+  moderationTarget(@Param('id') id: string): Promise<unknown> {
+    return this.moderation.resolveTarget(id);
   }
 
   @Post('moderation/reports/:id/act')
@@ -184,5 +246,12 @@ export class AdminController {
   @ApiOperation({ summary: 'The append-only audit trail' })
   auditLog(@Query() query: AuditQueryDto): Promise<unknown> {
     return this.audit.list(query);
+  }
+
+  @Get('audit/actions')
+  @RequirePermission(AdminPermission.AUDIT_VIEW)
+  @ApiOperation({ summary: 'Distinct action names, for populating a filter' })
+  auditActions(): Promise<string[]> {
+    return this.audit.actions();
   }
 }

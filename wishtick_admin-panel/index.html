@@ -1,0 +1,54 @@
+<!doctype html>
+<!--
+  data-theme="light" pins the panel to the light palette regardless of the
+  operating system's colour-scheme preference.
+
+  Set here on the static HTML rather than from React, so the correct palette is
+  applied before first paint — setting it after hydration would show a flash of
+  the OS theme on every load.
+
+  The dark tokens are intact in src/styles/index.css and still verified by
+  `npm run verify:contrast`. To follow the OS again, delete this attribute; to
+  offer a toggle, write "dark" or "light" to it at runtime.
+-->
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <!--
+      Strict CSP. This is the mitigation the sessionStorage token decision
+      depends on (see design-system.md / README): with no inline scripts and no
+      third-party origins, an injected <script> cannot run and therefore cannot
+      read the token.
+
+      A <meta> CSP covers everything except frame-ancestors, report-to, and
+      sandbox, which are header-only — serve those from the host too. The
+      recommended header set is in README.md.
+
+      style-src keeps 'unsafe-inline' because React writes element style
+      attributes (chart bar widths). Those are data, not code: a style attribute
+      cannot execute script in any current browser. Removing it would require
+      nonce-per-render, which buys nothing here.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data:;
+               font-src 'self';
+               connect-src 'self' http://localhost:3000 https:;
+               object-src 'none';
+               base-uri 'self';
+               form-action 'self';
+               frame-src 'none';
+               worker-src 'self'"
+    />
+    <title>Wishtick Admin</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

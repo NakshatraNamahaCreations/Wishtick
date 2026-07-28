@@ -7,6 +7,7 @@ import { AppException } from 'src/common/errors/app.exception';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import { QUEUE } from 'src/infra/queue/queue.constants';
 import { Message, type MessageDocument } from 'src/modules/chat/schemas/message.schema';
+import { EventStatus } from 'src/modules/events/event.types';
 import { Event, type EventDocument } from 'src/modules/events/schemas/event.schema';
 import { NotificationService } from 'src/modules/notifications/notification.service';
 import { NotificationType } from 'src/modules/notifications/notification.types';
@@ -26,6 +27,7 @@ import { AdminUsersService } from './admin-users.service';
 import type { AuthenticatedAdmin } from './admin.types';
 import { AuditService } from './audit.service';
 import {
+  type ModerationTargetView,
   ModerationAction,
   ReportSource,
   ReportStatus,
@@ -121,20 +123,207 @@ export class ModerationService {
 
   // ── Queue (admin) ────────────────────────────────────────────────────────────
 
+  /** Shared lookup: an invalid id and a missing report are the same 404. */
+  private async loadReport(reportId: string): Promise<ReportDocument> {
+    if (!Types.ObjectId.isValid(reportId)) {
+      throw new AppException(ErrorCode.REPORT_NOT_FOUND, 'Report not found', 404);
+    }
+    const report = await this.reportModel.findById(reportId).exec();
+    if (!report) throw new AppException(ErrorCode.REPORT_NOT_FOUND, 'Report not found', 404);
+    return report;
+  }
+
+  /**
+   * The report queue, worst-first.
+   *
+   * Returns a paginated envelope matching `GET /admin/users`, not a bare array:
+   * a backlog is exactly the situation where the operator needs to page, and
+   * the previous fixed 50-item slice made anything beyond it unreachable.
+   */
   async queue(filters: {
     targetType?: ReportTargetType;
     status?: ReportStatus;
+    page?: number;
     limit?: number;
-  }): Promise<ReportDocument[]> {
+  }): Promise<{ items: ReportDocument[]; total: number; page: number; limit: number }> {
     const query: Record<string, unknown> = {};
     query.status = filters.status ?? ReportStatus.OPEN;
     if (filters.targetType) query.targetType = filters.targetType;
-    // Prioritized: highest severity first, then oldest.
-    return this.reportModel
-      .find(query)
-      .sort({ severity: -1, createdAt: 1 })
-      .limit(Math.min(filters.limit ?? 50, 200))
-      .exec();
+
+    const page = Math.max(1, filters.page ?? 1);
+    const limit = Math.min(Math.max(1, filters.limit ?? 50), 200);
+
+    const [items, total] = await Promise.all([
+      this.reportModel
+        .find(query)
+        // Severity first, then oldest — the longest-waiting serious report wins.
+        .sort({ severity: -1, createdAt: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      this.reportModel.countDocuments(query).exec(),
+    ]);
+
+    return { items, total, page, limit };
+  }
+
+  /**
+   * Resolve a report's target into something a human can judge.
+   *
+   * Without this the queue hands a moderator a type and an ObjectId and asks
+   * them to decide — which is not a decision, it is a coin flip with an audit
+   * trail. A missing target is NOT an error: content can be hard-deleted after
+   * being reported, and the report still needs resolving.
+   */
+  async resolveTarget(reportId: string): Promise<ModerationTargetView> {
+    const report = await this.loadReport(reportId);
+    const id = report.targetId;
+
+    const base = {
+      targetType: report.targetType,
+      targetId: id,
+      exists: false,
+      title: null,
+      body: null,
+      mediaUrl: null,
+      authorId: null,
+      state: null,
+      createdAt: null,
+      fields: {},
+    } satisfies ModerationTargetView;
+
+    if (!Types.ObjectId.isValid(id)) return base;
+
+    switch (report.targetType) {
+      case ReportTargetType.MESSAGE: {
+        const msg = await this.messageModel.findById(id).exec();
+        if (!msg) return base;
+        return {
+          ...base,
+          exists: true,
+          title: 'Chat message',
+          body: msg.body ?? null,
+          authorId: msg.senderId?.toString() ?? null,
+          state: msg.deletedAt ? 'deleted' : null,
+          createdAt: msg.createdAt ?? null,
+          fields: {
+            kind: msg.kind ?? null,
+            chatId: msg.chatId?.toString() ?? null,
+            edited: msg.editedAt ? true : false,
+            attachments: msg.attachments?.length ?? 0,
+          },
+        };
+      }
+
+      case ReportTargetType.WISH: {
+        const wish = await this.wishModel.findById(id).exec();
+        if (!wish) return base;
+        return {
+          ...base,
+          exists: true,
+          title: `${wish.kind ?? 'text'} wish`,
+          body: wish.text ?? null,
+          mediaUrl: wish.mediaId?.toString() ?? null,
+          authorId: wish.authorId?.toString() ?? null,
+          state:
+            wish.moderationStatus === ModerationStatus.REJECTED
+              ? 'rejected'
+              : (wish.moderationStatus ?? null),
+          createdAt: wish.createdAt ?? null,
+          fields: {
+            authorName: wish.authorName ?? null,
+            collectionId: wish.collectionId?.toString() ?? null,
+            durationMs: wish.durationMs ?? null,
+          },
+        };
+      }
+
+      case ReportTargetType.REEL: {
+        const reel = await this.reelModel.findById(id).exec();
+        if (!reel) return base;
+        return {
+          ...base,
+          exists: true,
+          title: 'Birthday reel',
+          body: null,
+          mediaUrl: reel.reelMediaUrl ?? null,
+          authorId: reel.initiatorId?.toString() ?? null,
+          state: reel.reelMediaUrl ? (reel.status ?? null) : 'media removed',
+          createdAt: reel.createdAt ?? null,
+          fields: {
+            status: reel.status ?? null,
+            recipientUserId: reel.recipientUserId?.toString() ?? null,
+            releaseAt: reel.releaseAt ? reel.releaseAt.toISOString() : null,
+          },
+        };
+      }
+
+      case ReportTargetType.WISHLIST: {
+        const wl = await this.wishlistModel.findById(id).exec();
+        if (!wl) return base;
+        return {
+          ...base,
+          exists: true,
+          title: wl.title ?? 'Untitled wishlist',
+          body: wl.description ?? null,
+          mediaUrl: wl.coverUrl ?? null,
+          authorId: wl.ownerId?.toString() ?? null,
+          state: wl.archivedAt ? 'archived' : null,
+          createdAt: wl.createdAt ?? null,
+          fields: {
+            visibility: wl.visibility ?? null,
+            itemCount: wl.stats?.itemCount ?? null,
+          },
+        };
+      }
+
+      case ReportTargetType.EVENT: {
+        const event = await this.eventModel.findById(id).exec();
+        if (!event) return base;
+        return {
+          ...base,
+          exists: true,
+          title: event.title ?? 'Untitled event',
+          body: event.description ?? null,
+          mediaUrl: event.coverUrl ?? null,
+          authorId: event.hostId?.toString() ?? null,
+          state: event.status === EventStatus.CANCELLED ? 'cancelled' : (event.status ?? null),
+          createdAt: event.createdAt ?? null,
+          fields: {
+            type: event.type ?? null,
+            visibility: event.visibility ?? null,
+            startsAt: event.startsAt ? event.startsAt.toISOString() : null,
+          },
+        };
+      }
+
+      case ReportTargetType.USER: {
+        // Reuse the admin user projection so the moderator sees the same record
+        // the Users screen would show, rather than a second, divergent view.
+        try {
+          const user = await this.users.getDetail(id);
+          return {
+            ...base,
+            exists: true,
+            title: user.name ?? user.email ?? user.phone ?? 'Anonymized account',
+            body: null,
+            authorId: user.id,
+            state: user.status === 'active' ? null : user.status,
+            createdAt: user.createdAt ?? null,
+            fields: {
+              email: user.email,
+              phone: user.phone,
+              status: user.status,
+              suspendedReason: user.suspendedReason,
+              wishlists: user.counts.wishlists,
+              giftsGiven: user.counts.giftsGiven,
+            },
+          };
+        } catch {
+          return base;
+        }
+      }
+    }
   }
 
   // ── Actions (admin, audited) ────────────────────────────────────────────────
@@ -146,11 +335,7 @@ export class ModerationService {
     ip: string | null,
     reason: string | null,
   ): Promise<ReportDocument> {
-    if (!Types.ObjectId.isValid(reportId)) {
-      throw new AppException(ErrorCode.REPORT_NOT_FOUND, 'Report not found', 404);
-    }
-    const report = await this.reportModel.findById(reportId).exec();
-    if (!report) throw new AppException(ErrorCode.REPORT_NOT_FOUND, 'Report not found', 404);
+    const report = await this.loadReport(reportId);
     if (report.status === ReportStatus.RESOLVED || report.status === ReportStatus.DISMISSED) {
       throw new AppException(
         ErrorCode.REPORT_ALREADY_HANDLED,

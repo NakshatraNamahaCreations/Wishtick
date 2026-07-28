@@ -255,8 +255,8 @@ describe('Admin panel, moderation & analytics (e2e)', () => {
           .query({ targetType: 'user', targetId: user.userId })
           .set(auth(token))
           .expect(200)
-      ).body as Envelope<{ action: string }[]>;
-      const actions = audit.data.map((a) => a.action);
+      ).body as Envelope<{ items: { action: string }[]; total: number }>;
+      const actions = audit.data.items.map((a) => a.action);
       expect(actions).toContain('user.suspend');
       expect(actions).toContain('user.reactivate');
     });
@@ -281,15 +281,16 @@ describe('Admin panel, moderation & analytics (e2e)', () => {
           .query({ targetType: 'user', targetId: user.userId })
           .set(auth(token))
           .expect(200)
-      ).body as Envelope<
-        {
+      ).body as Envelope<{
+        items: {
           action: string;
           actorEmail: string;
           diff: { field: string; before: unknown; after: unknown }[];
-        }[]
-      >;
+        }[];
+        total: number;
+      }>;
 
-      const entry = audit.data.find((a) => a.action === 'user.suspend');
+      const entry = audit.data.items.find((a) => a.action === 'user.suspend');
       expect(entry).toBeDefined();
       expect(entry!.actorEmail).toBe(ADMIN_EMAIL);
       const statusChange = entry!.diff.find((d) => d.field === 'status');
@@ -347,6 +348,142 @@ describe('Admin panel, moderation & analytics (e2e)', () => {
 
   // ── Moderation: report → queue → act (audited) ───────────────────────────────
 
+  describe('admin management', () => {
+    it('cannot disable your own account, or demote yourself out of the panel', async () => {
+      const token = await adminToken();
+      const me = (await request(server()).get(`${V1}/admin/auth/me`).set(auth(token)).expect(200))
+        .body as Envelope<{ id: string }>;
+
+      // Self-disable is refused — otherwise an operator can lock themselves out
+      // and the only recovery is a manual database write.
+      const disabled = await request(server())
+        .patch(`${V1}/admin/admins/${me.data.id}`)
+        .set(auth(token))
+        .send({ status: 'disabled' })
+        .expect(403);
+      expect((disabled.body as { error: { code: string } }).error.code).toBe('ADMIN_FORBIDDEN');
+
+      // Same for removing your own super-admin role.
+      await request(server())
+        .patch(`${V1}/admin/admins/${me.data.id}`)
+        .set(auth(token))
+        .send({ roles: ['support'] })
+        .expect(403);
+
+      // And the account is untouched.
+      const after = (
+        await request(server()).get(`${V1}/admin/auth/me`).set(auth(token)).expect(200)
+      ).body as Envelope<{ roles: string[] }>;
+      expect(after.data.roles).toContain('super_admin');
+    });
+
+    it('updates a second admin and records a readable diff', async () => {
+      const token = await adminToken();
+      const created = (
+        await request(server())
+          .post(`${V1}/admin/admins`)
+          .set(auth(token))
+          .send({
+            email: `mod-${Date.now()}@wishtick.test`,
+            password: 'a-long-enough-password',
+            name: 'Mod One',
+            roles: ['moderator'],
+          })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      const updated = (
+        await request(server())
+          .patch(`${V1}/admin/admins/${created.data.id}`)
+          .set(auth(token))
+          .send({ roles: ['support'], name: 'Support One' })
+          .expect(200)
+      ).body as Envelope<{ roles: string[]; name: string; permissions: string[] }>;
+
+      expect(updated.data.roles).toEqual(['support']);
+      expect(updated.data.name).toBe('Support One');
+      // Permissions are recomputed from roles, not stored.
+      expect(updated.data.permissions).toContain('users:manage');
+
+      const audit = (
+        await request(server())
+          .get(`${V1}/admin/audit`)
+          .query({ targetType: 'admin', targetId: created.data.id })
+          .set(auth(token))
+          .expect(200)
+      ).body as Envelope<{
+        items: { action: string; diff: { field: string; before: unknown; after: unknown }[] }[];
+      }>;
+      const entry = audit.data.items.find((a) => a.action === 'admin.update');
+      expect(entry).toBeDefined();
+      const roleChange = entry!.diff.find((d) => d.field === 'roles');
+      expect(roleChange).toEqual({ field: 'roles', before: ['moderator'], after: ['support'] });
+    });
+
+    it('resetting a password never records the password itself', async () => {
+      const token = await adminToken();
+      const created = (
+        await request(server())
+          .post(`${V1}/admin/admins`)
+          .set(auth(token))
+          .send({
+            email: `pw-${Date.now()}@wishtick.test`,
+            password: 'original-password-1',
+            name: 'Pw Test',
+            roles: ['analyst'],
+          })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      await request(server())
+        .post(`${V1}/admin/admins/${created.data.id}/password`)
+        .set(auth(token))
+        .send({ password: 'a-brand-new-password' })
+        .expect(200);
+
+      const audit = (
+        await request(server())
+          .get(`${V1}/admin/audit`)
+          .query({ targetType: 'admin', targetId: created.data.id })
+          .set(auth(token))
+          .expect(200)
+      ).body as Envelope<{ items: { action: string }[] }>;
+      expect(audit.data.items.map((a) => a.action)).toContain('admin.password_reset');
+      // An audit log that quotes a credential is a credential leak with a timestamp.
+      expect(JSON.stringify(audit.data)).not.toContain('a-brand-new-password');
+    });
+
+    it('paginates the audit log and filters it by day', async () => {
+      const token = await adminToken();
+      const today = new Date().toISOString().slice(0, 10);
+
+      const page1 = (
+        await request(server())
+          .get(`${V1}/admin/audit`)
+          .query({ page: 1, limit: 2, from: today, to: today })
+          .set(auth(token))
+          .expect(200)
+      ).body as Envelope<{ items: unknown[]; total: number; page: number; limit: number }>;
+
+      expect(page1.data.page).toBe(1);
+      expect(page1.data.limit).toBe(2);
+      expect(page1.data.items.length).toBeLessThanOrEqual(2);
+      // `to` is inclusive of the whole day — entries written seconds ago must match.
+      expect(page1.data.total).toBeGreaterThan(0);
+
+      // A range that ended yesterday must exclude today's entries.
+      const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      const past = (
+        await request(server())
+          .get(`${V1}/admin/audit`)
+          .query({ to: yesterday })
+          .set(auth(token))
+          .expect(200)
+      ).body as Envelope<{ total: number }>;
+      expect(past.data.total).toBeLessThan(page1.data.total);
+    });
+  });
+
   describe('moderation flow', () => {
     it('carries a user report through the queue to a removal, deduped and audited', async () => {
       const token = await adminToken();
@@ -383,10 +520,36 @@ describe('Admin panel, moderation & analytics (e2e)', () => {
       // It appears in the moderator queue.
       const queue = (
         await request(server()).get(`${V1}/admin/moderation/queue`).set(auth(token)).expect(200)
-      ).body as Envelope<{ _id: string; targetId: string; status: string }[]>;
-      const queued = queue.data.find((r) => r.targetId === wishlistId);
+      ).body as Envelope<{
+        items: { _id: string; targetId: string; status: string }[];
+        total: number;
+      }>;
+      const queued = queue.data.items.find((r) => r.targetId === wishlistId);
       expect(queued).toBeDefined();
       expect(queued!.status).toBe('open');
+
+      // The queue is paginated, not a bare array — a backlog must be reachable.
+      expect(typeof queue.data.total).toBe('number');
+
+      // And the reported content itself resolves, so the moderator can judge it
+      // rather than acting on an opaque id.
+      const target = (
+        await request(server())
+          .get(`${V1}/admin/moderation/reports/${first.data.id}/target`)
+          .set(auth(token))
+          .expect(200)
+      ).body as Envelope<{
+        targetType: string;
+        exists: boolean;
+        title: string | null;
+        authorId: string | null;
+        state: string | null;
+      }>;
+      expect(target.data.targetType).toBe('wishlist');
+      expect(target.data.exists).toBe(true);
+      expect(target.data.title).toBeTruthy();
+      expect(target.data.authorId).toBeTruthy();
+      expect(target.data.state).toBeNull(); // not yet archived
 
       // Moderator removes the content.
       await request(server())
@@ -398,8 +561,8 @@ describe('Admin panel, moderation & analytics (e2e)', () => {
       // The report is resolved and no longer open in the queue.
       const after = (
         await request(server()).get(`${V1}/admin/moderation/queue`).set(auth(token)).expect(200)
-      ).body as Envelope<{ targetId: string }[]>;
-      expect(after.data.find((r) => r.targetId === wishlistId)).toBeUndefined();
+      ).body as Envelope<{ items: { targetId: string }[] }>;
+      expect(after.data.items.find((r) => r.targetId === wishlistId)).toBeUndefined();
 
       // The action is in the audit trail.
       const audit = (
@@ -408,8 +571,8 @@ describe('Admin panel, moderation & analytics (e2e)', () => {
           .query({ targetType: 'wishlist', targetId: wishlistId })
           .set(auth(token))
           .expect(200)
-      ).body as Envelope<{ action: string }[]>;
-      expect(audit.data.map((a) => a.action)).toContain('moderation.remove');
+      ).body as Envelope<{ items: { action: string }[]; total: number }>;
+      expect(audit.data.items.map((a) => a.action)).toContain('moderation.remove');
     });
   });
 

@@ -1,0 +1,212 @@
+@import '@fontsource/poppins/400.css';
+@import '@fontsource/poppins/500.css';
+@import '@fontsource/poppins/600.css';
+@import '@fontsource/poppins/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens — see design-system.md.
+ *
+ * Every value is defined three times: once as the light default, once under
+ * prefers-color-scheme (the OS signal), and once under an explicit data-theme
+ * (the in-app toggle, which must win over the OS in BOTH directions).
+ * Components reference only the token names, never these literals.
+ */
+:root {
+  --ground: #efeff2;
+  --surface: #ffffff;
+  --surface-2: #fbfbfc;
+  --ink: #14141a;
+  /* Greys darkened to clear 4.5:1 on every ground they sit on. The original
+     values were 2.3–3.2:1 — legible to me, not to a low-vision operator. */
+  --muted: #666673;
+  --muted-soft: #70707e;
+  /* Decorative dividers only. Anything delineating a control uses
+     --field-border, which is held to the 3:1 non-text requirement. */
+  --hairline: #eeeef1;
+  --field-border: #8a8a96;
+  /* Nav labels are primary interactive text, not captions — using --muted for
+     them was a category error. Held to AAA (7:1): a sidebar is scanned on every
+     single page load, so the AA floor is the wrong target for it. */
+  --nav-idle: #3a3a45;
+
+  /* Fill colour: white sits on it, so it must stay dark enough. */
+  --accent: #6c4def;
+  --accent-hover: #5b3ce0;
+  /* Accent used AS text. Split from the fill because one value cannot satisfy
+     both "white on it" and "it on a dark surface". */
+  --accent-text: #4c2dbf;
+  --accent-wash: #f0ebff;
+  --accent-wash-2: #f7f4ff;
+
+  /* Semantic hues deepened: every one failed against both white and its own
+     wash at the old brightness. */
+  --good: #166534;
+  --good-wash: #e7f6ec;
+  --info: #1d4ed8;
+  --info-wash: #e8f1fe;
+  --warn: #92400e;
+  --warn-wash: #fef3e2;
+  --crit: #b91c1c;
+  --crit-wash: #fdecec;
+
+  --shadow-shell: 0 8px 40px rgba(20, 20, 40, 0.06);
+  --shadow-card: 0 1px 2px rgba(20, 20, 40, 0.03);
+  --shadow-pop: 0 6px 24px rgba(20, 20, 40, 0.1);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #101015;
+    --surface: #1a1a21;
+    --surface-2: #1f1f27;
+    --ink: #f3f3f6;
+    --muted: #a0a0ac;
+    --muted-soft: #8a8a96;
+    --hairline: #2a2a33;
+    --field-border: #6b6b79;
+    --nav-idle: #c7c7d1;
+
+    /* Darker than the text variant so white labels clear 4.5:1 on a button. */
+    --accent: #6d4de6;
+    --accent-hover: #7c5ef0;
+    /* Lighter than the fill so it clears 4.5:1 as text on a dark surface. */
+    --accent-text: #c4b5ff;
+    --accent-wash: #2e2850;
+    --accent-wash-2: #201c34;
+
+    --good: #4ade80;
+    --good-wash: #14301f;
+    --info: #60a5fa;
+    --info-wash: #16263f;
+    --warn: #fbbf24;
+    --warn-wash: #33260c;
+    --crit: #f87171;
+    --crit-wash: #3a1a1a;
+
+    --shadow-shell: 0 8px 40px rgba(0, 0, 0, 0.5);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-pop: 0 6px 24px rgba(0, 0, 0, 0.5);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --ground: #101015;
+  --surface: #1a1a21;
+  --surface-2: #1f1f27;
+  --ink: #f3f3f6;
+  --muted: #a0a0ac;
+  --muted-soft: #8a8a96;
+  --hairline: #2a2a33;
+  --field-border: #6b6b79;
+  --nav-idle: #c7c7d1;
+
+  /* Darker than the text variant so white labels clear 4.5:1 on a button. */
+  --accent: #6d4de6;
+  --accent-hover: #7c5ef0;
+  /* Lighter than the fill so it clears 4.5:1 as text on a dark surface. */
+  --accent-text: #c4b5ff;
+  --accent-wash: #2e2850;
+  --accent-wash-2: #201c34;
+
+  --good: #4ade80;
+  --good-wash: #14301f;
+  --info: #60a5fa;
+  --info-wash: #16263f;
+  --warn: #fbbf24;
+  --warn-wash: #33260c;
+  --crit: #f87171;
+  --crit-wash: #3a1a1a;
+
+  --shadow-shell: 0 8px 40px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-pop: 0 6px 24px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --ground: #efeff2;
+  --surface: #ffffff;
+  --surface-2: #fbfbfc;
+  --ink: #14141a;
+  /* Greys darkened to clear 4.5:1 on every ground they sit on. The original
+     values were 2.3–3.2:1 — legible to me, not to a low-vision operator. */
+  --muted: #666673;
+  --muted-soft: #70707e;
+  /* Decorative dividers only. Anything delineating a control uses
+     --field-border, which is held to the 3:1 non-text requirement. */
+  --hairline: #eeeef1;
+  --field-border: #8a8a96;
+  /* Nav labels are primary interactive text, not captions — using --muted for
+     them was a category error. Held to AAA (7:1): a sidebar is scanned on every
+     single page load, so the AA floor is the wrong target for it. */
+  --nav-idle: #3a3a45;
+
+  /* Fill colour: white sits on it, so it must stay dark enough. */
+  --accent: #6c4def;
+  --accent-hover: #5b3ce0;
+  /* Accent used AS text. Split from the fill because one value cannot satisfy
+     both "white on it" and "it on a dark surface". */
+  --accent-text: #4c2dbf;
+  --accent-wash: #f0ebff;
+  --accent-wash-2: #f7f4ff;
+
+  /* Semantic hues deepened: every one failed against both white and its own
+     wash at the old brightness. */
+  --good: #166534;
+  --good-wash: #e7f6ec;
+  --info: #1d4ed8;
+  --info-wash: #e8f1fe;
+  --warn: #92400e;
+  --warn-wash: #fef3e2;
+  --crit: #b91c1c;
+  --crit-wash: #fdecec;
+
+  --shadow-shell: 0 8px 40px rgba(20, 20, 40, 0.06);
+  --shadow-card: 0 1px 2px rgba(20, 20, 40, 0.03);
+  --shadow-pop: 0 6px 24px rgba(20, 20, 40, 0.1);
+
+  color-scheme: light;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ground text-ink font-sans antialiased;
+  }
+
+  /* Never remove the focus ring — this is an operations tool and it must be
+     fully keyboard-operable. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Digits that sit in columns must not jitter between rows. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
