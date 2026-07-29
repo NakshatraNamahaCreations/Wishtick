@@ -56,4 +56,10 @@ export interface RequestContext {
 export enum OtpPurpose {
   VERIFY_EMAIL = 'verify_email',
   VERIFY_PHONE = 'verify_phone',
+  /**
+   * Passwordless sign-in. Kept distinct from VERIFY_PHONE because the codes are
+   * salted by purpose: a code issued to verify an existing user's number must
+   * never be replayable to mint a session, and vice versa.
+   */
+  SIGN_IN = 'sign_in',
 }

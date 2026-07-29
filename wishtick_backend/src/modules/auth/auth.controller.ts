@@ -23,6 +23,7 @@ import type { AuthenticatedUser } from 'src/common/types/authenticated-user';
 import { AuthService, type AuthUserView, type SessionView } from './auth.service';
 import type { RequestContext, TokenPair } from './auth.types';
 import { LoginDto } from './dto/login.dto';
+import { RequestOtpLoginDto, VerifyOtpLoginDto } from './dto/otp-login.dto';
 import { SignupDto } from './dto/signup.dto';
 import { RefreshTokenDto } from './dto/token.dto';
 import {
@@ -97,6 +98,39 @@ export class AuthController {
   ): Promise<{ user: AuthUserView; tokens: TokenPair }> {
     return this.auth.login(dto, AuthController.contextOf(req));
   }
+
+  // ── Passwordless phone sign-in ─────────────────────────────────────────────
+
+  @Post('otp/request')
+  @Public()
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Throttle(OTP_REQUEST_THROTTLE)
+  @ApiOperation({
+    summary: 'Send a sign-in code by SMS, whether or not the number is registered',
+  })
+  @ApiResponseDoc({ status: 202, description: 'Code sent' })
+  @ApiResponseDoc({ status: 429, description: 'OTP_COOLDOWN' })
+  requestOtpLogin(@Body() dto: RequestOtpLoginDto): Promise<{ expiresInSeconds: number }> {
+    return this.auth.requestOtpLogin(dto.phone);
+  }
+
+  @Post('otp/verify')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Throttle(OTP_CONFIRM_THROTTLE)
+  @ApiOperation({
+    summary: 'Exchange a sign-in code for a session, creating the account if new',
+  })
+  @ApiResponseDoc({ status: 400, description: 'OTP_INVALID / OTP_EXPIRED' })
+  @ApiResponseDoc({ status: 429, description: 'OTP_MAX_ATTEMPTS' })
+  verifyOtpLogin(
+    @Body() dto: VerifyOtpLoginDto,
+    @Req() req: Request,
+  ): Promise<{ user: AuthUserView; tokens: TokenPair; isNewUser: boolean }> {
+    return this.auth.verifyOtpLogin(dto, AuthController.contextOf(req));
+  }
+
+  // ── Session ────────────────────────────────────────────────────────────────
 
   @Post('refresh')
   @Public()

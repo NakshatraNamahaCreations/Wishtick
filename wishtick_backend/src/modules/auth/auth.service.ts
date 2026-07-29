@@ -12,6 +12,7 @@ import { UsersService } from 'src/modules/users/users.service';
 import type { UserDocument } from 'src/modules/users/schemas/user.schema';
 import { OtpPurpose, type RequestContext, type TokenPair } from './auth.types';
 import type { LoginDto } from './dto/login.dto';
+import type { VerifyOtpLoginDto } from './dto/otp-login.dto';
 import type { SignupDto } from './dto/signup.dto';
 import {
   PasswordResetToken,
@@ -149,6 +150,88 @@ export class AuthService implements OnModuleInit {
     }
   }
 
+  // ── Passwordless phone sign-in ─────────────────────────────────────────────
+
+  /**
+   * Sends a sign-in code to any number, registered or not.
+   *
+   * Unlike `requestPhoneVerification`, this deliberately does not care whether
+   * an account exists: the same call opens both the sign-up and the sign-in
+   * door, so the response reveals nothing either way.
+   */
+  async requestOtpLogin(phone: string): Promise<{ expiresInSeconds: number }> {
+    const normalized = UsersService.normalizePhone(phone);
+
+    // Refuse before spending an SMS on an account that could not sign in anyway.
+    const existing = await this.users.findByPhone(normalized);
+    if (existing) this.users.assertUsable(existing);
+
+    const code = await this.otp.issue(OtpPurpose.SIGN_IN, normalized);
+    await this.authNotifications.sendPhoneVerification(normalized, code);
+
+    return { expiresInSeconds: this.config.get('otp.ttlSeconds', { infer: true }) };
+  }
+
+  /**
+   * Confirms a sign-in code and returns a session, creating the account on the
+   * first successful code for an unknown number.
+   */
+  async verifyOtpLogin(
+    dto: VerifyOtpLoginDto,
+    ctx: RequestContext,
+  ): Promise<{ user: AuthUserView; tokens: TokenPair; isNewUser: boolean }> {
+    const normalized = UsersService.normalizePhone(dto.phone);
+
+    // Consumes the code, so everything below runs at most once per code.
+    await this.otp.verify(OtpPurpose.SIGN_IN, normalized, dto.code);
+
+    const existing = await this.users.findByPhone(normalized);
+    if (existing) {
+      this.users.assertUsable(existing);
+      // The code proves possession, so the number is verified from here on.
+      if (!existing.phoneVerifiedAt) await this.users.markPhoneVerified(existing._id);
+      await this.users.recordLogin(existing._id);
+
+      const tokens = await this.tokens.issuePair(existing, ctx);
+      const fresh = (await this.users.findById(existing._id)) ?? existing;
+      return { user: AuthService.toUserView(fresh), tokens, isNewUser: false };
+    }
+
+    // A soft-deleted account still holds this number in the unique index, so
+    // creating one here would fail on a duplicate key and surface as a bare 409.
+    // Say what actually happened instead.
+    const deleted = await this.users.findDeletedByIdentifierForRestore(normalized);
+    if (deleted) {
+      throw new AppException(
+        ErrorCode.ACCOUNT_DELETED,
+        'This account is pending deletion. Restore it before signing in again.',
+        403,
+      );
+    }
+
+    const source = dto.source?.trim() || 'organic';
+    // No passwordHash: the account is passwordless until its owner sets one
+    // through the reset flow.
+    const user = await this.users.create({
+      phone: normalized,
+      name: dto.name,
+      phoneVerified: true,
+      acquisition: { source, ref: dto.ref?.trim() || null },
+    });
+
+    // Same announcement as password signup, so invites addressed to this number
+    // before it existed get attached.
+    this.emitter.emit(USER_REGISTERED, {
+      userId: user._id.toString(),
+      phone: user.phone,
+      source,
+    } satisfies UserRegisteredEvent);
+
+    const tokens = await this.tokens.issuePair(user, ctx);
+    this.logger.log(`New passwordless signup: ${user._id.toString()}`);
+    return { user: AuthService.toUserView(user), tokens, isNewUser: true };
+  }
+
   // ── Login ──────────────────────────────────────────────────────────────────
 
   async login(
@@ -157,9 +240,10 @@ export class AuthService implements OnModuleInit {
   ): Promise<{ user: AuthUserView; tokens: TokenPair }> {
     const user = await this.users.findByIdentifier(dto.identifier, true);
 
-    if (!user) {
-      // Burn equivalent CPU before failing so the response time matches a real
-      // account with a wrong password.
+    if (!user?.passwordHash) {
+      // Covers both "no such user" and "passwordless account". Burn equivalent
+      // CPU before failing so the response time matches a real account with a
+      // wrong password — and so the two cases stay indistinguishable.
       await this.passwords.verify(this.decoyHash, dto.password);
       throw AuthService.invalidCredentials();
     }

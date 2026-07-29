@@ -40,7 +40,11 @@ export class AccountRestoreController {
     // No user, wrong password, and "not actually deleted" all return the same
     // 401. Anything else turns this into an oracle for which accounts exist and
     // which are pending deletion — and it is unauthenticated by necessity.
-    if (!user || !(await this.passwords.verify(user.passwordHash, dto.password))) {
+    //
+    // A passwordless (phone sign-in) account has nothing to verify against and
+    // so cannot be restored here. Restoring one needs an OTP-authorized path;
+    // until that exists it falls into the same generic 401.
+    if (!user?.passwordHash || !(await this.passwords.verify(user.passwordHash, dto.password))) {
       throw new AppException(
         ErrorCode.INVALID_CREDENTIALS,
         'Incorrect email/phone or password, or this account cannot be restored',

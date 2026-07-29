@@ -9,9 +9,15 @@ import { User, type UserDocument } from './schemas/user.schema';
 export interface CreateUserInput {
   email?: string;
   phone?: string;
-  passwordHash: string;
+  /** Omitted for passwordless accounts created via phone sign-in. */
+  passwordHash?: string;
   name?: string;
   acquisition?: { source: string; ref: string | null };
+  /**
+   * Stamps the number verified at creation. Set by the OTP sign-in flow, where
+   * possession of the number has just been proven.
+   */
+  phoneVerified?: boolean;
 }
 
 @Injectable()
@@ -32,7 +38,8 @@ export class UsersService {
     return this.userModel.create({
       ...(input.email ? { email: UsersService.normalizeEmail(input.email) } : {}),
       ...(input.phone ? { phone: UsersService.normalizePhone(input.phone) } : {}),
-      passwordHash: input.passwordHash,
+      ...(input.passwordHash ? { passwordHash: input.passwordHash } : {}),
+      ...(input.phoneVerified ? { phoneVerifiedAt: new Date() } : {}),
       name: input.name,
       // First-touch attribution, stamped once and never overwritten.
       ...(input.acquisition

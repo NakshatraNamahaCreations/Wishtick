@@ -55,9 +55,17 @@ export class User {
   @Prop({ type: String, trim: true })
   phone?: string;
 
-  /** argon2id hash. Never selected by default — queries must opt in explicitly. */
-  @Prop({ type: String, required: true, select: false })
-  passwordHash!: string;
+  /**
+   * argon2id hash. Never selected by default — queries must opt in explicitly.
+   *
+   * Optional because accounts created through passwordless phone sign-in have
+   * no password at all. Those accounts cannot use `POST /auth/login` until the
+   * owner sets one via the password-reset flow; AuthService.login rejects them
+   * with the same generic error as a wrong password, so the difference is not
+   * observable to an attacker.
+   */
+  @Prop({ type: String, select: false })
+  passwordHash?: string;
 
   @Prop({ type: Date, default: null })
   emailVerifiedAt!: Date | null;
