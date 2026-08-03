@@ -24,7 +24,7 @@ class SprintPlaceholder extends StatelessWidget {
     final colors = context.colors;
 
     return Scaffold(
-      backgroundColor: colors.background,
+      // Background inherits ThemeData.scaffoldBackgroundColor — see WishtickColors.background.
       appBar: AppBar(title: Text(title)),
       body: Center(
         child: Padding(

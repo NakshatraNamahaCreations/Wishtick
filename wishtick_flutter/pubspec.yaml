@@ -41,6 +41,9 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/avatar/
+    - assets/onboarding/
+    - assets/logo/
 
   # Bundled rather than fetched at runtime: no flash of fallback type on first
   # launch, works offline, and keeps golden tests deterministic. Both are

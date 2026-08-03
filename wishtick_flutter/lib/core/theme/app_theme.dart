@@ -3,16 +3,19 @@ import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
 import 'app_dimens.dart';
+import 'app_gradients.dart';
 import 'app_typography.dart';
 
 /// Builds the light and dark [ThemeData] from the semantic [WishtickColors]
 /// tokens. Both themes are produced by the same function, so a component
 /// configured here is guaranteed to exist in both.
 abstract final class AppTheme {
-  static ThemeData get light => _build(WishtickColors.light);
-  static ThemeData get dark => _build(WishtickColors.dark);
+  static ThemeData get light =>
+      _build(WishtickColors.light, WishtickGradients.light);
+  static ThemeData get dark =>
+      _build(WishtickColors.dark, WishtickGradients.dark);
 
-  static ThemeData _build(WishtickColors c) {
+  static ThemeData _build(WishtickColors c, WishtickGradients g) {
     final textTheme = AppTypography.buildTextTheme(
       primary: c.textPrimary,
       secondary: c.textSecondary,
@@ -23,7 +26,7 @@ abstract final class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: c.brightness,
-      extensions: <ThemeExtension<dynamic>>[c],
+      extensions: <ThemeExtension<dynamic>>[c, g],
       scaffoldBackgroundColor: c.background,
       canvasColor: c.background,
       textTheme: textTheme,
@@ -122,12 +125,25 @@ abstract final class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: c.surface,
+        // A faint lavender, not white — on the beige page a white field reads
+        // as a raised card rather than as an input.
+        fillColor: c.surfaceAlt,
+        constraints: const BoxConstraints(minHeight: AppSizes.inputHeight),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
-          vertical: AppSpacing.lg,
+          vertical: AppSpacing.md,
         ),
-        hintStyle: AppTypography.bodyMedium.copyWith(color: c.textMuted),
+        // Same size as the value that replaces it, so the field does not
+        // appear to change type size as soon as you start typing.
+        hintStyle: AppTypography.bodyLarge.copyWith(color: c.textMuted),
+        prefixIconColor: c.textPrimary,
+        iconColor: c.textMuted,
+        // Narrower than M3's 48 default, which pushed the glyph too close to
+        // the field's left edge relative to the design.
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 44,
+          minHeight: AppSizes.iconLg,
+        ),
         labelStyle: AppTypography.bodyMedium.copyWith(color: c.textMuted),
         floatingLabelStyle: AppTypography.bodySmall.copyWith(color: c.primary),
         border: _inputBorder(c.border),

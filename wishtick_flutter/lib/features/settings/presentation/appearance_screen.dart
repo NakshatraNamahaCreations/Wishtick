@@ -18,7 +18,7 @@ class AppearanceScreen extends ConsumerWidget {
     final mode = ref.watch(themeModeProvider);
 
     return Scaffold(
-      backgroundColor: colors.background,
+      // Background inherits ThemeData.scaffoldBackgroundColor — see WishtickColors.background.
       appBar: AppBar(title: const Text('Appearance')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.screenH),

@@ -11,14 +11,20 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   final libDir = Directory('lib');
 
-  /// The only files permitted to name a colour directly.
-  const colorLiteralAllowlist = {'lib/core/theme/app_palette.dart'};
+  /// The only files permitted to name a colour directly. `hex_color.dart`
+  /// carries no colour of its own — it constructs [Color] from *server data*
+  /// (taxonomy swatches) and is the sanctioned seam for that.
+  const colorLiteralAllowlist = {
+    'lib/core/theme/app_palette.dart',
+    'lib/core/theme/hex_color.dart',
+  };
 
-  /// Widgets read tokens through `context.colors`; only the theme layer is
-  /// allowed to touch the palette.
+  /// Widgets read tokens through `context.colors` / `context.gradients`; only
+  /// the theme layer is allowed to touch the palette.
   const paletteImportAllowlist = {
     'lib/core/theme/app_palette.dart',
     'lib/core/theme/app_colors.dart',
+    'lib/core/theme/app_gradients.dart',
   };
 
   List<File> dartFiles() => libDir

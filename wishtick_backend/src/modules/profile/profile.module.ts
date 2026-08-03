@@ -10,13 +10,19 @@ import { AccountLifecycleRegistrar } from './account-lifecycle.processor';
 import { AccountLifecycleService } from './account-lifecycle.service';
 import { AccountRestoreController } from './account-restore.controller';
 import { DataExportService } from './data-export.service';
+import { ImportantDatesController } from './important-dates.controller';
+import { ImportantDatesService } from './important-dates.service';
 import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
+import { ImportantDate, ImportantDateSchema } from './schemas/important-date.schema';
 import { UserProfile, UserProfileSchema } from './schemas/user-profile.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: UserProfile.name, schema: UserProfileSchema }]),
+    MongooseModule.forFeature([
+      { name: UserProfile.name, schema: UserProfileSchema },
+      { name: ImportantDate.name, schema: ImportantDateSchema },
+    ]),
     BullModule.registerQueue({ name: QUEUE.SCHEDULER }),
     UsersModule,
     TaxonomyModule,
@@ -26,9 +32,10 @@ import { UserProfile, UserProfileSchema } from './schemas/user-profile.schema';
     // so there is no cycle.
     AuthModule,
   ],
-  controllers: [ProfileController, AccountRestoreController],
+  controllers: [ProfileController, ImportantDatesController, AccountRestoreController],
   providers: [
     ProfileService,
+    ImportantDatesService,
     AccountLifecycleService,
     AccountLifecycleRegistrar,
     DataExportService,

@@ -4,16 +4,20 @@ import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
+  IsEmail,
+  IsEnum,
   IsMongoId,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { IsTimezone } from 'src/common/validators/is-timezone.validator';
+import { AVATAR_KEY_PATTERN, Gender } from '../schemas/user-profile.schema';
 
 export class UpdatePreferencesDto {
-  @ApiPropertyOptional({ example: ['music', 'travel'], description: 'Taxonomy keys' })
+  @ApiPropertyOptional({ example: ['fashion_shoes', 'tech_gaming'], description: 'Taxonomy keys' })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -22,7 +26,30 @@ export class UpdatePreferencesDto {
   @ArrayMaxSize(30)
   interests?: string[];
 
-  @ApiPropertyOptional({ example: ['blue', 'green'] })
+  @ApiPropertyOptional({ example: ['fashion', 'health_fitness'], description: 'Taxonomy keys' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(12)
+  interestCategories?: string[];
+
+  @ApiPropertyOptional({
+    example: ['Astronomy', 'Anime'],
+    description: 'Free text from "Anything Else You Love?" — max 40 chars each',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  @ArrayMaxSize(10)
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value)
+      ? value.map((v) => (typeof v === 'string' ? v.trim() : v)).filter((v) => v !== '')
+      : value,
+  )
+  customInterests?: string[];
+
+  @ApiPropertyOptional({ example: ['purple_plum', 'green_sage'] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -38,6 +65,11 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsString()
   shoeSize?: string | null;
+
+  @ApiPropertyOptional({ example: 'regular' })
+  @IsOptional()
+  @IsString()
+  fitPreference?: string | null;
 
   @ApiPropertyOptional({ example: ['books', 'electronics'] })
   @IsOptional()
@@ -112,6 +144,33 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsMongoId()
   photoMediaId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'avatar_07',
+    description:
+      'A bundled illustrated avatar. Mutually exclusive with photoMediaId — ' +
+      'setting one clears the other.',
+  })
+  @IsOptional()
+  @Matches(AVATAR_KEY_PATTERN, { message: 'avatarKey must be avatar_01 … avatar_20' })
+  avatarKey?: string | null;
+
+  @ApiPropertyOptional({ enum: Gender })
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender | null;
+
+  @ApiPropertyOptional({
+    example: 'ananya@example.com',
+    description: 'Stored unverified — see /auth/verify/email/request.',
+  })
+  @IsOptional()
+  @IsEmail({}, { message: 'email must be a valid email address' })
+  @MaxLength(254)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  email?: string;
 
   @ApiPropertyOptional({ type: UpdateContactDto })
   @IsOptional()

@@ -7,69 +7,114 @@ import 'package:flutter/material.dart';
 /// tokens from `context.colors` (see `app_colors.dart`). Rebranding the app
 /// therefore means editing this one file.
 ///
-/// Swatch names mirror the "Color System" page of the Figma file
-/// (`8OShdlUS8kUWEE6j5DQ8GP`, node `0:1`) so design and code stay in step.
-///
-/// Values were derived from the rendered Figma frames. The Figma MCP variable
-/// export was unavailable (Starter-plan tool-call limit), so before shipping
-/// Sprint 0 these should be reconciled against the Color System page via
-/// `get_variable_defs`. Swatches marked `[derived]` were interpolated because
-/// they do not appear in the screens exported so far.
+/// Swatch names and values mirror the "Color System" page of the Figma file
+/// (node `0:1`), **verified 2026-07-31** against a full render of that page.
+/// Notable correction from that verification: the CTA colour `#3F0E4C` is the
+/// page's *plum deep* — the swatch named *plum* is `#5B1A6E`.
 abstract final class AppPalette {
-  // --- Plum (brand primary) -------------------------------------------------
-  static const plum = Color(0xFF3F0E4C);
-  static const plumDeep = Color(0xFF23074A);
-  static const plumBright = Color(0xFF5B1A6E);
+  // --- Plum (brand) ---------------------------------------------------------
+  static const plum = Color(0xFF5B1A6E);
+  static const plumDeep = Color(0xFF3F0E4C);
   static const plumSoft = Color(0xFF7B3A8F);
-  static const plumMuted = Color(0xFF522651);
-  static const plumPale = Color(0xFFF3F0F4);
 
   // --- Pink (accent) --------------------------------------------------------
-  static const pink = Color(0xFFFF6994);
-  static const pinkSoft = Color(0xFFFF93B0);
-  static const pinkPale = Color(0xFFFFEAF0); // [derived]
+  static const pink = Color(0xFFE94E85);
+  static const pinkSoft = Color(0xFFF27BA3);
+  static const pinkPale = Color(0xFFFCE7EE);
 
   // --- Ivory / cream (light surfaces) ---------------------------------------
-  static const ivory = Color(0xFFFFFCFA);
-  static const ivoryDeep = Color(0xFFFFFBF7);
-  static const cream = Color(0xFFF5ECE4);
+  static const ivory = Color(0xFFFCFBF5);
+  static const ivoryDeep = Color(0xFFF5EFE4);
+  static const cream = Color(0xFFFFF7EA);
 
   // --- Gold -----------------------------------------------------------------
-  static const gold = Color(0xFFC79953);
-  static const goldSoft = Color(0xFFEFD5B2);
+  static const gold = Color(0xFFE7B85C);
+  static const goldSoft = Color(0xFFF5D48C);
 
-  // --- Coral (danger) -------------------------------------------------------
-  static const coral = Color(0xFFD51111);
-  static const coralSoft = Color(0xFFFFD8D5); // [derived]
-  static const roseSoft = Color(0xFFF3E7EA); // [derived]
+  // --- Coral ----------------------------------------------------------------
+  static const coral = Color(0xFFFF7B5C);
+  static const coralSoft = Color(0xFFFFB199);
+  static const roseSoft = Color(0xFFF4B6C2);
 
-  // --- Teal (success) -------------------------------------------------------
-  static const teal = Color(0xFF2E9253);
-  static const tealSoft = Color(0xFFD7EFDF); // [derived]
+  // --- Teal -----------------------------------------------------------------
+  static const teal = Color(0xFF3FBFA6);
+  static const tealSoft = Color(0xFF7FD9C6);
 
   // --- Navy -----------------------------------------------------------------
   static const navy = Color(0xFF1E1B3A);
-  static const navyDeep = Color(0xFF120F26); // [derived]
+  static const navyDeep = Color(0xFF0F0D24);
 
   // --- Violet ---------------------------------------------------------------
-  static const violet = Color(0xFFA02DC1);
+  static const violet = Color(0xFF7C6BE6);
   static const violetSoft = Color(0xFFB7ADF2);
-  static const violetPale = Color(0xFFFAF9FE);
 
-  // --- Amber (warning) ------------------------------------------------------
-  static const amber = Color(0xFFE8A33D); // [derived]
-  static const amberSoft = Color(0xFFF7E4C3);
+  // --- Amber ----------------------------------------------------------------
+  static const amber = Color(0xFFF3AB4A);
+  static const amberSoft = Color(0xFFF9D08B);
 
-  // --- Blue (informational surfaces, e.g. event cards) ----------------------
-  static const blue = Color(0xFF4A90D9); // [derived]
-  static const blueSoft = Color(0xFFBADEFC);
-  static const bluePale = Color(0xFFE3F1FE);
+  // --- Blue -----------------------------------------------------------------
+  static const blue = Color(0xFF4E8BE9);
+  static const blueSoft = Color(0xFF8FB4F0);
 
   // --- Ink / text -----------------------------------------------------------
   static const ink = Color(0xFF1E1B3A);
   static const inkSoft = Color(0xFF4A4463);
   static const textMuted = Color(0xFF8A82A1);
-  static const textFaint = Color(0xFFB4AEC4); // [derived]
+  static const textFaint = Color(0xFFB7B2C6);
+
+  // --- Screen-sampled -------------------------------------------------------
+  // Colours that appear in the shipped screen designs but are not on the
+  // Color System page. Sampled from the exported frames; re-point at official
+  // swatches if the design team later adds them to the page.
+
+  /// Deepest plum — snackbars and the darkest chip fills.
+  static const plumInk = Color(0xFF23074A);
+
+  /// Start of the gradient headline treatment ("Ready to Celebrate?").
+  static const plumMuted = Color(0xFF522651);
+
+  /// The warm end of the same gradient.
+  static const bronze = Color(0xFFB98B53);
+
+  /// Selected-state washes and lavender card fills.
+  static const plumPale = Color(0xFFF3F0F4);
+  static const violetPale = Color(0xFFFAF9FE);
+  static const bluePale = Color(0xFFE3F1FE);
+
+  /// The LOGOUT / DELETE ACCOUNT red. Distinct from [coral], which is an
+  /// orange-toned brand colour rather than an alarm colour.
+  static const redAlert = Color(0xFFD51112);
+  static const redAlertSubtle = Color(0xFFFFD8D5);
+
+  // Sampled pixel-by-pixel from the 393-px-wide frame exports on 2026-08-03,
+  // after the shipped screens turned out to disagree with the Color System
+  // page. Where they conflict the screens win — they are what gets compared.
+
+  /// The page beige every onboarding frame is drawn on. Three units off
+  /// [ivoryDeep], which is what the Color System page lists.
+  static const pageBeige = Color(0xFFF5ECE4);
+
+  /// The gold the screens actually use for progress fills, step captions, the
+  /// Terms link and the Continue badge — a clear step deeper than [gold].
+  static const goldDeep = Color(0xFFC79953);
+
+  /// The magenta of the Wishtick heart mark. Not [pink]: the mark is a purple
+  /// magenta, the wishlist hearts are a rose.
+  static const magenta = Color(0xFFB91E99);
+  static const magentaSoft = Color(0xFFE05FC6);
+
+  /// Hairline outline on outlined cards ("Select Avatar").
+  static const lilacLine = Color(0xFFC4A5C2);
+
+  /// Fill of an unselected selectable tile — more lavender than [violetPale],
+  /// which the input fields use.
+  static const lavenderTile = Color(0xFFF5F3FF);
+
+  /// The red that fills the onboarding progress heart as steps complete.
+  /// Deliberately not [redAlert]: that is the alarm colour for errors and
+  /// Delete Account, and progress is not an alarm.
+  static const heartRed = Color(0xFFE8283C);
+  static const heartRedSoft = Color(0xFFFF6472);
 
   // --- Neutrals -------------------------------------------------------------
   static const white = Color(0xFFFFFFFF);
@@ -92,8 +137,8 @@ abstract final class AppPalette {
   static const darkTextMuted = Color(0xFF9A8FA6);
 
   // Status colours re-tuned for dark surfaces: the light-theme versions are
-  // either too dark to read (teal, coral) or too saturated against the dark
-  // ramp. Their `*Container` partners are near-black tints of the same hue.
+  // either too dark to read or too saturated against the dark ramp. Their
+  // `*Container` partners are near-black tints of the same hue.
   static const darkPinkSubtle = Color(0xFF3A1F2C);
   static const darkTeal = Color(0xFF4CB878);
   static const darkTealSubtle = Color(0xFF1B3A29);

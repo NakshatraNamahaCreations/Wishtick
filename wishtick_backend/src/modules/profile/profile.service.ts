@@ -9,7 +9,11 @@ import { TaxonomyService } from 'src/modules/taxonomy/taxonomy.service';
 import { TaxonomyKind } from 'src/modules/taxonomy/taxonomy.types';
 import { UsersService } from 'src/modules/users/users.service';
 import type { UpdatePreferencesDto, UpdateProfileDto } from './dto/profile.dto';
-import { UserProfile, type UserProfileDocument } from './schemas/user-profile.schema';
+import {
+  type Gender,
+  UserProfile,
+  type UserProfileDocument,
+} from './schemas/user-profile.schema';
 
 export interface MeView {
   id: string;
@@ -22,15 +26,21 @@ export interface MeView {
   profile: {
     displayName: string | null;
     photoUrl: string | null;
+    /** A bundled avatar key when no photo was uploaded. */
+    avatarKey: string | null;
+    gender: Gender | null;
     bio: string | null;
     dateOfBirth: string | null;
     timezone: string;
     contact: { city: string | null; country: string | null; deliveryAddress: string | null };
     preferences: {
       interests: string[];
+      interestCategories: string[];
+      customInterests: string[];
       favouriteColors: string[];
       clothingSize: string | null;
       shoeSize: string | null;
+      fitPreference: string | null;
       giftCategories: string[];
       lifestyle: string[];
       occasions: string[];
@@ -92,6 +102,8 @@ export class ProfileService {
       profile: {
         displayName: profile.displayName ?? user.name ?? null,
         photoUrl: profile.photoUrl,
+        avatarKey: profile.avatarKey,
+        gender: profile.gender,
         bio: profile.bio,
         // Date-only field: the time component is meaningless and sending a
         // UTC timestamp invites clients to shift it across a day boundary.
@@ -104,9 +116,12 @@ export class ProfileService {
         },
         preferences: {
           interests: profile.preferences?.interests ?? [],
+          interestCategories: profile.preferences?.interestCategories ?? [],
+          customInterests: profile.preferences?.customInterests ?? [],
           favouriteColors: profile.preferences?.favouriteColors ?? [],
           clothingSize: profile.preferences?.clothingSize ?? null,
           shoeSize: profile.preferences?.shoeSize ?? null,
+          fitPreference: profile.preferences?.fitPreference ?? null,
           giftCategories: profile.preferences?.giftCategories ?? [],
           lifestyle: profile.preferences?.lifestyle ?? [],
           occasions: profile.preferences?.occasions ?? [],
@@ -147,8 +162,22 @@ export class ProfileService {
       };
     }
 
+    if (dto.gender !== undefined) profile.gender = dto.gender;
+
     if (dto.photoMediaId !== undefined) {
       await this.setPhoto(profile, userId, dto.photoMediaId);
+      // A photo wins over a preset: keeping both would leave "which picture"
+      // ambiguous, and the upload is the more deliberate choice.
+      if (dto.photoMediaId !== null) profile.avatarKey = null;
+    }
+
+    if (dto.avatarKey !== undefined) {
+      profile.avatarKey = dto.avatarKey;
+      if (dto.avatarKey !== null) await this.setPhoto(profile, userId, null);
+    }
+
+    if (dto.email !== undefined) {
+      await this.users.setEmail(userId, dto.email);
     }
 
     await profile.save();
@@ -199,10 +228,14 @@ export class ProfileService {
     const current = profile.preferences ?? ({} as UserProfile['preferences']);
     profile.preferences = {
       interests: dto.interests ?? current.interests ?? [],
+      interestCategories: dto.interestCategories ?? current.interestCategories ?? [],
+      customInterests: dto.customInterests ?? current.customInterests ?? [],
       favouriteColors: dto.favouriteColors ?? current.favouriteColors ?? [],
       clothingSize:
         dto.clothingSize !== undefined ? dto.clothingSize : (current.clothingSize ?? null),
       shoeSize: dto.shoeSize !== undefined ? dto.shoeSize : (current.shoeSize ?? null),
+      fitPreference:
+        dto.fitPreference !== undefined ? dto.fitPreference : (current.fitPreference ?? null),
       giftCategories: dto.giftCategories ?? current.giftCategories ?? [],
       lifestyle: dto.lifestyle ?? current.lifestyle ?? [],
       occasions: dto.occasions ?? current.occasions ?? [],
@@ -212,13 +245,27 @@ export class ProfileService {
     return this.getMe(userId);
   }
 
-  /** Every supplied key must exist in the taxonomy. Checked in parallel. */
+  /**
+   * Every supplied key must exist in the taxonomy. Checked in parallel.
+   * `customInterests` is exempt by design — it is free text (length-capped in
+   * the DTO), which is exactly what the "Anything Else You Love?" screen is for.
+   */
   async assertPreferencesValid(dto: UpdatePreferencesDto): Promise<void> {
     await Promise.all([
       this.taxonomy.assertValid(TaxonomyKind.INTEREST, dto.interests ?? [], 'interests'),
+      this.taxonomy.assertValid(
+        TaxonomyKind.INTEREST_CATEGORY,
+        dto.interestCategories ?? [],
+        'interestCategories',
+      ),
       this.taxonomy.assertValid(TaxonomyKind.COLOR, dto.favouriteColors ?? [], 'favouriteColors'),
       this.taxonomy.assertValidOne(TaxonomyKind.CLOTHING_SIZE, dto.clothingSize, 'clothingSize'),
       this.taxonomy.assertValidOne(TaxonomyKind.SHOE_SIZE, dto.shoeSize, 'shoeSize'),
+      this.taxonomy.assertValidOne(
+        TaxonomyKind.FIT_PREFERENCE,
+        dto.fitPreference,
+        'fitPreference',
+      ),
       this.taxonomy.assertValid(
         TaxonomyKind.GIFT_CATEGORY,
         dto.giftCategories ?? [],

@@ -10,8 +10,18 @@ abstract final class AppRoutes {
   static const mobileNumber = '/welcome/mobile';
   static const otp = '/welcome/otp';
 
-  // Onboarding (Sprint 2)
+  // Onboarding — a 5-step wizard; "Create Your Profile" is step 1.
   static const onboarding = '/onboarding';
+  static const onboardingAvatar = '/onboarding/avatar';
+  static const onboardingInterests = '/onboarding/interests';
+  static const onboardingColors = '/onboarding/colors';
+  static const onboardingSizes = '/onboarding/sizes';
+  static const onboardingDates = '/onboarding/dates';
+  static const onboardingDone = '/onboarding/done';
+
+  /// The per-category granular-interest screen (Figma `204:471` pattern).
+  static String onboardingInterestDetail(String categoryKey) =>
+      '/onboarding/interests/$categoryKey';
 
   // Tab shell
   static const home = '/home';

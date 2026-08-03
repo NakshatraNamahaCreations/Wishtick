@@ -99,9 +99,9 @@ describe('Onboarding, profile & media (e2e)', () => {
       expect(options.interest.length).toBeGreaterThan(5);
       expect(options.gift_category.length).toBeGreaterThan(5);
       expect(options.color).toContainEqual({
-        key: 'blue',
-        label: 'Blue',
-        meta: { hex: '#1E88E5' },
+        key: 'purple_plum',
+        label: 'Plum',
+        meta: { hex: '#5B1A6E', group: 'purple', groupLabel: 'Purple & Violet' },
       });
     });
 
@@ -125,7 +125,7 @@ describe('Onboarding, profile & media (e2e)', () => {
 
     it('serves the second request from cache', async () => {
       await request(app.getHttpServer()).get(`${V1}/onboarding/options`).expect(200);
-      const cached = await ctx.redis.get('taxonomy:options:v1');
+      const cached = await ctx.redis.get('taxonomy:options:v2');
       expect(cached).toBeTruthy();
     });
   });
@@ -157,13 +157,13 @@ describe('Onboarding, profile & media (e2e)', () => {
       await request(app.getHttpServer())
         .post(`${V1}/onboarding/steps/interests`)
         .set(auth(token))
-        .send({ interests: ['music', 'travel', 'cooking'] })
+        .send({ interests: ['ent_music', 'travel_road_trips', 'food_dining_experiences'] })
         .expect(200);
 
       await request(app.getHttpServer())
         .post(`${V1}/onboarding/steps/sizes`)
         .set(auth(token))
-        .send({ clothingSize: 'm', shoeSize: 'uk_8', favouriteColors: ['blue', 'green'] })
+        .send({ clothingSize: 'm', shoeSize: 'uk_8', favouriteColors: ['blue_navy', 'green_sage'] })
         .expect(200);
 
       await request(app.getHttpServer())
@@ -227,8 +227,8 @@ describe('Onboarding, profile & media (e2e)', () => {
         dateOfBirth: '1995-04-17',
         timezone: 'Asia/Kolkata',
         preferences: {
-          interests: ['music', 'travel', 'cooking'],
-          favouriteColors: ['blue', 'green'],
+          interests: ['ent_music', 'travel_road_trips', 'food_dining_experiences'],
+          favouriteColors: ['blue_navy', 'green_sage'],
           clothingSize: 'm',
           shoeSize: 'uk_8',
           giftCategories: ['books', 'electronics'],
@@ -272,13 +272,13 @@ describe('Onboarding, profile & media (e2e)', () => {
       await request(app.getHttpServer())
         .post(`${V1}/onboarding/steps/interests`)
         .set(auth(token))
-        .send({ interests: ['music'] })
+        .send({ interests: ['ent_music'] })
         .expect(200);
 
       const second = await request(app.getHttpServer())
         .post(`${V1}/onboarding/steps/interests`)
         .set(auth(token))
-        .send({ interests: ['gaming', 'art'] })
+        .send({ interests: ['tech_gaming', 'hobby_art_craft'] })
         .expect(200);
 
       const status = (second.body as Envelope<{ status: { completedSteps: string[] } }>).data
@@ -287,7 +287,7 @@ describe('Onboarding, profile & media (e2e)', () => {
 
       const me = (await request(app.getHttpServer()).get(`${V1}/me`).set(auth(token)).expect(200))
         .body as Envelope<MeView>;
-      expect(me.data.profile.preferences.interests).toEqual(['gaming', 'art']);
+      expect(me.data.profile.preferences.interests).toEqual(['tech_gaming', 'hobby_art_craft']);
     });
 
     it('lets a client resume a half-finished onboarding', async () => {
@@ -295,7 +295,7 @@ describe('Onboarding, profile & media (e2e)', () => {
       await request(app.getHttpServer())
         .post(`${V1}/onboarding/steps/interests`)
         .set(auth(token))
-        .send({ interests: ['music'] })
+        .send({ interests: ['ent_music'] })
         .expect(200);
 
       const status = (
@@ -313,7 +313,7 @@ describe('Onboarding, profile & media (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post(`${V1}/onboarding/steps/favourite-cheese`)
         .set(auth(token))
-        .send({ interests: ['music'] })
+        .send({ interests: ['ent_music'] })
         .expect(404);
       expect((res.body as Envelope<never>).error?.code).toBe(ErrorCode.ONBOARDING_STEP_UNKNOWN);
     });
@@ -325,7 +325,7 @@ describe('Onboarding, profile & media (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post(`${V1}/onboarding/steps/occasions`)
         .set(auth(token))
-        .send({ occasions: ['birthday'], interests: ['music'] })
+        .send({ occasions: ['birthday'], interests: ['ent_music'] })
         .expect(400);
       expect((res.body as Envelope<never>).error?.code).toBe(ErrorCode.VALIDATION_FAILED);
     });
@@ -335,7 +335,7 @@ describe('Onboarding, profile & media (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post(`${V1}/onboarding/steps/interests`)
         .set(auth(token))
-        .send({ interests: ['music', 'competitive-napping'] })
+        .send({ interests: ['ent_music', 'competitive-napping'] })
         .expect(400);
 
       // Free text here would make "users interested in music" unanswerable in
@@ -440,18 +440,18 @@ describe('Onboarding, profile & media (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`${V1}/me/preferences`)
         .set(auth(token))
-        .send({ interests: ['music'], giftCategories: ['books'] })
+        .send({ interests: ['ent_music'], giftCategories: ['books'] })
         .expect(200);
 
       // Sending only one field must not clear the others.
       const res = await request(app.getHttpServer())
         .patch(`${V1}/me/preferences`)
         .set(auth(token))
-        .send({ interests: ['gaming'] })
+        .send({ interests: ['tech_gaming'] })
         .expect(200);
 
       const me = (res.body as Envelope<MeView>).data;
-      expect(me.profile.preferences.interests).toEqual(['gaming']);
+      expect(me.profile.preferences.interests).toEqual(['tech_gaming']);
       expect(me.profile.preferences.giftCategories).toEqual(['books']);
     });
 

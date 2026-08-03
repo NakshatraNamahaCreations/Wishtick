@@ -135,6 +135,37 @@ export class UsersService {
     return found !== null;
   }
 
+  /**
+   * Sets (or changes) an account's email address, leaving it **unverified**.
+   *
+   * A phone sign-up has no email, so onboarding is where most users first give
+   * one. It lands unverified deliberately — possession is only proven by
+   * `/auth/verify/email/*`, and treating a self-declared address as verified
+   * would let anyone claim someone else's mailbox.
+   */
+  async setEmail(userId: string | Types.ObjectId, email: string): Promise<void> {
+    const normalized = UsersService.normalizeEmail(email);
+    const _id = new Types.ObjectId(userId.toString());
+
+    const current = await this.userModel.findById(_id).exec();
+    if (!current) throw new AppException(ErrorCode.NOT_FOUND, 'User not found', 404);
+    if (current.email === normalized) return;
+
+    // Pre-check for a clean message; the partial unique index is the guarantee
+    // and the exception filter maps a racing 11000 to 409.
+    if (await this.existsByEmail(normalized)) {
+      throw new AppException(
+        ErrorCode.EMAIL_ALREADY_REGISTERED,
+        'An account with this email already exists',
+        409,
+      );
+    }
+
+    await this.userModel
+      .updateOne({ _id }, { $set: { email: normalized, emailVerifiedAt: null } })
+      .exec();
+  }
+
   async markEmailVerified(id: Types.ObjectId): Promise<void> {
     await this.userModel.updateOne({ _id: id }, { $set: { emailVerifiedAt: new Date() } }).exec();
   }

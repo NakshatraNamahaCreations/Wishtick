@@ -10,6 +10,9 @@
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "db:up": "node scripts/dev-mongo.js",
+    "prestart": "node scripts/dev-mongo.js",
+    "prestart:dev": "node scripts/dev-mongo.js",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",

@@ -5,8 +5,10 @@ import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/core/network/token_storage.dart';
 import 'package:wishtick_flutter/features/auth/data/auth_repository.dart';
 import 'package:wishtick_flutter/features/auth/presentation/session_controller.dart';
+import 'package:wishtick_flutter/features/onboarding/data/onboarding_repository.dart';
 
 import '../../helpers/auth_fakes.dart';
+import '../../helpers/onboarding_fakes.dart';
 
 void main() {
   ({
@@ -21,6 +23,10 @@ void main() {
       overrides: [
         tokenStorageProvider.overrideWithValue(tokens),
         authRepositoryProvider.overrideWithValue(auth),
+        // Without this the onboarding check reaches the real network.
+        onboardingRepositoryProvider.overrideWithValue(
+          FakeOnboardingRepository(completed: true),
+        ),
       ],
     );
     addTearDown(container.dispose);

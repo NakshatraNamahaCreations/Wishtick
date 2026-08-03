@@ -356,9 +356,9 @@ describe('Account lifecycle & dashboard (e2e)', () => {
         .patch(`${V1}/me/preferences`)
         .set(auth(token))
         .send({
-          interests: ['music'],
+          interests: ['ent_music'],
           giftCategories: ['books'],
-          favouriteColors: ['blue'],
+          favouriteColors: ['blue_navy'],
           clothingSize: 'm',
         })
         .expect(200);

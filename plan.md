@@ -1,12 +1,17 @@
 # Wishtick — Mobile App Plan
 
-> **Design source of truth:** Figma file [Wishtick-UI](https://www.figma.com/design/8OShdlUS8kUWEE6j5DQ8GP/Wishtick-UI)
-> (fileKey: `8OShdlUS8kUWEE6j5DQ8GP`)
+> **Design source of truth:** Figma file [Wishtick-UI-v2](https://www.figma.com/design/6WXJf85eSt7J3SpPzyoJP2/Wishtick-UI-v2)
+> (fileKey: `6WXJf85eSt7J3SpPzyoJP2`). The UI team duplicated the original
+> `Wishtick-UI` file (`8OShdlUS8kUWEE6j5DQ8GP`) and continues in the copy.
+> **v2 fully re-inventoried 2026-08-01** (201 frames: 64 new · 24 removed ·
+> 12 redesigned · 1 renamed) — per-screen node IDs and ⚠️ v2 markers live in
+> [sprints.md](sprints.md); the export checklist is
+> [`UI_Screen/_v2_export_list.txt`](UI_Screen/_v2_export_list.txt).
 >
 > **Rule: every screen is built by first opening its Figma frame (node ID listed in
 > [sprints.md](sprints.md)), pulling a fresh screenshot + design context via the Figma MCP, and
 > implementing the UI *as designed* — spacing, type, radii, colors. No improvisation.**
-> To open a frame: `https://www.figma.com/design/8OShdlUS8kUWEE6j5DQ8GP/Wishtick-UI?node-id=<ID with ':' replaced by '-'>`
+> To open a frame: `https://www.figma.com/design/6WXJf85eSt7J3SpPzyoJP2/Wishtick-UI-v2?node-id=<ID with ':' replaced by '-'>`
 
 ---
 
@@ -14,10 +19,10 @@
 
 A social gifting platform for the Indian market — "Gifting, made together". Four pillars:
 
-1. **Wishlists** — multi-wishlist per user, public/shareable, items imported from Amazon / Flipkart / Myntra (affiliate links, price tracking).
-2. **Events & Invitations** — occasions (Birthday, Anniversary, Wedding, House Warming, Mom-to-Be, Rakhi, Best Wishes, Custom), invitation templates, invites + RSVP.
-3. **Gifting & Group Gifts** — reserve a gift (hold), buy solo, or pool money as a group (chip-in with goal tracking, participant chat, order confirmation → tracking → delivery, thank-you notes).
-4. **Memories** — time-locked capsules: friends add photo / video / audio / text messages that unlock on the occasion date.
+1. **Wishlists** — multi-wishlist per user, public/shareable, quick-add, items imported from Amazon / Flipkart / Myntra (affiliate links, price tracking).
+2. **Events & Invitations** — occasions (Birthday, Anniversary, Wedding, House Warming, Mom-to-Be, Rakhi, Best Wishes, Custom), invitation templates, invites + RSVP, guest list with export *(v2)*.
+3. **Gifting & Group Gifts** — reserve a gift (hold), buy solo, or pool money as a group (chip-in with goal tracking, participant chat, order confirmation → tracking → delivery, thank-you notes). *(v2)* group gifts extend to **multiple gifts + extra charges** with a **summary**, and a full **refund flow** paying back contributors via **UPI payouts**.
+4. **Memories** — time-locked capsules: friends add photo / video / text messages that unlock on the occasion date *(audio compose screens were dropped in v2 — pending design confirmation)*, surfaced under Profile → My Memories.
 
 Deep onboarding personalization (interests, colors, sizes, important dates) powers a gift-recommendation feed ("Discover").
 
@@ -90,20 +95,32 @@ Each feature: `data/` (api + dtos) · `domain/` (models) · `presentation/` (scr
 
 Same 3-layer approach for **typography** (`app_typography.dart`: display serif for headings/logo, Montserrat for UI — confirm exact families from Figma text styles) and **spacing/radius** (`app_dimens.dart`: 4-pt scale, card radius 16, sheet radius 24, pill buttons).
 
-### 4.2 Starting palette values (sampled from design screenshots)
+### 4.2 Palette values — ✅ verified against the Color System page (2026-07-31)
 
-⚠️ Sampled from rendered PNGs, close but must be verified against the Figma **Color System** page (node `0:1`) variables before Sprint 0 ends (Figma MCP quota was exhausted; re-run `get_variable_defs`).
+Every swatch on the Figma **Color System** page (node `0:1`) was sampled from a
+full render of the page and now lives verbatim in `app_palette.dart`:
 
-| Token | Sampled | Seen at |
-|---|---|---|
-| plum (primary / CTA) | `#3F0E4C` | Continue / Save buttons |
-| plum deep | `#320C3D` | "Custom Events" tile |
-| plum bright / chip | `#5B1A6E` | Selected filter chip |
-| ivory (light bg) | `#FFFCFA` | Section backgrounds |
-| cream | `#F5ECE4` | Profile / Memory hero bg |
-| gold soft | `#F5E1C0` | Group-gift progress card |
-| lavender surface | `#EAE9F2` / `#FAF9FE` | Cards, notification rows |
-| pink (accent hearts/CTA links) | ~`#E9316F` (verify) | Hearts, "my wishlist" badge |
+| Swatch | Hex | | Swatch | Hex |
+|---|---|---|---|---|
+| plum | `#5B1A6E` | | teal / teal soft | `#3FBFA6` / `#7FD9C6` |
+| plum deep | `#3F0E4C` | | navy / navy deep | `#1E1B3A` / `#0F0D24` |
+| plum soft | `#7B3A8F` | | violet / violet soft | `#7C6BE6` / `#B7ADF2` |
+| pink / soft / pale | `#E94E85` / `#F27BA3` / `#FCE7EE` | | amber / amber soft | `#F3AB4A` / `#F9D08B` |
+| ivory / ivory deep | `#FCFBF5` / `#F5EFE4` | | blue / blue soft | `#4E8BE9` / `#8FB4F0` |
+| cream | `#FFF7EA` | | ink / ink soft | `#1E1B3A` / `#4A4463` |
+| gold / gold soft | `#E7B85C` / `#F5D48C` | | text muted / faint | `#8A82A1` / `#B7B2C6` |
+| coral / coral soft | `#FF7B5C` / `#FFB199` | | rose soft | `#F4B6C2` |
+
+Findings from verification (already applied):
+- **The CTA colour `#3F0E4C` is officially *plum deep*** — the swatch named
+  *plum* is `#5B1A6E`. Semantic `primary` (light) maps to plum deep, so every
+  built screen is unchanged; the dark theme's primary uses the official plum.
+- **Screen backgrounds are *ivory deep*** (`#F5EFE4`), not cream.
+- **The LOGOUT red (`#D51112`) is not on the page** — official *coral* is an
+  orange (`#FF7B5C`). The alarm red is kept as a screen-sampled value
+  (`redAlert`), separate from coral.
+- A handful of screen-only colours (gradient stops, lavender washes) are kept in
+  a clearly-marked *screen-sampled* section of `app_palette.dart`.
 
 ### 4.3 Dark mode
 
@@ -115,7 +132,12 @@ Same 3-layer approach for **typography** (`app_typography.dart`: display serif f
 
 ## 5. Figma screen inventory
 
-Full inventory with node IDs lives in [sprints.md](sprints.md) — ~90 unique screens across: Onboarding/Auth (25), Home (2), Wishlist (10), Gifting/Orders (12), Group gifts (8), Events/Invitations (10), Memories (12), Notifications (12), Profile (14).
+Full inventory with node IDs lives in [sprints.md](sprints.md). As of the v2
+re-inventory (2026-08-01): **201 top-level frames ≈ 115 unique screens** across
+Onboarding/Auth (~24), Home (2), Wishlist (12), Gifting/Orders (12), Group
+gifts (**~30** — the refund flow and summary/charges screens landed in v2),
+Events/Invitations (14 — guest list added), Memories (12), Notifications (11),
+Profile (18 — My Memories and Refunds & Payouts added).
 
 ---
 
@@ -136,6 +158,9 @@ Backend already has (NestJS, versioned API): `auth` (signup/login/refresh/sessio
 | **Push (FCM)** (device token registry + send pipeline) | All notifications | Only in-app notification list today; mailer/SMS are console stubs |
 | **Friends/relations** (person + relation, upcoming occasions) | Home, Discover, Events | Today only event invitees; needs contact/relation model |
 | **Location** ("Where to deliver") | Home header | Simple; ties into addresses |
+| **Refund engine + UPI payouts** *(v2)* | Group-gift refund flow (S6), Profile → Refunds & Payouts / Enter UPI (S9) | Cancel / goal-missed / over-collection → per-contributor refunds via Razorpay refund API; payout destination (UPI) stored on profile; refund status timeline to match the ~16 refund frames |
+| **Group-gift charges & multi-gift** *(v2)* | Group gift summary / Add charge / Add gift (S6) | Extends the group-gift model: several gifts per group + miscellaneous charges rolled into the goal |
+| **Guest-list export** *(v2)* | Event guest list / Download (S7) | View is a projection over invites+RSVPs; download (CSV/PDF) is a new endpoint |
 
 ---
 

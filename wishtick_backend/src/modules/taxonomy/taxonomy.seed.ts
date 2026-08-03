@@ -14,50 +14,221 @@ const rows = (
 ): SeedTerm[] =>
   entries.map(([key, label, meta], i) => ({ kind, key, label, meta, sortOrder: i * 10 }));
 
+/** Granular interests for one category, keys prefixed to stay globally unique. */
+const interests = (
+  category: string,
+  prefix: string,
+  entries: [key: string, label: string][],
+): SeedTerm[] =>
+  entries.map(([key, label], i) => ({
+    kind: TaxonomyKind.INTEREST,
+    key: `${prefix}_${key}`,
+    label,
+    meta: { category },
+    sortOrder: i * 10,
+  }));
+
+/** One colour group from the onboarding colours screen (Figma `39:1061` v2). */
+const colours = (
+  group: string,
+  groupLabel: string,
+  entries: [key: string, label: string, hex: string][],
+): SeedTerm[] =>
+  entries.map(([key, label, hex], i) => ({
+    kind: TaxonomyKind.COLOR,
+    key: `${group}_${key}`,
+    label,
+    meta: { hex, group, groupLabel },
+    sortOrder: i * 10,
+  }));
+
 /**
- * The launch taxonomy. Sprint 11 gives admins CRUD over this; the seed only
- * establishes the starting set, and re-running it never clobbers admin edits
- * (see the upsert in the seed migration).
+ * The launch taxonomy, transcribed from the Wishtick-UI-v2 designs
+ * (interests `36:839` + the 12 category screens; colours `39:1061`; sizes
+ * `51:42`). Labels are verbatim from the design file, including its typos
+ * ("Activites", "Liesure", "Deserts") — fix them here *and* in Figma together.
+ *
+ * Sprint 11 gives admins CRUD over this; the seed only establishes the
+ * starting set, and re-running it never clobbers admin edits (see the upsert
+ * in the seed migration).
  */
 export const TAXONOMY_SEED: SeedTerm[] = [
-  ...rows(TaxonomyKind.INTEREST, [
-    ['music', 'Music'],
-    ['travel', 'Travel'],
-    ['reading', 'Reading'],
-    ['gaming', 'Gaming'],
-    ['cooking', 'Cooking'],
-    ['fitness', 'Fitness'],
-    ['photography', 'Photography'],
-    ['art', 'Art & Design'],
-    ['technology', 'Technology'],
-    ['fashion', 'Fashion'],
-    ['movies', 'Movies & TV'],
-    ['sports', 'Sports'],
-    ['gardening', 'Gardening'],
-    ['pets', 'Pets'],
-    ['crafts', 'DIY & Crafts'],
-    ['outdoors', 'Outdoors & Hiking'],
-    ['wellness', 'Wellness & Self-care'],
-    ['collecting', 'Collecting'],
+  // ── Interest categories (Figma 36:839, in display order) ──────────────────
+  ...rows(TaxonomyKind.INTEREST_CATEGORY, [
+    ['fashion', 'Fashion & Personal Style'],
+    ['technology', 'Technology & Gadgets'],
+    ['home_living', 'Home & Living'],
+    ['health_fitness', 'Health & Fitness'],
+    ['travel', 'Travel & Experiences'],
+    ['entertainment', 'Entertainment'],
+    ['hobbies', 'Hobbies & Creativity'],
+    ['kids_family', 'Kids & family'],
+    ['automotive', 'Automotive'],
+    ['sustainable', 'Sustainable Living'],
+    ['food_beverages', 'Food & Beverages'],
+    ['other', 'Other'],
   ]),
 
-  // `hex` lets clients render a swatch without shipping its own colour table.
-  ...rows(TaxonomyKind.COLOR, [
-    ['black', 'Black', { hex: '#000000' }],
-    ['white', 'White', { hex: '#FFFFFF' }],
-    ['red', 'Red', { hex: '#E53935' }],
-    ['pink', 'Pink', { hex: '#EC407A' }],
-    ['purple', 'Purple', { hex: '#8E24AA' }],
-    ['blue', 'Blue', { hex: '#1E88E5' }],
-    ['teal', 'Teal', { hex: '#00897B' }],
-    ['green', 'Green', { hex: '#43A047' }],
-    ['yellow', 'Yellow', { hex: '#FDD835' }],
-    ['orange', 'Orange', { hex: '#FB8C00' }],
-    ['brown', 'Brown', { hex: '#6D4C41' }],
-    ['grey', 'Grey', { hex: '#757575' }],
-    ['beige', 'Beige', { hex: '#D7CCC8' }],
-    ['gold', 'Gold', { hex: '#C9A227' }],
-    ['silver', 'Silver', { hex: '#B0BEC5' }],
+  // ── Granular interests, one block per category screen ─────────────────────
+  ...interests('fashion', 'fashion', [
+    ['clothing', 'Clothing'],
+    ['shoes', 'Shoes'],
+    ['bags_wallets', 'Bags & Wallets'],
+    ['watches', 'Watches'],
+    ['jewellery', 'Jewellery'],
+    ['accessories', 'Accessories'],
+    ['eye_wear', 'Eye Wear'],
+    ['fragrances', 'Fragrances'],
+    ['beauty_makeup', 'Beauty & Makeup'],
+    ['grooming', 'Grooming'],
+    ['skincare', 'Skincare'],
+  ]),
+  ...interests('technology', 'tech', [
+    ['smartphones', 'Smartphones'],
+    ['computers', 'Computers'],
+    ['laptops_tablets', 'Laptops & Tablets'],
+    ['audio_devices', 'Audio devices'],
+    ['gaming', 'Gaming'],
+    ['smart_home', 'Smart Home'],
+    ['wearables', 'Wearables'],
+    ['camera_photography', 'Camera & Photography'],
+    ['accessories', 'Tech Accessories'],
+  ]),
+  ...interests('home_living', 'home', [
+    ['decor', 'Home decor'],
+    ['furniture', 'Furniture'],
+    ['kitchen_dining', 'Kitchen & Dining'],
+    ['appliances', 'Home Appliances'],
+    ['bedding_bath', 'Bedding & Bath'],
+    ['lighting', 'Lighting'],
+    ['gardening', 'Gardening'],
+    ['improvement', 'Home Improvement'],
+  ]),
+  ...interests('health_fitness', 'health', [
+    ['equipments', 'Equipments'],
+    ['sports_gear', 'Sports Gear'],
+    ['yoga_meditation', 'Yoga & Meditation'],
+    ['nutrition', 'Nutrition'],
+    ['outdoor_activities', 'Outdoor Activities'],
+    ['cycling', 'Cycling'],
+    ['running', 'Running'],
+  ]),
+  ...interests('travel', 'travel', [
+    ['adventure_outdoor', 'Adventure & Outdoor Activites'],
+    ['road_trips', 'Road Trips'],
+    ['luxury_leisure', 'Luxury & Liesure Travel'],
+    ['accessories', 'Travel Accessories'],
+    ['spa_wellness', 'Spa & Wellness'],
+    ['fine_dining', 'Fine Dining'],
+    ['coffee_dates', 'Coffee dates'],
+    ['concerts_live', 'Concert & Live Events'],
+    ['movie_theatre', 'Movie & Theatre'],
+    ['workshops_classes', 'Workshops & Classes'],
+  ]),
+  ...interests('entertainment', 'ent', [
+    ['books', 'Books'],
+    ['movies_tv_ott', 'Movies & TV & OTT'],
+    ['music', 'Music'],
+    ['gaming', 'Gaming'],
+  ]),
+  ...interests('hobbies', 'hobby', [
+    ['art_craft', 'Art & Craft'],
+    ['music_instruments', 'Music Instruments'],
+    ['pottery', 'Pottery'],
+    ['painting', 'Painting'],
+  ]),
+  ...interests('kids_family', 'kids', [
+    ['baby_products', 'Baby Products'],
+    ['toys', 'Toys'],
+    ['family_activities', 'Family Activities'],
+    ['pet_care', 'Pet Care'],
+  ]),
+  ...interests('automotive', 'auto', [
+    ['cars', 'Cars'],
+    ['motorcycles', 'Motorcycles'],
+    ['car_accessories', 'Car Accessories'],
+  ]),
+  ...interests('sustainable', 'sus', [
+    ['eco_friendly', 'Eco-Friendly Products'],
+    ['organic_living', 'Organic Living'],
+    ['reusable', 'Reusable Products'],
+    ['fashion', 'Sustainable Fashion'],
+  ]),
+  ...interests('food_beverages', 'food', [
+    ['chocolates_sweets', 'Chocolates & Sweets'],
+    ['cakes_desserts', 'Cakes & Deserts'],
+    ['beverages', 'Beverages'],
+    ['dining_experiences', 'Dining & Restaurant Experiences'],
+  ]),
+  // "Other" suggestions (Figma 239:454); free-text customs are a profile
+  // field, not taxonomy.
+  ...interests('other', 'other', [
+    ['diy_crafts', 'DIY Crafts'],
+    ['baking', 'Baking'],
+    ['astronomy', 'Astronomy'],
+    ['poetry', 'Poetry'],
+    ['anime', 'Anime'],
+    ['pets', 'Pets'],
+  ]),
+
+  // ── Colours (Figma 39:1061 v2; hex sampled from the design render) ────────
+  // Teal Blue and Periwinkle are grey placeholder circles in the design file —
+  // the hexes here are stand-ins until the design team supplies real ones.
+  ...colours('neutral', 'Neutrals & Slate', [
+    ['white', 'White', '#FFFFFF'],
+    ['beige', 'Beige', '#F9F0E7'],
+    ['light_grey', 'Light Grey', '#DEE1E1'],
+    ['slate', 'Slate', '#727C8F'],
+    ['black', 'Black', '#161616'],
+  ]),
+  ...colours('earth', 'Earth Tones', [
+    ['cocoa', 'Cocoa', '#8A492B'],
+    ['terracotta', 'Terracotta', '#D86F42'],
+    ['mocha', 'Mocha', '#AB907F'],
+    ['sand', 'Sand', '#E8D2AE'],
+    ['olive', 'Olive', '#828050'],
+  ]),
+  ...colours('pastel', 'Pastels', [
+    ['blush', 'Blush', '#FDB8CA'],
+    ['peach', 'Peach', '#FEC1A5'],
+    ['lemon', 'Lemon', '#FEEC9F'],
+    ['mint', 'Mint', '#ACEBD0'],
+    ['lavender', 'Lavender', '#C5BCF5'],
+  ]),
+  ...colours('blue', 'Blues', [
+    ['navy', 'Navy', '#0C327E'],
+    ['royal', 'Royal Blue', '#156BF2'],
+    ['sky', 'Sky Blue', '#A7DEFD'],
+    ['teal', 'Teal Blue', '#367588'],
+    ['periwinkle', 'Peri winkle', '#AEB6E8'],
+  ]),
+  ...colours('green', 'Greens', [
+    ['forest', 'Forest', '#025733'],
+    ['emerald', 'Emerald', '#01AE6F'],
+    ['sage', 'Sage', '#A7C3AA'],
+    ['mint', 'Mint', '#A9EACE'],
+    ['lime', 'Lime', '#F4FF80'],
+  ]),
+  ...colours('red', 'Red & Pinks', [
+    ['cherry', 'Cherry', '#B71B3D'],
+    ['ruby', 'Ruby', '#D81F2C'],
+    ['coral', 'Coral', '#FF7B5C'],
+    ['rose', 'Rose', '#F4B6C2'],
+    ['hot_pink', 'Hot Pink', '#E94E85'],
+  ]),
+  ...colours('orange', 'Oranges & Yellows', [
+    ['orange', 'Orange', '#FF7300'],
+    ['tangerine', 'Tangerine', '#FF8C0A'],
+    ['amber', 'Amber', '#F3AB4A'],
+    ['yellow', 'Yellow', '#FFD31A'],
+    ['lemon', 'Lemon', '#FFE97A'],
+  ]),
+  ...colours('purple', 'Purple & Violet', [
+    ['plum', 'Plum', '#5B1A6E'],
+    ['violet', 'Violet', '#7C6BE6'],
+    ['lavender', 'Lavender', '#B7ADF2'],
+    ['lilac', 'Lilac', '#D8B6F2'],
+    ['orchid', 'Orchid', '#DB7DD9'],
   ]),
 
   ...rows(TaxonomyKind.CLOTHING_SIZE, [
@@ -72,19 +243,25 @@ export const TAXONOMY_SEED: SeedTerm[] = [
     ['prefer_not_to_say', 'Prefer not to say'],
   ]),
 
-  // Shoe size is optional in the scope, so it carries an explicit opt-out.
+  // The size screen (51:42) offers UK / US / EU; one key per size per system.
   ...rows(TaxonomyKind.SHOE_SIZE, [
-    ['uk_3', 'UK 3', { system: 'uk' }],
-    ['uk_4', 'UK 4', { system: 'uk' }],
-    ['uk_5', 'UK 5', { system: 'uk' }],
-    ['uk_6', 'UK 6', { system: 'uk' }],
-    ['uk_7', 'UK 7', { system: 'uk' }],
-    ['uk_8', 'UK 8', { system: 'uk' }],
-    ['uk_9', 'UK 9', { system: 'uk' }],
-    ['uk_10', 'UK 10', { system: 'uk' }],
-    ['uk_11', 'UK 11', { system: 'uk' }],
-    ['uk_12', 'UK 12', { system: 'uk' }],
+    ...([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const).map(
+      (n) => [`uk_${n}`, `UK ${n}`, { system: 'uk' }] as [string, string, Record<string, string>],
+    ),
+    ...([4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const).map(
+      (n) => [`us_${n}`, `US ${n}`, { system: 'us' }] as [string, string, Record<string, string>],
+    ),
+    ...([36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] as const).map(
+      (n) => [`eu_${n}`, `EU ${n}`, { system: 'eu' }] as [string, string, Record<string, string>],
+    ),
     ['prefer_not_to_say', 'Prefer not to say'],
+  ]),
+
+  ...rows(TaxonomyKind.FIT_PREFERENCE, [
+    ['slim', 'Slim'],
+    ['regular', 'Regular'],
+    ['relaxed', 'Relaxed'],
+    ['oversized', 'Oversized'],
   ]),
 
   ...rows(TaxonomyKind.GIFT_CATEGORY, [
@@ -130,6 +307,8 @@ export const TAXONOMY_SEED: SeedTerm[] = [
     ['retirement', 'Retirement'],
     ['engagement', 'Engagement'],
     ['just_because', 'Just Because'],
+    // The important-dates screen's occasion carousel (Figma 199:10 / 204:371).
+    ['special_moments', 'Special Moments'],
   ]),
 
   // Mirrors Event.type in Sprint 5. Kept in the taxonomy so the event-creation
@@ -140,4 +319,55 @@ export const TAXONOMY_SEED: SeedTerm[] = [
     ['generic', 'Custom Event'],
     ['special', 'Special Celebration'],
   ]),
+];
+
+/**
+ * v1 seed keys superseded by the v2 design — the flat interest list and the
+ * ungrouped colours. Migration 005 deactivates them on existing databases;
+ * fresh databases never create them.
+ */
+export const TAXONOMY_RETIRED: { kind: TaxonomyKind; keys: string[] }[] = [
+  {
+    kind: TaxonomyKind.INTEREST,
+    keys: [
+      'music',
+      'travel',
+      'reading',
+      'gaming',
+      'cooking',
+      'fitness',
+      'photography',
+      'art',
+      'technology',
+      'fashion',
+      'movies',
+      'sports',
+      'gardening',
+      'pets',
+      'crafts',
+      'outdoors',
+      'wellness',
+      'collecting',
+    ],
+  },
+  {
+    kind: TaxonomyKind.COLOR,
+    keys: [
+      'black',
+      'white',
+      'red',
+      'pink',
+      'purple',
+      'blue',
+      'teal',
+      'green',
+      'yellow',
+      'orange',
+      'brown',
+      'grey',
+      'beige',
+      'gold',
+      'silver',
+    ],
+  },
 ];

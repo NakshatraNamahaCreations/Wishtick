@@ -30,11 +30,15 @@ class ThemeModeController extends Notifier<ThemeMode> {
     await ref.read(sharedPreferencesProvider).setString(prefsKey, mode.name);
   }
 
+  /// Defaults to light rather than [ThemeMode.system] — the app should not
+  /// follow the device's theme, only an explicit choice made in Profile →
+  /// Appearance.
   @visibleForTesting
   static ThemeMode decode(String? raw) => switch (raw) {
     'light' => ThemeMode.light,
     'dark' => ThemeMode.dark,
-    _ => ThemeMode.system,
+    'system' => ThemeMode.system,
+    _ => ThemeMode.light,
   };
 }
 

@@ -9,9 +9,12 @@ import 'package:wishtick_flutter/core/theme/theme_controller.dart';
 import 'package:wishtick_flutter/core/widgets/wishtick_bottom_nav.dart';
 import 'package:wishtick_flutter/features/auth/data/auth_repository.dart';
 import 'package:wishtick_flutter/features/auth/presentation/welcome_screen.dart';
+import 'package:wishtick_flutter/features/onboarding/data/onboarding_repository.dart';
+import 'package:wishtick_flutter/features/onboarding/presentation/create_profile_screen.dart';
 import 'package:wishtick_flutter/features/splash/presentation/splash_screen.dart';
 
 import 'helpers/auth_fakes.dart';
+import 'helpers/onboarding_fakes.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -24,10 +27,18 @@ void main() {
     WidgetTester tester, {
     Map<String, Object> prefs = const {},
     bool signedIn = false,
+    bool onboarded = true,
   }) async {
     SharedPreferences.setMockInitialValues(prefs);
     final instance = await SharedPreferences.getInstance();
     final auth = FakeAuthRepository();
+
+    // A phone-sized surface: the default 800x600 test window is shorter than
+    // any real device and makes phone layouts look broken.
+    tester.view
+      ..physicalSize = const Size(393, 852)
+      ..devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -37,6 +48,11 @@ void main() {
             FakeTokenStorage(refreshToken: signedIn ? 'refresh' : null),
           ),
           authRepositoryProvider.overrideWithValue(auth),
+          // Without this the session's onboarding check reaches for the real
+          // network and every test waits out the connect timeout.
+          onboardingRepositoryProvider.overrideWithValue(
+            FakeOnboardingRepository(completed: onboarded),
+          ),
         ],
         child: const WishtickApp(),
       ),
@@ -81,7 +97,7 @@ void main() {
       expect(auth.meCalls, 0);
     });
 
-    testWidgets('sends a signed-in user straight to the tab shell', (
+    testWidgets('sends a signed-in, onboarded user to the tab shell', (
       tester,
     ) async {
       final auth = await pumpApp(tester, signedIn: true);
@@ -90,6 +106,26 @@ void main() {
       expect(auth.meCalls, 1);
       expect(find.byType(WishtickBottomNav), findsOneWidget);
       expect(find.byType(WelcomeScreen), findsNothing);
+    });
+
+    testWidgets('holds a signed-in user in onboarding until it is finished', (
+      tester,
+    ) async {
+      await pumpApp(tester, signedIn: true, onboarded: false);
+      await passSplash(tester);
+
+      expect(find.byType(CreateProfileScreen), findsOneWidget);
+      expect(find.byType(WishtickBottomNav), findsNothing);
+    });
+
+    testWidgets('onboarding is unreachable once it is complete', (
+      tester,
+    ) async {
+      await pumpApp(tester, signedIn: true);
+      await passSplash(tester);
+
+      expect(find.byType(CreateProfileScreen), findsNothing);
+      expect(find.byType(WishtickBottomNav), findsOneWidget);
     });
   });
 

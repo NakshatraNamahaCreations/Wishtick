@@ -3,11 +3,36 @@ import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 
 export type UserProfileDocument = HydratedDocument<UserProfile>;
 
+/** The three options the profile screen offers (Figma `31:608`). */
+export enum Gender {
+  MALE = 'male',
+  FEMALE = 'female',
+  OTHER = 'other',
+}
+
+/** How many bundled avatars ship with the app, so keys can be validated. */
+export const AVATAR_COUNT = 20;
+
+/** `avatar_01` … `avatar_20`. */
+export const AVATAR_KEY_PATTERN = /^avatar_(0[1-9]|1[0-9]|20)$/;
+
 @Schema({ _id: false })
 export class ProfilePreferences {
   /** All of these hold taxonomy *keys*, validated against the taxonomy on write. */
   @Prop({ type: [String], default: [] })
   interests!: string[];
+
+  /** Top-level interest categories (Figma `36:839`). */
+  @Prop({ type: [String], default: [] })
+  interestCategories!: string[];
+
+  /**
+   * Free-text interests from the "Anything Else You Love?" screen
+   * (Figma `239:454`). The one preference field that is deliberately *not*
+   * taxonomy-validated — its whole point is things we have no key for.
+   */
+  @Prop({ type: [String], default: [] })
+  customInterests!: string[];
 
   @Prop({ type: [String], default: [] })
   favouriteColors!: string[];
@@ -18,6 +43,10 @@ export class ProfilePreferences {
   /** Optional per the scope — plenty of people will not want to share it. */
   @Prop({ type: String, default: null })
   shoeSize!: string | null;
+
+  /** Slim / regular / relaxed / oversized (Figma `51:42`). */
+  @Prop({ type: String, default: null })
+  fitPreference!: string | null;
 
   @Prop({ type: [String], default: [] })
   giftCategories!: string[];
@@ -70,6 +99,20 @@ export class UserProfile {
   /** Media doc backing photoUrl, so an orphaned upload can be traced/cleaned. */
   @Prop({ type: SchemaTypes.ObjectId, ref: 'Media', default: null })
   photoMediaId!: Types.ObjectId | null;
+
+  /**
+   * Key of a bundled illustrated avatar (`avatar_01`…`avatar_20`), the
+   * alternative to uploading a photo.
+   *
+   * Mutually exclusive with [photoMediaId]: setting one clears the other, so
+   * "which picture do we show" never has two answers. The client resolves the
+   * key to a bundled asset, so no URL is stored.
+   */
+  @Prop({ type: String, default: null })
+  avatarKey!: string | null;
+
+  @Prop({ type: String, enum: Object.values(Gender), default: null })
+  gender!: Gender | null;
 
   @Prop({ type: String, maxlength: 280, default: null, trim: true })
   bio!: string | null;

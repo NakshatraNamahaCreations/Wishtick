@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/token_storage.dart';
+import '../../onboarding/data/onboarding_repository.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_user.dart';
 
@@ -17,25 +18,40 @@ enum SessionStatus {
 
 @immutable
 class SessionState {
-  const SessionState({required this.status, this.user});
+  const SessionState({
+    required this.status,
+    this.user,
+    this.onboardingCompleted = false,
+  });
 
-  const SessionState.unknown() : status = SessionStatus.unknown, user = null;
+  const SessionState.unknown()
+    : status = SessionStatus.unknown,
+      user = null,
+      onboardingCompleted = false;
   const SessionState.signedOut()
     : status = SessionStatus.unauthenticated,
-      user = null;
+      user = null,
+      onboardingCompleted = false;
 
   final SessionStatus status;
   final AuthUser? user;
+
+  /// Whether the 5-step onboarding is finished. The router keeps a signed-in
+  /// user inside onboarding until it is.
+  final bool onboardingCompleted;
 
   bool get isAuthenticated => status == SessionStatus.authenticated;
   bool get isResolved => status != SessionStatus.unknown;
 
   @override
   bool operator ==(Object other) =>
-      other is SessionState && other.status == status && other.user == user;
+      other is SessionState &&
+      other.status == status &&
+      other.user == user &&
+      other.onboardingCompleted == onboardingCompleted;
 
   @override
-  int get hashCode => Object.hash(status, user);
+  int get hashCode => Object.hash(status, user, onboardingCompleted);
 }
 
 /// Owns the signed-in user and the stored tokens.
@@ -60,7 +76,11 @@ class SessionController extends Notifier<SessionState> {
 
     try {
       final user = await _auth.me();
-      state = SessionState(status: SessionStatus.authenticated, user: user);
+      state = SessionState(
+        status: SessionStatus.authenticated,
+        user: user,
+        onboardingCompleted: await _isOnboardingComplete(),
+      );
     } on ApiException {
       // Includes the case where the interceptor already tried to refresh and
       // the refresh token was spent or revoked.
@@ -75,7 +95,34 @@ class SessionController extends Notifier<SessionState> {
     state = SessionState(
       status: SessionStatus.authenticated,
       user: result.user,
+      // A brand-new account has no onboarding progress by definition, so skip
+      // the round trip and send them straight into step 1.
+      onboardingCompleted: result.isNewUser
+          ? false
+          : await _isOnboardingComplete(),
     );
+  }
+
+  /// Marks onboarding finished locally, so the router releases the user into the
+  /// app without waiting for another status fetch.
+  void markOnboardingComplete() {
+    if (!state.isAuthenticated) return;
+    state = SessionState(
+      status: SessionStatus.authenticated,
+      user: state.user,
+      onboardingCompleted: true,
+    );
+  }
+
+  /// Defaults to *complete* when the status cannot be read: letting someone into
+  /// the app on a failed request is recoverable, trapping them in onboarding is
+  /// not.
+  Future<bool> _isOnboardingComplete() async {
+    try {
+      return (await ref.read(onboardingRepositoryProvider).status()).completed;
+    } on ApiException {
+      return true;
+    }
   }
 
   /// Replaces the cached user without touching tokens — after editing a

@@ -20,11 +20,15 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.accent,
     required this.onAccent,
     required this.accentSubtle,
+    required this.brandMark,
+    required this.heartFill,
     required this.background,
     required this.surface,
     required this.surfaceAlt,
+    required this.optionFill,
     required this.surfaceSunken,
     required this.border,
+    required this.outline,
     required this.overlay,
     required this.textPrimary,
     required this.textSecondary,
@@ -63,19 +67,45 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   final Color onAccent;
   final Color accentSubtle;
 
+  /// The Wishtick heart mark itself — the logo magenta, which is a colder,
+  /// more purple pink than [accent]. Only the brand mark uses it.
+  final Color brandMark;
+
+  /// Fills the onboarding progress heart as steps complete. A true red, kept
+  /// separate from [danger] so progress never borrows the alarm colour.
+  final Color heartFill;
+
   /// Page background behind [surface] cards.
+  ///
+  /// ⚠️ **Not final** — the design team has not confirmed the app background.
+  /// This token is the single seam for it: `AppTheme` feeds it into
+  /// `ThemeData.scaffoldBackgroundColor` and screens inherit from the theme
+  /// rather than setting their own, so changing the light/dark values below is
+  /// the whole change. (Screens that are deliberately white — the auth flow —
+  /// set [surface] explicitly and are unaffected.)
   final Color background;
 
   /// Default card / sheet fill.
   final Color surface;
 
-  /// Secondary card fill (lavender in light, raised grey in dark).
+  /// Secondary card fill (lavender in light, raised grey in dark). Input fills.
   final Color surfaceAlt;
+
+  /// Fill of an *unselected* selectable tile — gender, and the option tiles
+  /// that follow it. A touch more lavender than [surfaceAlt] so a grid of
+  /// options reads as tappable rather than as a row of inputs. Selected tiles
+  /// use [primary].
+  final Color optionFill;
 
   /// Recessed areas — search fields, image placeholders.
   final Color surfaceSunken;
 
   final Color border;
+
+  /// Hairline around an *outlined* card — one that is defined by its edge
+  /// rather than by a fill (the "Select Avatar" card). A tinted lilac, so it
+  /// reads as brand rather than as the neutral [border] used on inputs.
+  final Color outline;
 
   /// Scrim behind modals and bottom sheets.
   final Color overlay;
@@ -113,20 +143,32 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
 
   static const light = WishtickColors(
     brightness: Brightness.light,
-    primary: AppPalette.plum,
+    // Sampled from the frame exports: the Continue pill and the selected
+    // gender tile are both #522651. The Color System page calls #3F0E4C the
+    // CTA colour, but the shipped screens do not use it — so [primaryDeep]
+    // keeps it for the places that genuinely need more weight.
+    primary: AppPalette.plumMuted,
     onPrimary: AppPalette.ivory,
-    primaryDeep: AppPalette.plumDeep,
-    primaryMuted: AppPalette.plumMuted,
+    primaryDeep: AppPalette.plumInk,
+    // A genuinely *muted* plum. It used to resolve to #522651 — the same
+    // colour as [primary] — which drew de-emphasised brand content at full
+    // strength. The exports use #7B3A8F for the camera badge and for the
+    // content of unselected option tiles.
+    primaryMuted: AppPalette.plumSoft,
     primarySubtle: AppPalette.plumPale,
     accent: AppPalette.pink,
-    // Ink, not white: white on this pink is only 2.7:1, below AA. Ink is 6:1.
+    // Ink, not white: white on this pink falls below AA. Ink clears 4.5:1.
     onAccent: AppPalette.ink,
     accentSubtle: AppPalette.pinkPale,
-    background: AppPalette.cream,
+    brandMark: AppPalette.magenta,
+    heartFill: AppPalette.heartRed,
+    background: AppPalette.pageBeige,
     surface: AppPalette.white,
     surfaceAlt: AppPalette.violetPale,
-    surfaceSunken: AppPalette.ivoryDeep,
+    optionFill: AppPalette.lavenderTile,
+    surfaceSunken: AppPalette.ivory,
     border: AppPalette.border,
+    outline: AppPalette.lilacLine,
     overlay: AppPalette.scrim,
     textPrimary: AppPalette.ink,
     textSecondary: AppPalette.inkSoft,
@@ -134,17 +176,18 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     textOnDark: AppPalette.ivory,
     success: AppPalette.teal,
     successSubtle: AppPalette.tealSoft,
-    danger: AppPalette.coral,
+    // The alarm red from the screens, not the brand coral — see AppPalette.
+    danger: AppPalette.redAlert,
     onDanger: AppPalette.white,
-    dangerSubtle: AppPalette.coralSoft,
+    dangerSubtle: AppPalette.redAlertSubtle,
     warning: AppPalette.amber,
     warningSubtle: AppPalette.amberSoft,
     info: AppPalette.blue,
     infoSubtle: AppPalette.bluePale,
-    celebration: AppPalette.gold,
+    celebration: AppPalette.goldDeep,
     celebrationSubtle: AppPalette.goldSoft,
     navBackground: AppPalette.white,
-    navSelected: AppPalette.plum,
+    navSelected: AppPalette.plumMuted,
     navUnselected: AppPalette.textMuted,
     shadow: AppPalette.black,
   );
@@ -158,20 +201,29 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   /// luminance.
   static const dark = WishtickColors(
     brightness: Brightness.dark,
-    primary: AppPalette.plumBright,
+    primary: AppPalette.plum,
     onPrimary: AppPalette.ivory,
-    primaryDeep: AppPalette.plum,
+    primaryDeep: AppPalette.plumDeep,
     primaryMuted: AppPalette.plumSoft,
     primarySubtle: AppPalette.darkSurfaceAlt,
     accent: AppPalette.pink,
     // [accent] is the same pink in both themes, so its foreground matches too.
     onAccent: AppPalette.navyDeep,
     accentSubtle: AppPalette.darkPinkSubtle,
+    // The logo magenta is too dark to read against the dark ramp; the mark
+    // steps up to its soft variant to keep the same identity.
+    brandMark: AppPalette.magentaSoft,
+    heartFill: AppPalette.heartRedSoft,
     background: AppPalette.darkBackground,
     surface: AppPalette.darkSurface,
     surfaceAlt: AppPalette.darkSurfaceAlt,
+    // No separate lavender in dark — a raised grey already reads as tappable.
+    optionFill: AppPalette.darkSurfaceAlt,
     surfaceSunken: AppPalette.darkSurfaceSunken,
     border: AppPalette.darkBorder,
+    // No lilac tint survives on the dark ramp; the neutral border is the
+    // strongest edge that still reads as a hairline.
+    outline: AppPalette.darkBorder,
     overlay: AppPalette.darkScrim,
     textPrimary: AppPalette.darkTextPrimary,
     textSecondary: AppPalette.darkTextSecondary,
@@ -205,11 +257,15 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color? accent,
     Color? onAccent,
     Color? accentSubtle,
+    Color? brandMark,
+    Color? heartFill,
     Color? background,
     Color? surface,
     Color? surfaceAlt,
+    Color? optionFill,
     Color? surfaceSunken,
     Color? border,
+    Color? outline,
     Color? overlay,
     Color? textPrimary,
     Color? textSecondary,
@@ -241,11 +297,15 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       accent: accent ?? this.accent,
       onAccent: onAccent ?? this.onAccent,
       accentSubtle: accentSubtle ?? this.accentSubtle,
+      brandMark: brandMark ?? this.brandMark,
+      heartFill: heartFill ?? this.heartFill,
       background: background ?? this.background,
       surface: surface ?? this.surface,
       surfaceAlt: surfaceAlt ?? this.surfaceAlt,
+      optionFill: optionFill ?? this.optionFill,
       surfaceSunken: surfaceSunken ?? this.surfaceSunken,
       border: border ?? this.border,
+      outline: outline ?? this.outline,
       overlay: overlay ?? this.overlay,
       textPrimary: textPrimary ?? this.textPrimary,
       textSecondary: textSecondary ?? this.textSecondary,
@@ -283,11 +343,15 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       accent: c(accent, other.accent),
       onAccent: c(onAccent, other.onAccent),
       accentSubtle: c(accentSubtle, other.accentSubtle),
+      brandMark: c(brandMark, other.brandMark),
+      heartFill: c(heartFill, other.heartFill),
       background: c(background, other.background),
       surface: c(surface, other.surface),
       surfaceAlt: c(surfaceAlt, other.surfaceAlt),
+      optionFill: c(optionFill, other.optionFill),
       surfaceSunken: c(surfaceSunken, other.surfaceSunken),
       border: c(border, other.border),
+      outline: c(outline, other.outline),
       overlay: c(overlay, other.overlay),
       textPrimary: c(textPrimary, other.textPrimary),
       textSecondary: c(textSecondary, other.textSecondary),

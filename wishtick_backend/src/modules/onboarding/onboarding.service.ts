@@ -21,9 +21,17 @@ export interface OnboardingStatusView {
 
 /** Which profile fields each step is allowed to write. */
 const STEP_FIELDS: Record<OnboardingStep, (keyof SaveOnboardingStepDto)[]> = {
-  [OnboardingStep.PROFILE]: ['displayName', 'dateOfBirth', 'timezone'],
-  [OnboardingStep.INTERESTS]: ['interests'],
-  [OnboardingStep.SIZES]: ['clothingSize', 'shoeSize', 'favouriteColors'],
+  [OnboardingStep.PROFILE]: [
+    'displayName',
+    'dateOfBirth',
+    'timezone',
+    'email',
+    'gender',
+    'avatarKey',
+    'photoMediaId',
+  ],
+  [OnboardingStep.INTERESTS]: ['interests', 'interestCategories', 'customInterests'],
+  [OnboardingStep.SIZES]: ['clothingSize', 'shoeSize', 'favouriteColors', 'fitPreference'],
   [OnboardingStep.GIFTING]: ['giftCategories', 'lifestyle'],
   [OnboardingStep.OCCASIONS]: ['occasions'],
 };
@@ -122,16 +130,25 @@ export class OnboardingService {
           displayName: dto.displayName,
           dateOfBirth: dto.dateOfBirth,
           timezone: dto.timezone,
+          email: dto.email,
+          gender: dto.gender,
+          avatarKey: dto.avatarKey,
+          photoMediaId: dto.photoMediaId,
         });
         return;
       case OnboardingStep.INTERESTS:
-        await this.profiles.updatePreferences(userId, { interests: dto.interests });
+        await this.profiles.updatePreferences(userId, {
+          interests: dto.interests,
+          interestCategories: dto.interestCategories,
+          customInterests: dto.customInterests,
+        });
         return;
       case OnboardingStep.SIZES:
         await this.profiles.updatePreferences(userId, {
           clothingSize: dto.clothingSize,
           shoeSize: dto.shoeSize,
           favouriteColors: dto.favouriteColors,
+          fitPreference: dto.fitPreference,
         });
         return;
       case OnboardingStep.GIFTING:

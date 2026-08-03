@@ -7,7 +7,9 @@ import { CacheService } from 'src/infra/redis/cache.service';
 import { TaxonomyTerm, type TaxonomyDocument } from './schemas/taxonomy.schema';
 import { TaxonomyKind, type TaxonomyOption, type TaxonomyOptions } from './taxonomy.types';
 
-const CACHE_KEY = 'taxonomy:options:v1';
+// v2: the Wishtick-UI-v2 reseed added kinds (interest_category, fit_preference)
+// — bumping the key stops a warm v1 cache from hiding them for up to an hour.
+const CACHE_KEY = 'taxonomy:options:v2';
 const CACHE_TTL_SECONDS = 3_600;
 
 @Injectable()

@@ -6,8 +6,10 @@ import 'package:wishtick_flutter/features/auth/data/auth_repository.dart';
 import 'package:wishtick_flutter/features/auth/domain/phone_number.dart';
 import 'package:wishtick_flutter/features/auth/presentation/session_controller.dart';
 import 'package:wishtick_flutter/features/auth/presentation/sign_in_controller.dart';
+import 'package:wishtick_flutter/features/onboarding/data/onboarding_repository.dart';
 
 import '../../helpers/auth_fakes.dart';
+import '../../helpers/onboarding_fakes.dart';
 
 void main() {
   ({
@@ -22,6 +24,11 @@ void main() {
       overrides: [
         authRepositoryProvider.overrideWithValue(auth),
         tokenStorageProvider.overrideWithValue(tokens),
+        // The session's onboarding check would otherwise reach the real network
+        // and stall each test on the connect timeout.
+        onboardingRepositoryProvider.overrideWithValue(
+          FakeOnboardingRepository(completed: true),
+        ),
       ],
     );
     addTearDown(container.dispose);

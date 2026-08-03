@@ -5,13 +5,44 @@ Gifting, made together. See [`../plan.md`](../plan.md) for the architecture and
 
 ## Running
 
+### Without a backend (fake API)
+
+Walks the whole app — sign-in, onboarding, the shell — with no server running.
+**Any phone number is accepted and any 6-digit code works.**
+
+```bash
+flutter run --dart-define=WISHTICK_FAKE_BACKEND=true
+```
+
+A red **FAKE API** ribbon sits in the top-right the entire time, so a
+screenshot can never be mistaken for the real thing. Sign-in and onboarding
+completion persist across restarts, so both the "new user" and "returning
+user" paths are testable; sign out (or clear app data) to reset.
+
+The switch is opt-in *and* `kDebugMode`-gated — a release or profile build
+folds it to `false` and tree-shakes the fakes, even if the define is passed.
+See [`lib/core/dev/dev_mode.dart`](lib/core/dev/dev_mode.dart).
+
+### Against the real backend
+
 ```bash
 flutter pub get
 flutter run --dart-define=WISHTICK_API_BASE_URL=http://10.0.2.2:3000
 ```
 
-`10.0.2.2` is the Android emulator's route to the host machine. On iOS
-simulator use `http://localhost:3000`; on a physical device use your LAN IP.
+`10.0.2.2` is **the Android emulator's** route to the host machine — it does
+not resolve on a physical device. On a real phone pass your computer's LAN IP
+(`ipconfig` → IPv4 address), with the phone on the same Wi-Fi and the backend
+bound to `0.0.0.0` (it already is):
+
+```bash
+flutter run --dart-define=WISHTICK_API_BASE_URL=http://192.168.1.10:3000
+```
+
+On the iOS simulator use `http://localhost:3000`.
+
+VS Code users: all three are preset in
+[`.vscode/launch.json`](../.vscode/launch.json).
 
 The backend serves everything under `/api/v1` (global prefix + URI versioning),
 with `/health` and `/ready` outside the prefix. `ApiConfig` composes this.

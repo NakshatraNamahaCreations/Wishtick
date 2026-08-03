@@ -14,8 +14,18 @@ abstract final class AppSpacing {
   static const xxxl = 32.0;
   static const huge = 40.0;
 
+  /// Break between major sections of a form.
+  static const section = 56.0;
+
   /// Horizontal padding of a standard screen body.
   static const screenH = 16.0;
+
+  /// Content inset of an onboarding frame.
+  ///
+  /// Measured off the 393-px exports: the form fields, the "Select Avatar"
+  /// card, the gender row and the Continue pill all span x 26.5 → 366.5, i.e.
+  /// a 340-wide column centred on the frame. Rounded to 26 — half a pixel.
+  static const screenGutter = 26.0;
 }
 
 abstract final class AppRadius {
@@ -34,8 +44,10 @@ abstract final class AppRadius {
 }
 
 abstract final class AppSizes {
-  static const buttonHeight = 56.0;
-  static const inputHeight = 56.0;
+  // Both measured off the frame exports (button y 1348..1401, fields y
+  // 665..717). Still clear of [minTapTarget].
+  static const buttonHeight = 54.0;
+  static const inputHeight = 54.0;
   static const chipHeight = 36.0;
   static const bottomNavHeight = 68.0;
   static const fabSize = 56.0;
@@ -54,6 +66,14 @@ abstract final class AppDurations {
   static const fast = Duration(milliseconds: 150);
   static const normal = Duration(milliseconds: 250);
   static const slow = Duration(milliseconds: 400);
+
+  /// One pass of the sheen across a swipe track.
+  static const shimmer = Duration(milliseconds: 1800);
+
+  /// How long a swipe button's success check stays up before the caller's
+  /// completion callback fires — long enough to register as confirmation,
+  /// short enough not to feel like a stall.
+  static const successDwell = Duration(milliseconds: 500);
 
   /// How long the splash holds before routing (matches the Figma progress bar).
   static const splash = Duration(milliseconds: 2000);

@@ -11,6 +11,7 @@ import { migration009 } from './scripts/009-notification-indexes';
 import { migration010 } from './scripts/010-reel-indexes';
 import { migration011 } from './scripts/011-admin-indexes';
 import { migration012 } from './scripts/012-notification-ttl';
+import { migration013 } from './scripts/013-taxonomy-v2';
 
 /** Every migration must be registered here to run. Order comes from the id. */
 export const MIGRATIONS: Migration[] = [
@@ -26,6 +27,7 @@ export const MIGRATIONS: Migration[] = [
   migration010,
   migration011,
   migration012,
+  migration013,
 ];
 
 export { MigrationRunner } from './migration.runner';

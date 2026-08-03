@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import 'app_gradients.dart';
 
 /// Ergonomic access to the Wishtick design tokens.
 ///
@@ -15,6 +16,10 @@ extension WishtickThemeContext on BuildContext {
   /// happens inside a bare [MaterialApp] in tests.
   WishtickColors get colors =>
       Theme.of(this).extension<WishtickColors>() ?? WishtickColors.light;
+
+  /// Gradient tokens for the active theme.
+  WishtickGradients get gradients =>
+      Theme.of(this).extension<WishtickGradients>() ?? WishtickGradients.light;
 
   TextTheme get text => Theme.of(this).textTheme;
 

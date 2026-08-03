@@ -71,8 +71,13 @@ abstract final class AppTypography {
       _display(40, FontWeight.w600, height: 1.2);
   static TextStyle get displayMedium =>
       _display(32, FontWeight.w600, height: 1.25);
+
+  /// Screen titles ("Create Your Profile", "Select Your Avatar", "Verify…").
+  ///
+  /// 30, not 26: the exports measure 28px from cap top to descender bottom,
+  /// and Playfair's cap+descender is 0.932em → 30.0.
   static TextStyle get displaySmall =>
-      _display(26, FontWeight.w600, height: 1.3);
+      _display(30, FontWeight.w600, height: 1.3);
 
   static TextStyle get headlineLarge => _body(24, FontWeight.w700, height: 1.3);
   static TextStyle get headlineMedium =>

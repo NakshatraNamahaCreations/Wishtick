@@ -24,15 +24,17 @@ void main() {
       expect(ThemeModeController.decode('system'), ThemeMode.system);
     });
 
-    test('falls back to system for missing or unknown values', () {
-      expect(ThemeModeController.decode(null), ThemeMode.system);
-      expect(ThemeModeController.decode('sepia'), ThemeMode.system);
+    test('falls back to light for missing or unknown values', () {
+      // The app must not silently follow the device's theme on first launch —
+      // only an explicit choice on Profile → Appearance may do that.
+      expect(ThemeModeController.decode(null), ThemeMode.light);
+      expect(ThemeModeController.decode('sepia'), ThemeMode.light);
     });
   });
 
-  test('defaults to following the device setting', () async {
+  test('defaults to light rather than the device setting', () async {
     final container = await containerWith({});
-    expect(container.read(themeModeProvider), ThemeMode.system);
+    expect(container.read(themeModeProvider), ThemeMode.light);
   });
 
   test('restores the saved preference on launch', () async {

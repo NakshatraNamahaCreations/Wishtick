@@ -57,69 +57,75 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final colors = context.colors;
 
     return Scaffold(
-      backgroundColor: colors.background,
+      // Background inherits ThemeData.scaffoldBackgroundColor — see WishtickColors.background.
       body: SafeArea(
-        child: Column(
-          children: [
-            const Spacer(flex: 3),
-            _Mark(),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'Wishtick',
-              style: AppTypography.displayMedium.copyWith(
-                color: colors.primary,
+        // A Scaffold body gets *loose* width constraints, and every child of
+        // this Column is intrinsic-width — without forcing full width the
+        // Column shrinks to its widest text and hugs the left edge on device.
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            children: [
+              const Spacer(flex: 3),
+              _Mark(),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Wishtick',
+                style: AppTypography.displayMedium.copyWith(
+                  color: colors.primary,
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Gifting, made together',
-              style: context.text.bodyLarge?.copyWith(
-                color: colors.textSecondary,
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Gifting, made together',
+                style: context.text.bodyLarge?.copyWith(
+                  color: colors.textSecondary,
+                ),
               ),
-            ),
-            const Spacer(flex: 4),
-            SizedBox(
-              width: 131,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, _) => LinearProgressIndicator(
-                    value: _controller.value,
-                    minHeight: 4,
-                    backgroundColor: colors.border,
-                    valueColor: AlwaysStoppedAnimation(colors.primary),
+              const Spacer(flex: 4),
+              SizedBox(
+                width: 131,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, _) => LinearProgressIndicator(
+                      value: _controller.value,
+                      minHeight: 4,
+                      backgroundColor: colors.border,
+                      valueColor: AlwaysStoppedAnimation(colors.primary),
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            Text(
-              'Setting up your celebrations',
-              style: context.text.bodyMedium?.copyWith(color: colors.textMuted),
-            ),
-            const SizedBox(height: AppSpacing.huge),
-          ],
+              const SizedBox(height: AppSpacing.xl),
+              Text(
+                'Setting up your celebrations',
+                style: context.text.bodyMedium?.copyWith(
+                  color: colors.textMuted,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.huge),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Placeholder for the Figma logo mark (`214:607`). Sprint 1 swaps this for the
-/// exported asset once the design hand-off includes it.
+/// The Figma logo mark (`214:607`) — the gradient heart-and-check exported to
+/// `assets/logo/logo.png`, floating directly on the background with no
+/// backdrop, matching the export.
+///
+/// 150 rather than the file's own 165 canvas: the source PNG carries a
+/// transparent margin around the glyph (a soft drop-shadow falloff), so
+/// displaying it at its raw canvas size undershoots the reference — sized
+/// here so the *visible* heart measures the same ~91×81 the reference export
+/// shows in a 393-wide frame.
 class _Mark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      width: 117,
-      height: 117,
-      decoration: BoxDecoration(
-        color: colors.accentSubtle,
-        borderRadius: BorderRadius.circular(AppRadius.xxl),
-      ),
-      child: Icon(Icons.favorite, size: 64, color: colors.accent),
-    );
+    return Image.asset('assets/logo/logo.png', width: 150, height: 150);
   }
 }
