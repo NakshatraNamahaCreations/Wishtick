@@ -1,0 +1,3 @@
+# Design reference exports — source of truth is the Figma file, not the repo.
+# Root-anchored so it only matches the top-level folder.
+/UI_Screen/
