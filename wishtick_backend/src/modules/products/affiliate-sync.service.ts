@@ -6,6 +6,7 @@ import {
   WishlistItem,
   type WishlistItemDocument,
 } from 'src/modules/wishlists/schemas/wishlist-item.schema';
+import { MonetizationService } from './affiliate/monetization.service';
 import { PRODUCT_PROVIDER, type IProductProvider } from './providers/product-provider.port';
 import { ProviderGuard, ProviderUnavailableError } from './providers/provider-guard.service';
 import { ProductsService } from './products.service';
@@ -40,6 +41,8 @@ export interface SyncReport {
   itemsFlaggedPrice: number;
   itemsFlaggedStock: number;
   providerErrors: number;
+  /** Products that gained an affiliate link on this run. */
+  productsMonetized: number;
 }
 
 @Injectable()
@@ -52,6 +55,7 @@ export class AffiliateSyncService {
     @Inject(PRODUCT_PROVIDER) private readonly provider: IProductProvider,
     private readonly guard: ProviderGuard,
     private readonly productsService: ProductsService,
+    private readonly monetization: MonetizationService,
     private readonly events: EventEmitter2,
   ) {}
 
@@ -72,6 +76,7 @@ export class AffiliateSyncService {
       itemsFlaggedPrice: 0,
       itemsFlaggedStock: 0,
       providerErrors: 0,
+      productsMonetized: 0,
     };
 
     const referencedIds = await this.items.distinct('sourceProductId', {
@@ -80,6 +85,11 @@ export class AffiliateSyncService {
     });
 
     if (referencedIds.length === 0) return report;
+
+    // Resolve links for saved products before the price sweep, so a gift that
+    // gets clicked tomorrow already pays. A click still resolves on demand —
+    // this only means the first clicker does not wait for two upstream calls.
+    report.productsMonetized = await this.monetization.backfillReferenced(referencedIds);
 
     const stale = await this.products
       .find({ _id: { $in: referencedIds } })
@@ -91,7 +101,11 @@ export class AffiliateSyncService {
       report.productsChecked++;
       try {
         const fresh = await this.guard.run(this.provider.name, 'sync', () =>
-          this.provider.getDetails(product.externalId),
+          // Same reason as MonetizationService: a provider whose id is not
+          // enough on its own gets the stored reference handed back to it.
+          this.provider.getDetailsByRef
+            ? this.provider.getDetailsByRef(product.externalId, product.affiliateMeta)
+            : this.provider.getDetails(product.externalId),
         );
 
         if (!fresh) {
@@ -144,7 +158,7 @@ export class AffiliateSyncService {
     this.logger.log(
       `Affiliate sync: checked ${report.productsChecked}, updated ${report.productsUpdated}, ` +
         `flagged ${report.itemsFlaggedPrice} price / ${report.itemsFlaggedStock} stock, ` +
-        `${report.providerErrors} provider error(s)`,
+        `monetized ${report.productsMonetized}, ${report.providerErrors} provider error(s)`,
     );
     return report;
   }

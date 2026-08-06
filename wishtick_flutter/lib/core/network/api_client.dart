@@ -33,10 +33,14 @@ class ApiClient {
     );
   }
 
+  /// [headers] is per-request rather than baked into the Dio instance because
+  /// the only current use is `Idempotency-Key`, which must differ per call —
+  /// a shared header would make every retry look like a different request.
   Future<T> post<T>(
     String path, {
     Object? body,
     Map<String, dynamic>? query,
+    Map<String, String>? headers,
     CancelToken? cancelToken,
   }) {
     return _send<T>(
@@ -45,6 +49,7 @@ class ApiClient {
         data: body,
         queryParameters: query,
         cancelToken: cancelToken,
+        options: headers == null ? null : Options(headers: headers),
       ),
     );
   }

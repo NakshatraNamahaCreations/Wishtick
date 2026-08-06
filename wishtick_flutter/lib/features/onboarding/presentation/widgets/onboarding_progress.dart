@@ -89,6 +89,11 @@ class _ProgressHeart extends StatelessWidget {
   /// 0 to 1.
   final double fraction;
 
+  /// Sized on its own rather than [AppSizes.iconLg] — that token is shared by
+  /// icons across the app (back buttons, the camera badge, …), and this
+  /// heart needed to shrink without pulling those along with it.
+  static const _size = 22.0;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -99,7 +104,7 @@ class _ProgressHeart extends StatelessWidget {
       curve: Curves.easeOut,
       builder: (context, value, _) => CustomPaint(
         key: progressHeartKey,
-        size: const Size(AppSizes.iconLg, AppSizes.iconLg),
+        size: const Size(_size, _size),
         painter: HeartPainter(
           revealHeight: HeartFillGeometry.heightFractionForArea(value),
           outlineColor: colors.primary,

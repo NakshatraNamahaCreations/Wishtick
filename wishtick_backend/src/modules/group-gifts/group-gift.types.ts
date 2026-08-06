@@ -24,13 +24,69 @@ export enum GroupGiftStatus {
   REFUNDING = 'refunding',
 }
 
+/**
+ * Where one person's share stands.
+ *
+ * Wishtick never holds the money — the group settles with the host outside the
+ * app — so these track *promises and acknowledgements*, not captured funds:
+ *
+ *  - `pledged` is the normal state on creation. Someone has said what they will
+ *    put in. Nothing has moved.
+ *  - `confirmed` means **the host acknowledged receiving that person's share**.
+ *    It is a human confirmation, not a payment capture. Only confirmed shares
+ *    count as actually collected.
+ *  - `refunded` is a share the host has given back, or one written off when the
+ *    gift was cancelled.
+ *
+ * The names are inherited from the design's vocabulary. `confirmed` in
+ * particular used to mean "money is in" when this module assumed a PSP; it does
+ * not any more, and anything reading it as proof of payment is wrong.
+ */
 export enum ContributionStatus {
-  /** Reserved for a future payment integration: money promised, not yet captured. */
+  /** Promised, not yet handed over. The default. */
   PLEDGED = 'pledged',
-  /** Money is in. Only confirmed contributions count toward the total. */
+  /** The host says this person's share arrived. */
   CONFIRMED = 'confirmed',
-  /** Returned after a cancellation. Excluded from the collected total. */
+  /** Given back, or written off on cancellation. */
   REFUNDED = 'refunded',
+}
+
+/**
+ * How the host proposes the bill is divided (`299:1658`).
+ *
+ * Advisory, not enforced: both modes accept any amount, because a group gift
+ * that rejects ₹400 from someone who was asked for ₹500 helps nobody. `EQUAL`
+ * simply means the client shows everyone the same suggested figure.
+ */
+export enum ContributionMode {
+  EQUAL = 'equal',
+  CUSTOM = 'custom',
+}
+
+/** Which way an outstanding balance runs. */
+export enum SettlementDirection {
+  /** Over-collected: the host owes the contributor. The frames' "refund". */
+  RETURN = 'return',
+  /** Under-collected: the contributor owes the host. A contribution request. */
+  TOP_UP = 'top_up',
+}
+
+/**
+ * A settlement's life.
+ *
+ * Two marks, deliberately separate: `sent` is the payer's claim, `confirmed` is
+ * the receiver's acknowledgement. Only the second closes the row, because one
+ * party must not be able to settle the other's balance by asserting it.
+ */
+export enum SettlementStatus {
+  /** Raised. Nobody has paid, and the UPI ID may not even be known yet. */
+  PENDING = 'pending',
+  /** The payer marked it sent. Awaiting the other side. */
+  SENT = 'sent',
+  /** The receiver confirmed it landed. Terminal. */
+  CONFIRMED = 'confirmed',
+  /** Called off — the balance changed again before anyone paid. */
+  CANCELLED = 'cancelled',
 }
 
 /**

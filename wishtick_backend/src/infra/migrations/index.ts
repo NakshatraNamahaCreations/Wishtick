@@ -12,6 +12,11 @@ import { migration010 } from './scripts/010-reel-indexes';
 import { migration011 } from './scripts/011-admin-indexes';
 import { migration012 } from './scripts/012-notification-ttl';
 import { migration013 } from './scripts/013-taxonomy-v2';
+import { migration014 } from './scripts/014-occasions-home-grid';
+import { migration015 } from './scripts/015-address-indexes';
+import { migration016 } from './scripts/016-order-indexes';
+import { migration017 } from './scripts/017-conversion-indexes';
+import { migration018 } from './scripts/018-settlement-indexes';
 
 /** Every migration must be registered here to run. Order comes from the id. */
 export const MIGRATIONS: Migration[] = [
@@ -28,6 +33,11 @@ export const MIGRATIONS: Migration[] = [
   migration011,
   migration012,
   migration013,
+  migration014,
+  migration015,
+  migration016,
+  migration017,
+  migration018,
 ];
 
 export { MigrationRunner } from './migration.runner';

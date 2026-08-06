@@ -50,6 +50,8 @@ import {
 } from './group-gift.views';
 import {
   CONTRIBUTABLE_GROUP_GIFT_STATUSES,
+  ContributionMode,
+  INACTIVE_GROUP_GIFT_STATUSES,
   ContributionStatus,
   GROUP_GIFT_TRANSITIONS,
   GroupGiftStatus,
@@ -112,7 +114,12 @@ export class GroupGiftService {
   async create(itemId: string, userId: string, dto: CreateGroupGiftDto): Promise<GroupGiftView> {
     const item = await this.gifting.loadGiftableItem(itemId, userId);
 
-    const target = dto.targetAmountMinor ?? item.price?.amountMinor ?? null;
+    const itemPrice = dto.targetAmountMinor ?? item.price?.amountMinor ?? null;
+    // Charges are agreed on the way to "Proceed to Contribution", so they are
+    // part of what the group collects from the very first contribution — the
+    // Grand Total, not an extra that surfaces later.
+    const chargesTotal = (dto.charges ?? []).reduce((sum, c) => sum + c.amountMinor, 0);
+    const target = itemPrice === null ? null : itemPrice + chargesTotal;
     if (!target || target <= 0) {
       throw new AppException(
         ErrorCode.CONTRIBUTION_AMOUNT_INVALID,
@@ -176,7 +183,19 @@ export class GroupGiftService {
                   initiatorId: new Types.ObjectId(userId),
                   recipientId: item.ownerId,
                   giftId: holder._id,
+                  title: dto.title,
                   targetAmountMinor: target,
+                  hostUpiId: dto.hostUpiId ?? null,
+                  contributionMode: dto.contributionMode ?? ContributionMode.EQUAL,
+                  suggestedAmountsMinor: dto.suggestedAmountsMinor ?? [],
+                  charges: (dto.charges ?? []).map((c) => ({
+                    _id: new Types.ObjectId(),
+                    label: c.label,
+                    amountMinor: c.amountMinor,
+                    addedBy: new Types.ObjectId(userId),
+                    addedAt: new Date(),
+                  })),
+                  lines: [],
                   collectedAmountMinor: 0,
                   currency: item.price?.currency ?? 'INR',
                   deadline,
@@ -572,6 +591,247 @@ export class GroupGiftService {
     return view;
   }
 
+  // ── Charges and extra gifts (Sprint 6b) ────────────────────────────────────
+
+  /**
+   * Rebuilds the collect target from the breakdown that justifies it.
+   *
+   * The summary screen shows Total Gift Price + Total Charges = **Grand Total**
+   * (`4006:463`), and the Grand Total is what the group collects. Deriving it
+   * rather than storing an independent number means the two can never disagree
+   * — a group whose target says ₹17,347 while its lines add to ₹17,000 would be
+   * asking people for money it cannot account for.
+   */
+  private static recomputeTarget(gift: GroupGiftDocument, primaryItemMinor: number): void {
+    const lines = gift.lines.reduce((sum, line) => sum + (line.amountMinor ?? 0), 0);
+    const charges = gift.charges.reduce((sum, charge) => sum + charge.amountMinor, 0);
+    gift.targetAmountMinor = primaryItemMinor + lines + charges;
+  }
+
+  /**
+   * The primary item's own price, backed out of the current target.
+   *
+   * Stored nowhere directly — the group gift keeps the *total* — so it is
+   * recovered by subtracting the parts that are itemised.
+   */
+  private static primaryItemMinor(gift: GroupGiftDocument): number {
+    const lines = gift.lines.reduce((sum, line) => sum + (line.amountMinor ?? 0), 0);
+    const charges = gift.charges.reduce((sum, charge) => sum + charge.amountMinor, 0);
+    return gift.targetAmountMinor - lines - charges;
+  }
+
+  /**
+   * Editing the bill is only legal before anyone has put money in.
+   *
+   * The design settles the whole bill up front — gifts and charges are chosen
+   * on the way to *"Proceed to Contribution"* (`4007:568`) — so changing the
+   * target afterwards would move the goalposts under people who already
+   * committed against the old number. A cost discovered later is a *shortfall*,
+   * resolved by a contribution request, not by a silent re-target.
+   */
+  private assertBillEditable(gift: GroupGiftDocument): void {
+    if (INACTIVE_GROUP_GIFT_STATUSES.includes(gift.status)) {
+      throw new AppException(
+        ErrorCode.GROUP_GIFT_NOT_OPEN,
+        'This group gift is no longer active',
+        409,
+      );
+    }
+    if (gift.contributorCount > 0 || gift.collectedAmountMinor > 0) {
+      throw new AppException(
+        ErrorCode.GROUP_GIFT_NOT_OPEN,
+        'The bill is fixed once people start contributing — raise a contribution request instead',
+        409,
+      );
+    }
+  }
+
+  /** Adds a non-item cost — delivery, packaging (`4007:568`, `4007:628`). */
+  async addCharge(
+    groupGiftId: string,
+    userId: string,
+    input: { label: string; amountMinor: number },
+  ): Promise<GroupGiftView> {
+    const gift = await this.loadOrFail(groupGiftId);
+    if (gift.initiatorId.toString() !== userId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only the initiator can add a charge', 403);
+    }
+    this.assertBillEditable(gift);
+    const primary = GroupGiftService.primaryItemMinor(gift);
+
+    gift.charges.push({
+      _id: new Types.ObjectId(),
+      label: input.label,
+      amountMinor: input.amountMinor,
+      addedBy: new Types.ObjectId(userId),
+      addedAt: new Date(),
+    });
+    GroupGiftService.recomputeTarget(gift, primary);
+    await gift.save();
+    return this.assembleView(gift, userId);
+  }
+
+  async removeCharge(
+    groupGiftId: string,
+    chargeId: string,
+    userId: string,
+  ): Promise<GroupGiftView> {
+    const gift = await this.loadOrFail(groupGiftId);
+    if (gift.initiatorId.toString() !== userId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only the initiator can remove a charge', 403);
+    }
+    this.assertBillEditable(gift);
+    const primary = GroupGiftService.primaryItemMinor(gift);
+
+    const before = gift.charges.length;
+    gift.charges = gift.charges.filter((c) => c._id.toString() !== chargeId);
+    if (gift.charges.length === before) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'Charge not found', 404);
+    }
+    GroupGiftService.recomputeTarget(gift, primary);
+    await gift.save();
+    return this.assembleView(gift, userId);
+  }
+
+  /**
+   * Folds a second item into the group (`4007:720`).
+   *
+   * Claims it with its own holder gift, through exactly the same path as
+   * `create` — same lock, same in-transaction re-read, same unique
+   * `(itemId, active)` index. Anything less and a multi-gift group would be the
+   * one way to claim an item somebody else has already reserved.
+   */
+  async addGiftLine(groupGiftId: string, itemId: string, userId: string): Promise<GroupGiftView> {
+    const gift = await this.loadOrFail(groupGiftId);
+    if (gift.initiatorId.toString() !== userId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only the initiator can add a gift', 403);
+    }
+    this.assertBillEditable(gift);
+    if (
+      gift.itemId.toString() === itemId ||
+      gift.lines.some((l) => l.itemId.toString() === itemId)
+    ) {
+      throw new AppException(
+        ErrorCode.ITEM_ALREADY_CLAIMED,
+        'That item is already part of this group gift',
+        409,
+      );
+    }
+
+    const item = await this.gifting.loadGiftableItem(itemId, userId);
+    // Every extra item must come from the same wishlist: a group gift is one
+    // recipient's celebration, and the recipient is denormalized onto the
+    // document — spanning wishlists would make `recipientId` a lie.
+    if (item.wishlistId.toString() !== gift.wishlistId.toString()) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        'Every gift in a group must come from the same wishlist',
+        409,
+      );
+    }
+
+    const updated = await this.locks.withLock(
+      `item:${itemId}`,
+      async () => {
+        const session = await this.connection.startSession();
+        try {
+          let result!: GroupGiftDocument;
+          await session.withTransaction(async () => {
+            const fresh = await this.itemModel.findById(item._id).session(session).exec();
+            if (!fresh || fresh.archivedAt) {
+              throw new AppException(ErrorCode.WISHLIST_ITEM_NOT_FOUND, 'Item not found', 404);
+            }
+            if (fresh.status !== WishlistItemStatus.AVAILABLE) {
+              throw new AppException(
+                ErrorCode.ITEM_NOT_AVAILABLE,
+                'This item is already spoken for',
+                409,
+                { status: fresh.status },
+              );
+            }
+
+            const holder = await this.status.createReservation(
+              {
+                item: fresh,
+                gifterId: new Types.ObjectId(userId),
+                recipientId: fresh.ownerId,
+                mode: GiftMode.ONLINE,
+                visibility: gift.visibility,
+                expiresAt: null,
+                type: GiftType.GROUP,
+                amountMinorOverride: fresh.price?.amountMinor ?? null,
+              },
+              session,
+            );
+
+            const doc = await this.groupGiftModel.findById(gift._id).session(session).exec();
+            if (!doc) {
+              throw new AppException(ErrorCode.GROUP_GIFT_NOT_FOUND, 'Group gift not found', 404);
+            }
+            // Read the primary's share *before* pushing, so the new line is not
+            // counted twice when the target is rebuilt.
+            const primary = GroupGiftService.primaryItemMinor(doc);
+            doc.lines.push({
+              _id: new Types.ObjectId(),
+              itemId: fresh._id,
+              amountMinor: fresh.price?.amountMinor ?? null,
+              giftId: holder._id,
+              addedAt: new Date(),
+            });
+            GroupGiftService.recomputeTarget(doc, primary);
+            await doc.save({ session });
+            result = doc;
+          });
+          return result;
+        } finally {
+          await session.endSession();
+        }
+      },
+      { ttlMs: 5_000, retries: 5, retryDelayMs: 60 },
+    );
+
+    await this.wishlists.recount(updated.wishlistId);
+    return this.assembleView(updated, userId);
+  }
+
+  /**
+   * Drops an extra gift back out of the group — the `×` on the summary
+   * (`4006:463`).
+   *
+   * Releases its holder gift, so the item returns to available rather than
+   * staying claimed by a group that no longer wants it. The primary item is not
+   * removable: it is what the group *is*, and dropping it would leave a group
+   * gift with no subject. Cancel the whole thing instead.
+   */
+  async removeGiftLine(
+    groupGiftId: string,
+    lineId: string,
+    userId: string,
+  ): Promise<GroupGiftView> {
+    const gift = await this.loadOrFail(groupGiftId);
+    if (gift.initiatorId.toString() !== userId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only the initiator can remove a gift', 403);
+    }
+    this.assertBillEditable(gift);
+
+    const line = gift.lines.find((l) => l._id.toString() === lineId);
+    if (!line) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'Gift not found in this group', 404);
+    }
+
+    const primary = GroupGiftService.primaryItemMinor(gift);
+    await this.status.transitionById(line.giftId, GiftStatus.CANCELLED, `user:${userId}`, {
+      note: 'removed from group gift',
+    });
+
+    gift.lines = gift.lines.filter((l) => l._id.toString() !== lineId);
+    GroupGiftService.recomputeTarget(gift, primary);
+    await gift.save();
+
+    await this.wishlists.recount(gift.wishlistId);
+    return this.assembleView(gift, userId);
+  }
+
   /**
    * Cancels a group gift. Frees the item (holder → cancelled) and, if money was
    * collected, routes through `refunding`: every confirmed contribution is
@@ -657,6 +917,46 @@ export class GroupGiftService {
   }
 
   // ── Read ────────────────────────────────────────────────────────────────────
+
+  /**
+   * The group gifts the caller takes part in — initiated, joined, or
+   * contributed to — newest first. Home's chip-in card (Figma `51:11`) reads
+   * this; without it a client holding no id had no way to find one.
+   *
+   * Gifts where the caller is the *recipient* and visibility is
+   * `hidden_from_owner` are excluded, for the same reason [get] 404s them:
+   * the surprise must not leak through a list either.
+   */
+  async listMine(userId: string, limit: number): Promise<GroupGiftView[]> {
+    const _userId = new Types.ObjectId(userId);
+
+    // Contributing without joining still counts as taking part, so the
+    // contribution index is consulted alongside participantIds.
+    const contributedIds = await this.contributionModel
+      .find({ userId: _userId })
+      .distinct('groupGiftId')
+      .exec();
+
+    const gifts = await this.groupGiftModel
+      .find({
+        $or: [
+          { initiatorId: _userId },
+          { participantIds: _userId },
+          ...(contributedIds.length > 0 ? [{ _id: { $in: contributedIds } }] : []),
+        ],
+        $nor: [
+          {
+            recipientId: _userId,
+            visibility: GroupGiftVisibility.HIDDEN_FROM_OWNER,
+          },
+        ],
+      })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .exec();
+
+    return Promise.all(gifts.map((gift) => this.assembleView(gift, userId)));
+  }
 
   async get(groupGiftId: string, userId: string): Promise<GroupGiftView> {
     const gift = await this.loadOrFail(groupGiftId);

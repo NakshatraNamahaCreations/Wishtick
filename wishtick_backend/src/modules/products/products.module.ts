@@ -9,6 +9,9 @@ import { TaxonomyModule } from 'src/modules/taxonomy/taxonomy.module';
 import { WishlistsModule } from 'src/modules/wishlists/wishlists.module';
 import { AffiliateSyncProcessor } from './affiliate-sync.processor';
 import { AffiliateSyncService } from './affiliate-sync.service';
+import { ConversionSyncService } from './affiliate/conversion-sync.service';
+import { CuelinksClient } from './affiliate/cuelinks.client';
+import { MonetizationService } from './affiliate/monetization.service';
 import { ClickTrackingService } from './click-tracking.service';
 import { ProductImportController } from './product-import.controller';
 import { ProductImportService } from './product-import.service';
@@ -17,8 +20,16 @@ import { ProductsService } from './products.service';
 import { FixtureProductProvider } from './providers/fixture-provider';
 import { PRODUCT_PROVIDER, type IProductProvider } from './providers/product-provider.port';
 import { ProviderGuard } from './providers/provider-guard.service';
+import { SerpApiClient } from './providers/serpapi/serpapi.client';
+import { SerpApiProductProvider } from './providers/serpapi/serpapi-provider';
 import { RedirectController } from './redirect.controller';
 import { ClickEvent, ClickEventSchema } from './schemas/click-event.schema';
+import {
+  AffiliateSyncState,
+  AffiliateSyncStateSchema,
+  Conversion,
+  ConversionSchema,
+} from './schemas/conversion.schema';
 import { Product, ProductSchema } from './schemas/product.schema';
 import { UrlResolverService } from './url-resolver.service';
 
@@ -29,6 +40,8 @@ const logger = new Logger('ProductsModule');
     MongooseModule.forFeature([
       { name: Product.name, schema: ProductSchema },
       { name: ClickEvent.name, schema: ClickEventSchema },
+      { name: Conversion.name, schema: ConversionSchema },
+      { name: AffiliateSyncState.name, schema: AffiliateSyncStateSchema },
     ]),
     BullModule.registerQueue({ name: QUEUE.AFFILIATE_SYNC }),
     // For AccessPolicyService, WishlistsService, and the WishlistItem model.
@@ -48,12 +61,18 @@ const logger = new Logger('ProductsModule');
     ProviderGuard,
     SsrfGuard,
     FixtureProductProvider,
+    SerpApiClient,
+    SerpApiProductProvider,
+    CuelinksClient,
+    MonetizationService,
+    ConversionSyncService,
     {
       provide: PRODUCT_PROVIDER,
-      inject: [ConfigService, FixtureProductProvider],
+      inject: [ConfigService, FixtureProductProvider, SerpApiProductProvider],
       useFactory: (
         config: ConfigService<AppConfig, true>,
         fixture: FixtureProductProvider,
+        serpapi: SerpApiProductProvider,
       ): IProductProvider => {
         const driver = config.get('products.provider', { infer: true });
 
@@ -67,11 +86,25 @@ const logger = new Logger('ProductsModule');
           );
         }
 
-        logger.log(`Product provider: ${driver}`);
-        return fixture;
+        const network = config.get('affiliate.network', { infer: true });
+        logger.log(`Product provider: ${driver}; affiliate network: ${network}`);
+        // A real catalogue with no network is a supported state — every click
+        // simply goes to the merchant unmonetized — but it is worth saying out
+        // loud, because "we shipped and earned nothing" is a silent failure.
+        if (driver === 'serpapi' && network === 'none') {
+          logger.warn('Affiliate network is "none" — outbound clicks will not be monetized');
+        }
+
+        return driver === 'serpapi' ? serpapi : fixture;
       },
     },
   ],
-  exports: [ProductsService, ProductImportService, AffiliateSyncService, PRODUCT_PROVIDER],
+  exports: [
+    ProductsService,
+    ProductImportService,
+    AffiliateSyncService,
+    MonetizationService,
+    PRODUCT_PROVIDER,
+  ],
 })
 export class ProductsModule {}

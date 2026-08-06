@@ -40,6 +40,10 @@ export class Product {
   @Prop({ type: Number, default: null })
   amountMinor!: number | null;
 
+  /** Pre-discount / MRP, minor units. Null when the provider gives none. */
+  @Prop({ type: Number, default: null })
+  listPriceMinor!: number | null;
+
   @Prop({ type: String, default: 'INR', uppercase: true })
   currency!: string;
 

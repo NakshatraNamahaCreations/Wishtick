@@ -112,7 +112,9 @@ describe('Group gifting (e2e)', () => {
       .post(`${V1}/items/${itemId}/group-gift`)
       .set(auth(initiator.token))
       .set(idem())
-      .send(body);
+      // Group Title is required (`299:1658` marks it with a red asterisk);
+      // every case here is about funding, so a default keeps them readable.
+      .send({ title: 'Group gift', ...body });
 
   const contribute = (user: Actor, ggId: string, body: Record<string, unknown>): request.Test =>
     request(app.getHttpServer())

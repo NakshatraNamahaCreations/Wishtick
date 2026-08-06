@@ -25,8 +25,10 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { DiscoverModule } from './modules/discover/discover.module';
 import { EventsModule } from './modules/events/events.module';
 import { GiftingModule } from './modules/gifting/gifting.module';
+import { OrdersModule } from './modules/orders/orders.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReelsModule } from './modules/reels/reels.module';
 import { GroupGiftModule } from './modules/group-gifts/group-gift.module';
@@ -120,11 +122,13 @@ import { WishlistsModule } from './modules/wishlists/wishlists.module';
     EventsModule,
     ProductsModule,
     GiftingModule,
+    OrdersModule,
     GroupGiftModule,
     ChatModule,
     NotificationsModule,
     ReelsModule,
     DashboardModule,
+    DiscoverModule,
     // Analytics is imported before Admin because AdminModule depends on it.
     AnalyticsModule,
     AdminModule,

@@ -77,4 +77,7 @@ abstract final class AppDurations {
 
   /// How long the splash holds before routing (matches the Figma progress bar).
   static const splash = Duration(milliseconds: 2000);
+
+  /// How long the "You're all set!" confetti burst runs before settling.
+  static const confettiBurst = Duration(seconds: 3);
 }

@@ -9,11 +9,7 @@ import { TaxonomyService } from 'src/modules/taxonomy/taxonomy.service';
 import { TaxonomyKind } from 'src/modules/taxonomy/taxonomy.types';
 import { UsersService } from 'src/modules/users/users.service';
 import type { UpdatePreferencesDto, UpdateProfileDto } from './dto/profile.dto';
-import {
-  type Gender,
-  UserProfile,
-  type UserProfileDocument,
-} from './schemas/user-profile.schema';
+import { type Gender, UserProfile, type UserProfileDocument } from './schemas/user-profile.schema';
 
 export interface MeView {
   id: string;
@@ -261,11 +257,7 @@ export class ProfileService {
       this.taxonomy.assertValid(TaxonomyKind.COLOR, dto.favouriteColors ?? [], 'favouriteColors'),
       this.taxonomy.assertValidOne(TaxonomyKind.CLOTHING_SIZE, dto.clothingSize, 'clothingSize'),
       this.taxonomy.assertValidOne(TaxonomyKind.SHOE_SIZE, dto.shoeSize, 'shoeSize'),
-      this.taxonomy.assertValidOne(
-        TaxonomyKind.FIT_PREFERENCE,
-        dto.fitPreference,
-        'fitPreference',
-      ),
+      this.taxonomy.assertValidOne(TaxonomyKind.FIT_PREFERENCE, dto.fitPreference, 'fitPreference'),
       this.taxonomy.assertValid(
         TaxonomyKind.GIFT_CATEGORY,
         dto.giftCategories ?? [],

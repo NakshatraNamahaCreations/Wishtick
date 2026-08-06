@@ -11,6 +11,7 @@ import {
   type WishlistItemDocument,
 } from 'src/modules/wishlists/schemas/wishlist-item.schema';
 import { WishlistsService } from 'src/modules/wishlists/wishlists.service';
+import { MonetizationService } from './affiliate/monetization.service';
 import { ClickEvent, type ClickEventDocument } from './schemas/click-event.schema';
 import { ProductsService } from './products.service';
 
@@ -24,6 +25,7 @@ export class ClickTrackingService {
     private readonly wishlists: WishlistsService,
     private readonly access: AccessPolicyService,
     private readonly products: ProductsService,
+    private readonly monetization: MonetizationService,
   ) {}
 
   /**
@@ -55,9 +57,26 @@ export class ClickTrackingService {
       ? await this.products.findSnapshotById(item.sourceProductId)
       : null;
 
-    // Prefer the monetized link, fall back to the item's own snapshot link. An
-    // item added by hand has no affiliate URL and must still be clickable.
-    const destination = product?.affiliateUrl ?? product?.productUrl ?? item.productLink;
+    // The click is the moment of intent, and the only point at which paying two
+    // vendors to resolve a merchant link is worth it. Resolution is cached on
+    // the product, so this is a plain read from the second click onwards, and
+    // every failure inside returns a working unmonetized URL rather than
+    // throwing — see MonetizationService.
+    const monetized = product
+      ? await this.monetization.ensureMonetized(product, {
+          itemId: item._id.toString(),
+          wishlistId: item.wishlistId.toString(),
+          userId: ctx.userId,
+        })
+      : null;
+
+    if (monetized && !monetized.monetized) {
+      this.logger.debug(`Unmonetized click on item ${itemId}: ${monetized.reason}`);
+    }
+
+    // Fall back to the item's own snapshot link: an item added by hand has no
+    // product row at all and must still be clickable.
+    const destination = monetized?.destination ?? item.productLink;
     if (!destination) {
       throw new AppException(ErrorCode.PRODUCT_NOT_FOUND, 'This item has no link', 404);
     }

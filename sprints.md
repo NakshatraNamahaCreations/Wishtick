@@ -15,12 +15,60 @@ Figma file: **`6WXJf85eSt7J3SpPzyoJP2` (Wishtick-UI-v2)** — open any node via
 > added or redesigned and need fresh exports —
 > [`UI_Screen/_v2_export_list.txt`](UI_Screen/_v2_export_list.txt) is the
 > download checklist (PNG named `<node-id with '-'>.png`).
+>
+> ⚠️ **The refund / payout / UPI frames predate the money-model decision below**
+> and describe a product Wishtick is not building. See *Decision: Wishtick never
+> handles money*.
 
 **Working agreement (applies to every sprint):**
 1. Before building a screen: pull its Figma frame (screenshot + design context) by node ID and match it exactly.
 2. No hardcoded colors/fonts/spacing — semantic tokens only (`plan.md` §4).
 3. Every screen verified in **light and dark** mode before "done".
 4. Screens marked *(variant)* are alternate states of the same screen — build one widget, cover all states.
+
+---
+
+## Decision: Wishtick never handles money (2026-08-05)
+
+**Wishtick is an affiliate business, not a payments business.** Revenue comes
+from referral commission when a user is sent to a merchant and buys there. No
+payment is ever collected, held, or disbursed by us.
+
+Two vendors make that work:
+
+| Vendor | Job |
+|---|---|
+| **SerpApi** | The catalogue. Google Shopping search, and the only route to a *merchant* product URL. |
+| **Cuelinks** | The monetization. Turns a merchant URL into a tracked `clnk.in` link and reports the sales it produced. |
+
+### What this invalidates
+
+Several v2 frames and earlier backlog lines assume Wishtick is a payment
+processor. They describe flows that cannot exist:
+
+- **Razorpay** — not integrated, anywhere. Sprint 5's "Razorpay groundwork" and
+  Sprint 6's "order/verify/webhook" are both cancelled.
+- **The ~16 refund frames** — there is nothing to refund. Wishtick holds no
+  funds, so there is no PSP to call and no processing/settled/failed lifecycle.
+  They are being rebuilt as **settle-up** screens (see Sprint 6b).
+- **UPI payout collection** (Sprint 9's *Refunds & Payouts*) — Wishtick pays
+  nobody out. At most it stores a group-gift buyer's UPI ID so contributors can
+  pay **that person** directly.
+
+### What a group gift becomes
+
+A **split-the-bill ledger**, not a pot of money:
+
+1. Contributors **pledge** an amount (the `ContributionStatus.PLEDGED` state
+   that has sat unused in the schema since Sprint 6's original design).
+2. One person — the initiator — buys at the merchant through the affiliate
+   link. Wishtick earns the referral on that single purchase.
+3. Everyone else settles with the buyer **outside the app** (UPI, cash), marks
+   it paid, and the buyer confirms receipt.
+
+"Confirmed" therefore changes meaning: it is the buyer acknowledging a share
+arrived, not a payment captured. `collectedAmountMinor` becomes *pledged*, not
+*raised* — worth renaming when 6b touches the model.
 
 ---
 
@@ -229,9 +277,19 @@ APK builds.
 
 ---
 
-## Sprint 3 — Wishlist core (2 wk)
+## Sprint 3 — Wishlist core ✅ DONE
 
 **Goal:** create wishlists, add products by URL or search, manage items.
+
+**Delivered:** wishlist CRUD + item management + reorder, product search and
+URL resolution (behind `IProductProvider`, fixture-backed at the time), device
+photo picker for covers, and `recipientName` / `relation` / `occasionKey` added
+to `WishlistItem` so an item can say who it is for.
+
+> **Note:** `POST /wishlists/:id/items/from-product` lives on
+> `ProductImportController` in the **products** module, mounted under
+> `/wishlists` — not on `WishlistsController`. That keeps wishlists from
+> importing the products module. Easy to conclude it does not exist.
 
 | Screen | Figma node ID |
 |---|---|
@@ -249,9 +307,18 @@ APK builds.
 
 ---
 
-## Sprint 4 — Home, sharing & discovery (2 wk)
+## Sprint 4 — Home, sharing & discovery ✅ DONE
 
 **Goal:** Home tab live; share wishlists; discover feed with recommendations.
+
+**Delivered:** Home rails (occasion grid, upcoming occasions, events, group
+gift), a real address book (`/me/addresses` with a single-default invariant),
+the Discover feed, share links, and the public wishlist view.
+
+> **On "recommendations":** there is no recommendation model. Wishtick knows the
+> *occasion*, never the recipient's taste, so shelves are curated by occasion in
+> `discover.curation.ts` — an editorial table, honestly labelled as one.
+> `rakhi` and `best_wishes` were added to the occasion taxonomy for Home's grid.
 
 | Screen | Figma node ID |
 |---|---|
@@ -266,9 +333,13 @@ APK builds.
 
 ---
 
-## Sprint 5 — Gifting & orders (2 wk)
+## Sprint 5 — Gifting & orders ✅ DONE
 
 **Goal:** reserve gifts on friends' wishlists, buy via affiliate redirect, order states.
+
+**Delivered:** the full reserve → buy → track → delivered flow, plus the invite
+view and RSVP. An `Order` model with a six-stage timeline, a human `WTK-…`
+reference, and HMAC-verified courier-webhook groundwork that nothing calls yet.
 
 | Screen | Figma node ID |
 |---|---|
@@ -281,18 +352,197 @@ APK builds.
 | Order delivered | `299:1620` (variant `316:460`) |
 | Add new address (checkout) | `316:883` |
 
-**API:** `POST items/:itemId/reserve`, `DELETE …/reserve`, `items/:itemId/gift-offline`, `gifts/:id/purchase|fulfill|complete`, `GET r/:itemId` redirect.
-**Backend (new):** address book CRUD; order-tracking model (status timeline); Razorpay integration groundwork.
+**API:** `POST items/:itemId/reserve`, `DELETE …/reserve`, `items/:itemId/gift-offline`, `gifts/:id/purchase|fulfill|complete`, `GET r/:itemId` redirect, `GET orders/mine|:id`, `GET gifts/:id/order`.
+**Backend (new):** address book CRUD (moved here from Sprint 4); order-tracking model (status timeline). ~~Razorpay groundwork~~ — cancelled, see the money-model decision.
+
+**Deliberate gaps, all because the data does not exist:**
+- **No delivery date.** Every carrier field is null until there is a logistics
+  feed, so Order Confirmed says *"Confirmed by the store at checkout"* rather
+  than printing the mock's `26 Jul 2026`.
+- **Timeline has three states, not two** — `Pending` / `Not reported` / a real
+  timestamp. The server marks every stage *before* the current one reached, so
+  a delivered order showed four filled dots labelled "Pending".
+- **No star rating** on the product page: no ratings API exists.
+- **"Proceed to Pay" is "Continue to Store"** — Wishtick takes no payment. The
+  purchase is the gifter's word, which is what `POST /gifts/:id/purchase` is.
+
+**Also added (not in the original scope):** a *Shared with you* section on the
+wishlist tab — without a wishlist you do not own, none of Sprint 5 is reachable.
+Owner-only actions (Edit/Share/Delete, per-item delete) are now hidden when
+`access.canManage` is false; they were being drawn on friends' lists and would
+have 403'd.
+
+**Known theme defect (not Sprint 5's to fix):** dark-mode `colors.primary`
+(#5B1A6E) measures **1.61:1** against the dark page background — under the 3:1
+floor for large text. Affects every headline drawn in it, on screens from
+earlier sprints too. `context.headlineBrandColor` works around it on the screens
+shipped here; re-tuning the dark palette is a design decision.
 
 ---
 
-## Sprint 6 — Group gifts + payments (2 wk → resize to ~3 wk)
+## Sprint 6a — Real catalogue & monetization ✅ BACKEND DONE & LIVE-VERIFIED
 
-**Goal:** full chip-in flow with real payments, group chat, **refunds and payouts**.
+**Goal:** replace the fixture catalogue with real products, and make an outbound
+click actually earn.
 
-> ⚠️ **v2 grew this sprint substantially**: a full refund flow (~16 frames), a
-> group-gift *summary* with extra charges and multiple gifts, and UPI payout
-> collection. Re-estimate before starting.
+Split out of Sprint 6 because it is the revenue path, and because real products
+make every group-gift screen in 6b testable with real data.
+
+**Delivered — backend:**
+- `SerpApiProductProvider` behind the existing `IProductProvider` port. The port
+  promised the swap would be "one new file plus a config flag"; it held.
+- `CuelinksClient` (`links/convert`, `campaigns`, `transactions`, `ping`) and
+  `MonetizationService`.
+- `ConversionSyncService` — cursor-based incremental sale reconciliation, hourly.
+- `Conversion` + `AffiliateSyncState` schemas, migration `017`.
+- 14 unit + 11 e2e tests, all against a stubbed `fetch`. Full backend: **183
+  unit, 356 e2e**, tsc and eslint clean.
+
+### The cost split that shaped the design
+
+SerpApi charges per engine call, and the two engines do different jobs:
+
+| Engine | Gives | Cost |
+|---|---|---|
+| `google_shopping` | ~40 results: title, price, image, merchant *name*, rating | 1 call per search |
+| `google_immersive_product` | `product_results.stores[].link` — the **merchant's own URL** | 1 call **per product** |
+
+`google_shopping`'s `product_link` points at *Google's* page, which no affiliate
+network can monetize. Resolving every search result would therefore cost ~40
+SerpApi calls **plus** ~40 Cuelinks calls per page, for products nobody asked
+for.
+
+So **monetization is lazy**: search stays one call and leaves `affiliateUrl`
+null; the merchant URL and tracked link are resolved at the *click*, cached on
+the product row, and backfilled overnight for products someone saved. Every
+failure returns a working unmonetized link — earning nothing is bad, a dead buy
+button is worse. Measured live: first click ~2s (two vendor calls), second
+click **12 ms**.
+
+### What the live probe corrected (2026-08-05)
+
+Every one of these was coded from the vendors' public docs and was **wrong**.
+The docs are not a substitute for a probe.
+
+| Assumed | Actual |
+|---|---|
+| `engine=google_product` returns sellers | **HTTP 400 — "The Google Product service is no longer offered by Google."** The engine is retired. |
+| Sellers at `sellers_results.online_sellers[].direct_link` | `product_results.stores[].link`, via `engine=google_immersive_product` |
+| Detail lookup keyed by `product_id` | Keyed by `immersive_product_page_token`, which **only a search response carries** |
+| Cuelinks returns `{tracking_url, affiliated}` | Wrapped: `{data: {…}}` — reading the top level yields `undefined`, which looks exactly like "not affiliated" |
+| Sub-IDs are `subid1…subid5` | First dimension is **`subid`**. `subid1` is accepted and **silently dropped** — that is the item id, so all sale attribution was being lost |
+| Transactions paginate by `next_cursor` | Page-based: `{data, meta:{page, next_page, total_pages}}` |
+| Tracking domain `clnk.in` | `linksredirect.com` |
+
+**`affiliated: false` is not a gate.** Live calls against Amazon India
+(campaign 817) and Flipkart (campaign 1) both return `affiliated:false`
+*together with* a valid `tracking_url` on a real campaign — it appears to
+describe this publisher's approval state, not whether the URL can be tracked.
+Gating on it rejected 100% of links. The presence of `tracking_url` decides; the
+flag is recorded for reporting.
+
+### Two more the *device* run found (2026-08-06)
+
+Both invisible to the API probe, because both need the app's own query shapes.
+
+1. **Discover was empty.** `priceBandSection()` and `premiumSection()` search
+   with *only* a min/max price — no keyword, no category. The fixture catalogue
+   answered that by filtering its in-memory list; a keyword engine cannot, so
+   `queryFor()` returned null and both shelves were silently dropped.
+   `/discover/feed` answered **200 in 24 ms with zero sections** — a success
+   response for a broken feed. A price filter is now treated as intent to
+   browse and gets a generic `gifts` term.
+2. **`PRODUCT_TIMEOUT_MS=4000` was too tight for SerpApi.** It proxies a live
+   Google Shopping search, and measured latency straddles 4 s: a cold search
+   burned all three attempts (`serpapi unavailable (timeout) and no cached
+   results`) while the very next identical call succeeded. The timeout, not the
+   vendor, was the outage. Now **15 s with 1 retry** — a timeout here means
+   Google is slow, and a second full wait doubles the user's latency without
+   improving the odds.
+
+> **Cache caveat that will waste your time:** a failed or empty search is cached
+> under the same key as a good one (fresh TTL 15 min, stale 24 h). After
+> changing provider behaviour, a fix appears not to work until the key expires.
+> `freshness: "cached"` on a zero-item result is the tell.
+
+### Things that will bite if forgotten
+
+- **The immersive token must be persisted at search time.** It is the only route
+  to a merchant URL, and it exists nowhere else. A Product row without one can
+  never be monetized *or* re-priced — which is why `IProductProvider` grew an
+  optional `getDetailsByRef(externalId, ref)`.
+- **`upsertMany` must not write `affiliateUrl` unconditionally.** A catalogue
+  provider always reports it as null, so an unguarded write erased a resolved
+  link every time anyone re-searched the product. Fixed, with a test pinning it.
+- **Conversion sync walks from page 1 every run**, because a *revision* to an
+  old sale (pending → confirmed, changed commission) can surface on any page.
+  It stops at the first page with nothing new, so the steady state is one call,
+  and refuses a `next_page` that does not strictly advance.
+
+### Verified live
+
+`PRODUCT_PROVIDER=serpapi` + `AFFILIATE_NETWORK=cuelinks` against the running
+API: search returned real Indian listings (Amazon.in ₹1,999 / Myntra ₹1,699 /
+Flipkart ₹1,199), import succeeded, and `GET /r/:itemId` answered **302 to
+`linksredirect.com`** carrying `subid=<itemId>` and our own `subId` click id,
+wrapping the real `amazon.in/dp/…` merchant URL. Second click served from cache.
+
+**Backend suite:** 186 unit, 359 e2e, tsc and eslint clean.
+
+### Verified on device (2026-08-06)
+
+Physical device against the real API (`adb reverse tcp:3000 tcp:3000`, run with
+`--dart-define=WISHTICK_API_BASE_URL=http://127.0.0.1:3000`; Dart's HttpClient
+bypasses Android's cleartext policy, so no manifest change was needed):
+
+- **Discover** renders "Gifts Under ₹2,000" and "Premium Picks for You" with
+  real listings, images off Google's CDN, and real merchant names.
+- **Search** for "sony" returned Sony WH-CH520 ₹4,199 (Vijay Sales), SA-D40M2
+  ₹5,719 struck through from ₹6,499 (vlebazaar.in), PS4 Slim ₹19,999
+  (GameLoot), ULT Field 1 ₹9,599 (TATA CLiQ LUXURY). The struck-through price
+  appears only on the one row with a genuine discount — `toListPriceMinor`
+  behaving correctly on live data.
+
+> `adb reverse` is cleared when `flutter run` attaches. Re-add it *after* the
+> app is installed, or every request fails with "No connection".
+
+### Still open
+
+- **No conversion has ever been observed**, because no real purchase has been
+  made through a Wishtick link. `/transactions` returns an empty page today, so
+  the reconciler's parsing of a *populated* row is still only covered by tests —
+  and given how much else in these vendors' docs was wrong, treat its field
+  names as unconfirmed until a real sale lands.
+- **Shelf quality is poor for the generic browse.** `gifts` returns marketplace
+  long-tail — "Gift Card ₹1,000.00" from *Itihasikala*, Ferrero Rocher as a
+  "Premium Pick". Correct, but not compelling. Curated per-band queries (or
+  price bands layered onto the category shelves) would fix it; that is a
+  product decision, not a bug.
+
+---
+
+## Sprint 6b — Group gifts as a split-the-bill ledger (~2.5 wk)
+
+**Goal:** chip-in coordination, group chat, and settle-up — with no money
+passing through Wishtick. See the money-model decision above.
+
+**Already built (Sprint 6's original backend, mostly reusable):** the group-gift
+funding state machine, contributions with durable `(groupGiftId, idempotencyKey)`
+idempotency, over-fund policy, the nightly reconciler, share links + OG progress
+card, and the participant model. **Group-gift chat is done too** — provisioned
+eagerly, WebSocket fan-out, system messages, anti-spoiler masking. sprints.md
+previously listed "extend chat to group-gift scope" as new work; it is not.
+
+**Model changes needed:**
+- `PLEDGED` becomes the default contribution state; `CONFIRMED` re-means *the
+  buyer acknowledged this share arrived*.
+- **Settle-up tracking**: who has paid the buyer, who has not, who confirmed.
+- **Misc charges** (delivery, wrapping) as splittable line items.
+- **Multi-gift groups**: one group gift covers several items. This is the schema
+  change — `itemId` becomes a list — and it needs a migration. Doing it with
+  charges rather than after, since the summary frame (`4006:463`) needs both and
+  splitting means migrating twice.
+- Optional buyer UPI ID, so contributors can pay a person directly.
 
 | Screen | Figma node ID |
 |---|---|
@@ -306,11 +556,63 @@ APK builds.
 | Contribute sheet (pay) | `316:119` (⚠️ v2 adds variant `4095:538`) |
 | Group participants | `316:536` (variants `2262:1084`, `2262:1152` ⚠️ v2 redesign 1501→1024 px; ⚠️ v2 adds `4092:66`, `4093:273`, `4093:338`, `4093:405`, `4095:702`) |
 | Group chat | `316:640` (⚠️ v2 adds variant `4093:474`) |
-| **Group refund flow** | ⚠️ v2 — **new**: `4092:174` (states: `4092:203`, `4093:444`, `4095:574`, `4095:611`, `4095:637`, `4095:883`, `4095:967`, `4095:1036`, `4095:1169`, `4095:1181`, `4099:936`, `4099:976`, `4099:1026`, `4099:1075`, `4099:1199`) |
+| **Settle-up flow** | ⚠️ v2 `4092:174` (states: `4092:203`, `4093:444`, `4095:574`, `4095:611`, `4095:637`, `4095:883`, `4095:967`, `4095:1036`, `4095:1169`, `4095:1181`, `4099:936`, `4099:976`, `4099:1026`, `4099:1075`, `4099:1199`) — **all of it survives.** See the mapping below. |
 | Group thank-you | `2219:603` (variant `2288:5`) |
 
-**API:** `POST items/:itemId/group-gift`, `group-gifts/:id/join|contribute|purchase|share`, `GET group-gifts/:id`, `public/group-gifts/:slug`, chat endpoints.
-**Backend (new):** Razorpay order/verify/webhook for contributions; **refund engine** (cancel / goal-missed / over-collection → per-contributor refunds via Razorpay refund API, with status tracking to match the ~16 refund frames); **UPI payout collection** (see Sprint 9's Refunds & Payouts screens); **charges + multi-gift group-gift model**; extend chat to group-gift scope.
+**API:** `POST items/:itemId/group-gift`, `group-gifts/:id/join|contribute|purchase|share`, `GET group-gifts/:id`, `public/group-gifts/:slug`, chat endpoints — all already built. New: settle-up marks, charges, multi-gift.
+**Backend (new):** pledge/settle-up ledger; **charges + multi-gift group-gift model** (schema change + migration). ~~Razorpay order/verify/webhook~~, ~~refund engine~~, ~~UPI payout collection~~ — all cancelled; Wishtick holds no funds. ~~extend chat to group-gift scope~~ — already done.
+
+**Flutter:** essentially all of it. Today there is only a read-only `GroupGift`
+model and Home's chip-in card — no repository, no screens.
+
+### The settle-up frames, mapped (2026-08-06)
+
+**The earlier prediction in this file was wrong.** These were described as "drawn
+for PSP refunds (processing / settled / failed / retry), which cannot happen
+here — expect several to collapse". Reading them says the opposite: the designer
+built the whole flow **person-to-person from the start**. `4099:976` states it
+outright —
+
+> *"You are sending refund of ₹333 to each contributor **outside Wishtick**.
+> Once sent, mark each refund as 'Sent'."*
+
+— and `4095:1036` asks the contributor to confirm *"your refund of ₹333 **from
+the host**"*. Nothing anywhere expects Wishtick to hold or move money. The
+frames need **no redesign**; only the word "refund" is doing double duty, since
+it means "the host sends your money back", not a card reversal.
+
+It is a **balance-adjustment flow that runs in both directions**:
+
+| Direction | Frame | What it is |
+|---|---|---|
+| **Shortfall** (gift costs more than pledged) | `4092:174` | *Contribution Request* — additional amount, per-member split, message to group |
+| **Surplus** (over-collected) | `4093:444` | *Refund Distribution* — extra balance, split equally or custom per contributor |
+| ↳ host | `4099:1199` | *Request UPI Details* — who has / has not shared one, per-person Request |
+| ↳ host | `4099:936` | *UPI Received* — all collected, "you can now send refunds" |
+| ↳ host | `4099:976` | *Refund Progress* — per-contributor **Mark as Sent** → **Sent** |
+| ↳ contributor | `4099:1075` | *UPI Details Required* — "Rohan will refund this amount to you" |
+| ↳ contributor | `4095:611` | *Enter UPI ID* sheet, with "save this UPI ID in my profile" |
+| ↳ contributor | `4095:1036` | *Refund Received?* — Yes / Not Yet |
+| ↳ contributor | `4095:1169` | *Thank You* — confirmed |
+
+**This also answers the Sprint 9 question.** "UPI collection" is not a payout
+Wishtick makes — it is contributors handing the *host* a UPI ID so the host can
+pay them back. It belongs here, in 6b, and the Profile screens should be dropped.
+
+**Six frames are not exported yet:** `4092:203`, `4095:574`, `4095:637`,
+`4095:883`, `4095:967`, `4099:1026` (plus `4095:1056` from *Group created*).
+Likely intermediate/empty states of the above; export before building those.
+
+### What this needs from the backend
+
+- **`Settlement`** — one row per (group gift, contributor): direction
+  (`return` | `top_up`), `amountMinor`, status `pending → sent → confirmed`,
+  plus `sentAt` / `confirmedAt`. This is the ledger the whole flow reads.
+- **UPI ID** on the user profile, with the "save for next time" opt-in, and a
+  per-settlement copy so a later profile edit cannot rewrite history.
+- **Balance** = pledged − (gift cost + charges), which is what decides whether
+  the group is in shortfall or surplus.
+- **Contribution request** — a shortfall broadcast with a per-member amount.
 
 ---
 
@@ -332,6 +634,13 @@ APK builds.
 
 **API:** `events` CRUD + publish, `invite-templates`, `events/:id/invites` (+ resend/link), `public/invites/:token` + RSVP, `events/mine|invited`.
 **Backend (new):** guest-list view is mostly a projection over invites + RSVPs, but **guest-list download/export** (CSV/PDF per the v2 screens) is a new endpoint.
+
+> **Already built in Sprint 5:** the invitee side — `/i/:token` renders
+> `public/invites/:token` and RSVP works, gated so an event-only wishlist
+> appears only after a yes/maybe. What remains here is the **host** side:
+> creating events, designing invitations, sending invites, and the guest list.
+> An Event still has **no venue field** (only a free-text slot inside an invite
+> template), which is why the invite screen shows a time but no location.
 
 ---
 
@@ -382,7 +691,7 @@ APK builds.
 | Gifts received | `324:1108` |
 | Gifts given | `324:1253` (variant `2227:163`) |
 | Gifts on hold | `324:1210` |
-| Address book | `324:1295` |
+| Address book | `324:1295` (backend shipped in Sprint 5) |
 | Add new address | `324:1340` |
 | Privacy policy | `2262:1019` |
 | Help centre | `2252:628` |
@@ -392,9 +701,19 @@ APK builds.
 **API:** `notifications` list/read/preferences, `thank-you` flows, `/me` + preferences + export/delete/restore, gifting given/received/on-hold.
 **Backend (new):** FCM device-token registry + push pipeline; real mail adapter.
 
+> **Refunds & Payouts / UPI collection — resolved, drop from this sprint.**
+> Reading the v2 frames (see Sprint 6b's mapping) settles it: UPI collection is
+> contributors handing the **host** a UPI ID so the host can pay them back
+> outside the app. Wishtick pays nobody out. It is built in 6b. What may still
+> belong in Profile is the *saved* UPI ID — `4095:611` offers "save this UPI ID
+> in my profile" — which is one field on the profile screen, not a section.
+
 ---
 
 ## Sprint 10 — Hardening & release (1.5 wk)
+
+> Add to the dark-mode audit: `colors.primary` on a dark background is
+> **1.61:1**, below the 3:1 large-text floor. See Sprint 5's note.
 
 - Dark-mode audit across all ~90 screens (goldens), accessibility pass (contrast, tap targets, TalkBack/VoiceOver).
 - Performance: image caching, list virtualization, startup time.

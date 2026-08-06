@@ -56,10 +56,7 @@ describe('Onboarding v2: taxonomy, preferences, important dates (e2e)', () => {
 
   const newPhoneUser = async (): Promise<string> => {
     const phone = uniquePhone();
-    await request(app.getHttpServer())
-      .post(`${V1}/auth/otp/request`)
-      .send({ phone })
-      .expect(202);
+    await request(app.getHttpServer()).post(`${V1}/auth/otp/request`).send({ phone }).expect(202);
     const res = await request(app.getHttpServer())
       .post(`${V1}/auth/otp/verify`)
       .send({ phone, code: ctx.sms.lastCode() })

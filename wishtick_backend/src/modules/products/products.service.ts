@@ -207,16 +207,26 @@ export class ProductsService {
               description: p.description,
               imageUrls: p.imageUrls,
               productUrl: p.productUrl,
-              affiliateUrl: p.affiliateUrl,
               amountMinor: p.amountMinor,
+              listPriceMinor: p.listPriceMinor,
               currency: p.currency,
               merchant: p.merchant,
               category: p.category,
               inStock: p.inStock,
               affiliateMeta: p.affiliateMeta,
               lastSyncedAt: now,
+              // A monetized link is written by the affiliate network, not by
+              // the catalogue provider — which reports null for it on every
+              // search. Setting it unconditionally would erase a resolved link
+              // the next time anyone searched for the same product, silently
+              // un-monetizing it. Only a real value overwrites.
+              ...(p.affiliateUrl !== null ? { affiliateUrl: p.affiliateUrl } : {}),
             },
-            $setOnInsert: { provider: p.provider, externalId: p.externalId },
+            $setOnInsert: {
+              provider: p.provider,
+              externalId: p.externalId,
+              ...(p.affiliateUrl === null ? { affiliateUrl: null } : {}),
+            },
           },
           upsert: true,
         },
@@ -265,6 +275,7 @@ export class ProductsService {
       productUrl: doc.productUrl,
       affiliateUrl: doc.affiliateUrl,
       amountMinor: doc.amountMinor,
+      listPriceMinor: doc.listPriceMinor ?? null,
       currency: doc.currency,
       merchant: doc.merchant,
       category: doc.category,

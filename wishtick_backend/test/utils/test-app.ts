@@ -30,9 +30,11 @@ import { AnalyticsModule } from 'src/modules/analytics/analytics.module';
 import { AnalyticsRollupProcessor } from 'src/modules/analytics/analytics.processor';
 import { AuthModule } from 'src/modules/auth/auth.module';
 import { DashboardModule } from 'src/modules/dashboard/dashboard.module';
+import { DiscoverModule } from 'src/modules/discover/discover.module';
 import { EventsModule } from 'src/modules/events/events.module';
 import { ChatModule } from 'src/modules/chat/chat.module';
 import { GiftingModule } from 'src/modules/gifting/gifting.module';
+import { OrdersModule } from 'src/modules/orders/orders.module';
 import { GroupGiftModule } from 'src/modules/group-gifts/group-gift.module';
 import { NotificationsModule } from 'src/modules/notifications/notifications.module';
 import { NotificationProcessor } from 'src/modules/notifications/notification.processor';
@@ -158,11 +160,13 @@ export async function createTestApp(
       EventsModule,
       ProductsModule,
       GiftingModule,
+      OrdersModule,
       GroupGiftModule,
       ChatModule,
       NotificationsModule,
       ReelsModule,
       DashboardModule,
+      DiscoverModule,
       AnalyticsModule,
       AdminModule,
     ],

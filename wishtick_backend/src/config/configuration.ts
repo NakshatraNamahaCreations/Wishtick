@@ -142,6 +142,14 @@ export interface AppConfig {
     webhookSecrets: Record<string, string>;
     webhookToleranceSeconds: number;
   };
+  orders: {
+    /**
+     * courier → signing secret. Empty until a logistics contract exists, which
+     * makes every courier webhook 404 rather than be silently trusted.
+     */
+    courierWebhookSecrets: Record<string, string>;
+    courierWebhookToleranceSeconds: number;
+  };
   groupGifting: {
     /** Smallest allowed contribution, in minor units. Stops zero/dust pledges. */
     minContributionMinor: number;
@@ -149,7 +157,13 @@ export interface AppConfig {
     maxTargetMinor: number;
   };
   products: {
-    provider: 'fixture';
+    provider: 'fixture' | 'serpapi';
+    /** SerpApi private key. Empty unless `provider` is `serpapi`. */
+    serpApiKey: string;
+    /** SerpApi locale — `gl`, `hl`, `google_domain`. Defaults target India. */
+    serpApiCountry: string;
+    serpApiLanguage: string;
+    serpApiDomain: string;
     timeoutMs: number;
     maxRetries: number;
     retryBaseDelayMs: number;
@@ -162,6 +176,18 @@ export interface AppConfig {
     urlMaxBytes: number;
     urlMaxRedirects: number;
     urlAllowPrivate: boolean;
+  };
+  /**
+   * The affiliate network that monetizes an outbound click.
+   *
+   * Separate from `products` because it is a different vendor with its own key:
+   * the catalogue tells us *what* a product is, the network tells us *how to get
+   * paid* for sending someone to it. Either can be swapped without the other.
+   */
+  affiliate: {
+    network: 'none' | 'cuelinks';
+    cuelinksApiKey: string;
+    cuelinksBaseUrl: string;
   };
   observability: {
     sentryDsn: string;
@@ -328,12 +354,20 @@ export const configuration = (): AppConfig => {
       webhookSecrets: parseJsonRecord(process.env.GIFT_WEBHOOK_SECRETS),
       webhookToleranceSeconds: toInt(process.env.GIFT_WEBHOOK_TOLERANCE_SECONDS, 300),
     },
+    orders: {
+      courierWebhookSecrets: parseJsonRecord(process.env.COURIER_WEBHOOK_SECRETS),
+      courierWebhookToleranceSeconds: toInt(process.env.COURIER_WEBHOOK_TOLERANCE_SECONDS, 300),
+    },
     groupGifting: {
       minContributionMinor: toInt(process.env.GROUP_GIFT_MIN_CONTRIBUTION_MINOR, 100),
       maxTargetMinor: toInt(process.env.GROUP_GIFT_MAX_TARGET_MINOR, 100_000_000),
     },
     products: {
-      provider: (process.env.PRODUCT_PROVIDER ?? 'fixture') as 'fixture',
+      provider: (process.env.PRODUCT_PROVIDER ?? 'fixture') as 'fixture' | 'serpapi',
+      serpApiKey: process.env.SERPAPI_KEY ?? '',
+      serpApiCountry: process.env.SERPAPI_COUNTRY ?? 'in',
+      serpApiLanguage: process.env.SERPAPI_LANGUAGE ?? 'en',
+      serpApiDomain: process.env.SERPAPI_GOOGLE_DOMAIN ?? 'google.co.in',
       timeoutMs: toInt(process.env.PRODUCT_TIMEOUT_MS, 4_000),
       maxRetries: toInt(process.env.PRODUCT_MAX_RETRIES, 2),
       retryBaseDelayMs: toInt(process.env.PRODUCT_RETRY_BASE_DELAY_MS, 150),
@@ -346,6 +380,12 @@ export const configuration = (): AppConfig => {
       urlMaxBytes: toInt(process.env.PRODUCT_URL_MAX_BYTES, 512 * 1024),
       urlMaxRedirects: toInt(process.env.PRODUCT_URL_MAX_REDIRECTS, 3),
       urlAllowPrivate: toBool(process.env.PRODUCT_URL_ALLOW_PRIVATE, false),
+    },
+    affiliate: {
+      network: (process.env.AFFILIATE_NETWORK ?? 'none') as 'none' | 'cuelinks',
+      cuelinksApiKey: process.env.CUELINKS_API_KEY ?? '',
+      cuelinksBaseUrl:
+        process.env.CUELINKS_BASE_URL ?? 'https://developers.cuelinks.com/pub_api/v3',
     },
     observability: {
       sentryDsn: process.env.SENTRY_DSN ?? '',

@@ -8,6 +8,9 @@ export interface ItemView {
   id: string;
   title: string;
   notes: string | null;
+  recipientName: string | null;
+  relation: string | null;
+  occasionKey: string | null;
   imageUrls: string[];
   productLink: string | null;
   price: { amountMinor: number | null; currency: string };
@@ -25,6 +28,7 @@ export interface WishlistView {
   id: string;
   title: string;
   description: string | null;
+  occasionLabel: string | null;
   visibility: WishlistVisibility;
   coverUrl: string | null;
   chatEnabled: boolean;
@@ -97,6 +101,9 @@ export const toItemView = (item: WishlistItemDocument, maskForOwner = false): It
     id: item._id.toString(),
     title: item.title,
     notes: item.notes,
+    recipientName: item.recipientName,
+    relation: item.relation,
+    occasionKey: item.occasionKey,
     imageUrls: item.imageUrls,
     productLink: item.productLink,
     price: {
@@ -127,6 +134,7 @@ export const toWishlistView = (
     id: wishlist._id.toString(),
     title: wishlist.title,
     description: wishlist.description,
+    occasionLabel: wishlist.occasionLabel,
     visibility: wishlist.visibility,
     coverUrl: wishlist.coverUrl,
     chatEnabled: wishlist.chatEnabled,

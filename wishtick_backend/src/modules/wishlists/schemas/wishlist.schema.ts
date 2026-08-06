@@ -47,6 +47,10 @@ export class Wishlist {
   @Prop({ type: String, default: null, trim: true, maxlength: 1000 })
   description!: string | null;
 
+  /** Free text, e.g. "Ananya's Birthday" — display only, never taxonomy-validated. */
+  @Prop({ type: String, default: null, trim: true, maxlength: 140 })
+  occasionLabel!: string | null;
+
   @Prop({
     type: String,
     enum: Object.values(WishlistVisibility),

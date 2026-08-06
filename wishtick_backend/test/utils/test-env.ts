@@ -90,6 +90,13 @@ process.env.PRODUCT_STALE_TTL_SECONDS = '86400';
 process.env.PRODUCT_URL_ALLOW_PRIVATE = 'true';
 process.env.PRODUCT_URL_FETCH_TIMEOUT_MS = '2000';
 
+// Affiliate network on, with a fake key: the suite stubs `fetch`, so no request
+// ever leaves the process. Enabled by default so the monetization path is
+// exercised by every products test rather than only the affiliate one.
+process.env.AFFILIATE_NETWORK = 'cuelinks';
+process.env.CUELINKS_API_KEY = 'test-cuelinks-key';
+process.env.CUELINKS_BASE_URL = 'https://cuelinks.test/pub_api/v3';
+
 // Admin panel: its own audience so a user token can never authenticate on
 // /admin, and a bootstrap super-admin seeded at boot so tests have an operator
 // to log in as. TOTP is off for that seed (first login is password-only), which

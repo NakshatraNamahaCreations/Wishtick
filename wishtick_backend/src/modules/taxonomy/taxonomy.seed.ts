@@ -309,6 +309,11 @@ export const TAXONOMY_SEED: SeedTerm[] = [
     ['just_because', 'Just Because'],
     // The important-dates screen's occasion carousel (Figma 199:10 / 204:371).
     ['special_moments', 'Special Moments'],
+    // Appended for Home's "What are we celebrating today?" grid (Figma 51:11),
+    // which shows both by name. Appended rather than slotted in beside
+    // `festival` so no existing row's sortOrder shifts.
+    ['rakhi', 'Rakhi'],
+    ['best_wishes', 'Best Wishes'],
   ]),
 
   // Mirrors Event.type in Sprint 5. Kept in the taxonomy so the event-creation

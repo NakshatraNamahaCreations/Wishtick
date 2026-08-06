@@ -169,9 +169,25 @@ export const envValidationSchema = Joi.object({
   GROUP_GIFT_MAX_TARGET_MINOR: Joi.number().integer().min(1).default(100_000_000),
 
   // ─── Products / affiliate ───────────────────────────────────────────────
-  // 'fixture' is an in-memory catalogue for dev and tests. The real network is
-  // not chosen yet; adding it means a new adapter and a new value here.
-  PRODUCT_PROVIDER: Joi.string().valid('fixture').default('fixture'),
+  // 'fixture' is an in-memory catalogue for dev and tests; 'serpapi' is the
+  // real catalogue, reading Google Shopping through SerpApi.
+  PRODUCT_PROVIDER: Joi.string().valid('fixture', 'serpapi').default('fixture'),
+  SERPAPI_KEY: Joi.string().allow('').default(''),
+  /**
+   * SerpApi locale. Defaults target India, which is the only market Wishtick
+   * prices in — everything downstream assumes INR minor units.
+   */
+  SERPAPI_COUNTRY: Joi.string().default('in'),
+  SERPAPI_LANGUAGE: Joi.string().default('en'),
+  SERPAPI_GOOGLE_DOMAIN: Joi.string().default('google.co.in'),
+
+  // The network that turns a merchant URL into a paid link. 'none' means every
+  // outbound click goes to the plain merchant URL and earns nothing — a valid
+  // state, and the one dev runs in.
+  AFFILIATE_NETWORK: Joi.string().valid('none', 'cuelinks').default('none'),
+  CUELINKS_API_KEY: Joi.string().allow('').default(''),
+  CUELINKS_BASE_URL: Joi.string().uri().default('https://developers.cuelinks.com/pub_api/v3'),
+
   PRODUCT_TIMEOUT_MS: Joi.number().min(100).default(4_000),
   PRODUCT_MAX_RETRIES: Joi.number().min(0).max(5).default(2),
   PRODUCT_RETRY_BASE_DELAY_MS: Joi.number().min(10).default(150),
@@ -231,6 +247,18 @@ export const envValidationSchema = Joi.object({
       return helpers.message({
         custom: 'PRODUCT_URL_ALLOW_PRIVATE must never be true in production (SSRF)',
       });
+    }
+    return value;
+  })
+  // Selecting a vendor without its key would boot fine and then fail on every
+  // call — an outage that looks like an empty catalogue. Refuse the boot
+  // instead, the same reasoning as the fixture-in-production guard.
+  .custom((value: Record<string, unknown>, helpers) => {
+    if (value.PRODUCT_PROVIDER === 'serpapi' && !value.SERPAPI_KEY) {
+      return helpers.message({ custom: 'PRODUCT_PROVIDER=serpapi requires SERPAPI_KEY' });
+    }
+    if (value.AFFILIATE_NETWORK === 'cuelinks' && !value.CUELINKS_API_KEY) {
+      return helpers.message({ custom: 'AFFILIATE_NETWORK=cuelinks requires CUELINKS_API_KEY' });
     }
     return value;
   });

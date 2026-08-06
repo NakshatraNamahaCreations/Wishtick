@@ -91,6 +91,7 @@ export class ItemsService {
     }
 
     await this.taxonomy.assertValidOne(TaxonomyKind.GIFT_CATEGORY, dto.category, 'category');
+    await this.taxonomy.assertValidOne(TaxonomyKind.OCCASION, dto.occasionKey, 'occasionKey');
     const imageUrls = await this.resolveImages(ctx.userId!, dto.mediaIds ?? []);
 
     const item = await this.model.create({
@@ -98,6 +99,9 @@ export class ItemsService {
       ownerId: wishlist.ownerId,
       title: dto.title,
       notes: dto.notes ?? null,
+      recipientName: dto.recipientName ?? null,
+      relation: dto.relation ?? null,
+      occasionKey: dto.occasionKey ?? null,
       imageUrls,
       mediaIds: (dto.mediaIds ?? []).map((id) => new Types.ObjectId(id)),
       productLink: dto.productLink ?? null,
@@ -155,8 +159,17 @@ export class ItemsService {
       item.category = dto.category;
     }
 
+    if (dto.occasionKey !== undefined) {
+      await this.taxonomy.assertValidOne(TaxonomyKind.OCCASION, dto.occasionKey, 'occasionKey');
+      item.occasionKey = dto.occasionKey;
+    }
+
     if (dto.title !== undefined) item.title = dto.title;
     if (dto.notes !== undefined) item.notes = dto.notes;
+    // Who/why this was added is organizational context, not what the item is —
+    // unlike title/price/productLink, it stays editable after a claim.
+    if (dto.recipientName !== undefined) item.recipientName = dto.recipientName;
+    if (dto.relation !== undefined) item.relation = dto.relation;
     if (dto.productLink !== undefined) item.productLink = dto.productLink;
     if (dto.priority !== undefined) item.priority = dto.priority;
     if (dto.importance !== undefined) item.importance = dto.importance;

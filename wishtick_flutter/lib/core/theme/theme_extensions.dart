@@ -24,4 +24,18 @@ extension WishtickThemeContext on BuildContext {
   TextTheme get text => Theme.of(this).textTheme;
 
   bool get isDarkMode => Theme.of(this).brightness == Brightness.dark;
+
+  /// The colour for a large brand headline drawn straight on the page.
+  ///
+  /// Light mode uses the plum the mocks show, which clears 10:1 on the beige
+  /// page. Dark mode cannot: `colors.primary` there is #5B1A6E, measuring
+  /// **1.61:1** against the #17101B background — under the 3:1 floor for large
+  /// text — so it steps to [WishtickColors.brandMark], the token whose job is
+  /// to stay legible in both themes (5.88:1 here).
+  ///
+  /// A workaround, not a fix: the same 1.61:1 applies to *every* headline
+  /// drawn in `colors.primary` on a dark page, which is a palette decision
+  /// rather than a per-screen one.
+  Color get headlineBrandColor =>
+      isDarkMode ? colors.brandMark : colors.primary;
 }

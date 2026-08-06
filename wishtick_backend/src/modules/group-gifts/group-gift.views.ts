@@ -25,12 +25,41 @@ export interface GroupGiftShareView {
   expiresAt: Date | null;
 }
 
+/** A non-item cost folded into the group's total (`4007:568`). */
+export interface GroupGiftChargeView {
+  id: string;
+  label: string;
+  amountMinor: number;
+  addedBy: string;
+  addedAt: Date;
+}
+
+/** An additional item beyond the primary one (`4007:720`). */
+export interface GroupGiftLineView {
+  id: string;
+  itemId: string;
+  amountMinor: number | null;
+  addedAt: Date;
+}
+
 export interface GroupGiftView {
   id: string;
   itemId: string;
   wishlistId: string;
   status: string;
+  /** The host's name for it, e.g. "Siya's birthday gift". */
+  title: string;
+  /** Where members send their share. Wishtick never holds the money. */
+  hostUpiId: string | null;
+  contributionMode: string;
+  /** The chips the host offers on the contribute sheet. Minor units. */
+  suggestedAmountsMinor: number[];
+  /** The Grand Total: every gift plus every charge. What the group collects. */
   targetAmountMinor: number;
+  /** The charges' share of the target, so the summary need not re-add them. */
+  chargesTotalMinor: number;
+  charges: GroupGiftChargeView[];
+  lines: GroupGiftLineView[];
   collectedAmountMinor: number;
   currency: string;
   percentFunded: number;
@@ -113,9 +142,33 @@ export function toGroupGiftView(input: {
     itemId: gift.itemId.toString(),
     wishlistId: gift.wishlistId.toString(),
     status: gift.status,
+    title: gift.title,
+    hostUpiId: gift.hostUpiId,
+    contributionMode: gift.contributionMode,
+    suggestedAmountsMinor: gift.suggestedAmountsMinor,
+    // The Grand Total off the summary screen. Charges are agreed before the
+    // first contribution, so this *is* the target rather than something on top
+    // of it — see GroupGiftService.recomputeTarget.
     targetAmountMinor: gift.targetAmountMinor,
+    chargesTotalMinor: gift.charges.reduce((sum, charge) => sum + charge.amountMinor, 0),
+    charges: gift.charges.map((charge) => ({
+      id: charge._id.toString(),
+      label: charge.label,
+      amountMinor: charge.amountMinor,
+      addedBy: charge.addedBy.toString(),
+      addedAt: charge.addedAt,
+    })),
+    lines: gift.lines.map((line) => ({
+      id: line._id.toString(),
+      itemId: line.itemId.toString(),
+      amountMinor: line.amountMinor,
+      addedAt: line.addedAt,
+    })),
     collectedAmountMinor: gift.collectedAmountMinor,
     currency: gift.currency,
+    // Progress stays measured against the *target* the group set, not the true
+    // cost: a charge added at checkout must not make an already-full bar look
+    // like it went backwards. The shortfall shows up in the balance instead.
     percentFunded: percent(gift.collectedAmountMinor, gift.targetAmountMinor),
     contributorCount: gift.contributorCount,
     participantCount: gift.participantIds.length,

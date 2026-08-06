@@ -53,6 +53,16 @@ export class CreateWishlistDto {
   @IsOptional()
   @IsBoolean()
   chatEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    example: "Ananya's Birthday",
+    description: 'Free text, display only — not validated against the occasion taxonomy.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  @Transform(trim)
+  occasionLabel?: string | null;
 }
 
 export class UpdateWishlistDto {
@@ -84,6 +94,13 @@ export class UpdateWishlistDto {
   @IsOptional()
   @IsBoolean()
   chatEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: "Ananya's Birthday" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  @Transform(trim)
+  occasionLabel?: string | null;
 }
 
 export class ShareWishlistDto {
@@ -163,6 +180,34 @@ export class CreateItemDto {
   @MaxLength(1000)
   @Transform(trim)
   notes?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Ananya',
+    description: 'Who this gift is for — free text, display only.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  @Transform(trim)
+  recipientName?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Best Friend',
+    description: "Free text, matching /me/important-dates' relation field.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  @Transform(trim)
+  relation?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'An occasion key from /onboarding/options (same taxonomy as important-dates).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  occasionKey?: string | null;
 
   @ApiPropertyOptional({ example: 'https://example.com/product/123' })
   @IsOptional()

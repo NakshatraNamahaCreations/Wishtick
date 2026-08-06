@@ -6,6 +6,15 @@ import '../../features/auth/presentation/mobile_number_screen.dart';
 import '../../features/auth/presentation/otp_screen.dart';
 import '../../features/auth/presentation/session_controller.dart';
 import '../../features/auth/presentation/welcome_screen.dart';
+import '../../features/events/presentation/invite_screen.dart';
+import '../../features/gifting/presentation/gift_details_screen.dart';
+import '../../features/gifting/presentation/gift_item_screen.dart';
+import '../../features/gifting/presentation/order_confirmed_screen.dart';
+import '../../features/gifting/presentation/order_controller.dart';
+import '../../features/gifting/presentation/order_delivered_screen.dart';
+import '../../features/gifting/presentation/track_order_screen.dart';
+import '../../features/home/presentation/delivery_location_screen.dart';
+import '../../features/home/presentation/home_screen.dart';
 import '../../features/onboarding/presentation/all_set_screen.dart';
 import '../../features/onboarding/presentation/avatar_picker_screen.dart';
 import '../../features/onboarding/presentation/category_detail_screen.dart';
@@ -16,6 +25,14 @@ import '../../features/onboarding/presentation/interests_screen.dart';
 import '../../features/onboarding/presentation/size_fit_screen.dart';
 import '../../features/settings/presentation/appearance_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
+import '../../features/wishlist/domain/product.dart';
+import '../../features/wishlist/domain/wishlist.dart';
+import '../../features/wishlist/presentation/create_wishlist_screen.dart';
+import '../../features/wishlist/presentation/product_detail_screen.dart';
+import '../../features/wishlist/presentation/public_wishlist_screen.dart';
+import '../../features/wishlist/presentation/wishlist_detail_screen.dart';
+import '../../features/wishlist/presentation/wishlist_item_detail_screen.dart';
+import '../../features/wishlist/presentation/wishlist_tab_screen.dart';
 import '../widgets/sprint_placeholder.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
@@ -50,6 +67,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       final onSplash = location == AppRoutes.splash;
       final inAuthFlow = location.startsWith(AppRoutes.welcome);
       final inOnboarding = location.startsWith(AppRoutes.onboarding);
+      // A shared wishlist or an event invite is a public link: someone sent it
+      // to a friend who may have no account. Sending them to sign-in would
+      // break the share.
+      final isPublicLink =
+          location.startsWith('/w/') || location.startsWith('/i/');
+
+      if (isPublicLink) return null;
 
       // Hold on the splash until the stored session has been resolved.
       if (!session.isResolved) return onSplash ? null : AppRoutes.splash;
@@ -126,6 +150,97 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.appearance,
         builder: (context, state) => const AppearanceScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.deliveryLocation,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const DeliveryLocationScreen(),
+      ),
+      GoRoute(
+        // A share link, so it must resolve without a session — the redirect
+        // below lets it through for exactly that reason.
+        path: '/w/:slug',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => PublicWishlistScreen(
+          slug: state.pathParameters['slug']!,
+          passcode: state.uri.queryParameters['passcode'],
+        ),
+      ),
+      GoRoute(
+        // Public, like a share link — the token is the authorization, and
+        // requiring a signup to answer a party invitation is the fastest way
+        // to collect no RSVPs at all.
+        path: '/i/:token',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            InviteScreen(token: state.pathParameters['token']!),
+      ),
+      GoRoute(
+        path: '/gift/:wishlistId/items/:itemId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => GiftItemScreen(
+          wishlistId: state.pathParameters['wishlistId']!,
+          itemId: state.pathParameters['itemId']!,
+        ),
+        routes: [
+          GoRoute(
+            path: 'details',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => GiftDetailsScreen(
+              wishlistId: state.pathParameters['wishlistId']!,
+              itemId: state.pathParameters['itemId']!,
+            ),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/gifts/:giftId/confirmed',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            OrderConfirmedScreen(giftId: state.pathParameters['giftId']!),
+      ),
+      GoRoute(
+        path: '/gifts/:giftId/order',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => TrackOrderScreen(
+          orderRef: OrderRef(
+            state.pathParameters['giftId']!,
+            OrderLookup.byGiftId,
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/orders/:orderId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => TrackOrderScreen(
+          orderRef: OrderRef(
+            state.pathParameters['orderId']!,
+            OrderLookup.byOrderId,
+          ),
+        ),
+        routes: [
+          GoRoute(
+            path: 'delivered',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                OrderDeliveredScreen(orderId: state.pathParameters['orderId']!),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: AppRoutes.productDetail,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final product = state.extra;
+          return switch (product) {
+            NormalizedProduct p => ProductDetailScreen.fromSearch(p),
+            ResolvedUrlProduct p => ProductDetailScreen.fromResolved(p),
+            _ => throw ArgumentError(
+              'AppRoutes.productDetail requires a NormalizedProduct or '
+              'ResolvedUrlProduct via extra',
+            ),
+          };
+        },
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             AppShell(navigationShell: navigationShell),
@@ -134,11 +249,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.home,
-                builder: (context, state) => const SprintPlaceholder(
-                  title: 'Home',
-                  sprint: 'Sprint 4 — Home & discovery',
-                  figmaNodeId: '51:11',
-                ),
+                builder: (context, state) => const HomeScreen(),
               ),
             ],
           ),
@@ -146,11 +257,40 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.wishlist,
-                builder: (context, state) => const SprintPlaceholder(
-                  title: 'Wishlist',
-                  sprint: 'Sprint 3 — Wishlist core',
-                  figmaNodeId: '280:428',
-                ),
+                builder: (context, state) => const WishlistTabScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'create',
+                    // Pushed on the root navigator, not the branch's — a
+                    // create/detail page is full-screen, over the tab bar.
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) => const CreateWishlistScreen(),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) => WishlistDetailScreen(
+                      wishlistId: state.pathParameters['id']!,
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: 'edit',
+                        parentNavigatorKey: _rootNavigatorKey,
+                        builder: (context, state) => CreateWishlistScreen(
+                          editing: state.extra as Wishlist?,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'items/:itemId',
+                        parentNavigatorKey: _rootNavigatorKey,
+                        builder: (context, state) => WishlistItemDetailScreen(
+                          wishlistId: state.pathParameters['id']!,
+                          itemId: state.pathParameters['itemId']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),

@@ -31,6 +31,21 @@ export interface IProductProvider {
   /** Null when the provider genuinely has no such product (not on failure). */
   getDetails(externalId: string): Promise<NormalizedProduct | null>;
 
+  /**
+   * Detail lookup for providers whose id is not enough on its own.
+   *
+   * SerpApi is the reason this exists: Google retired the engine that took a
+   * product id, and its replacement is keyed by an opaque per-search token. The
+   * token is captured at search time into `affiliateMeta` and handed back here.
+   *
+   * Optional — a provider whose `externalId` fully identifies a product (most
+   * of them) implements only [getDetails], and callers fall back to it.
+   */
+  getDetailsByRef?(
+    externalId: string,
+    ref: Record<string, unknown>,
+  ): Promise<NormalizedProduct | null>;
+
   getCategories(): Promise<ProviderCategory[]>;
 
   /**

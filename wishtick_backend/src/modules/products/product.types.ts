@@ -18,6 +18,14 @@ export interface NormalizedProduct {
   affiliateUrl: string | null;
   /** Minor units. Never a float — see the note on ItemPrice. */
   amountMinor: number | null;
+  /**
+   * The pre-discount / MRP price in minor units, when the provider gives one
+   * and it is genuinely higher than [amountMinor]. Null means "no discount to
+   * show" — Discover's cards render the struck-through price only when this is
+   * present, so an absent value degrades to a plain price rather than a fake
+   * saving.
+   */
+  listPriceMinor: number | null;
   currency: string;
   merchant: string | null;
   /** Our gift-category taxonomy key, mapped from the provider's own category. */

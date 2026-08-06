@@ -61,8 +61,9 @@ describe('Passwordless OTP sign-in (e2e)', () => {
       const phone = uniquePhone();
 
       const requested = await requestCode(phone).expect(202);
-      expect((requested.body as Envelope<{ expiresInSeconds: number }>).data.expiresInSeconds)
-        .toBeGreaterThan(0);
+      expect(
+        (requested.body as Envelope<{ expiresInSeconds: number }>).data.expiresInSeconds,
+      ).toBeGreaterThan(0);
       expect(ctx.sms.sent).toHaveLength(1);
 
       const res = await verifyCode(phone, ctx.sms.lastCode(), { name: 'Ananya' }).expect(200);

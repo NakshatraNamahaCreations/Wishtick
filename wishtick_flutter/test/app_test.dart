@@ -9,12 +9,16 @@ import 'package:wishtick_flutter/core/theme/theme_controller.dart';
 import 'package:wishtick_flutter/core/widgets/wishtick_bottom_nav.dart';
 import 'package:wishtick_flutter/features/auth/data/auth_repository.dart';
 import 'package:wishtick_flutter/features/auth/presentation/welcome_screen.dart';
+import 'package:wishtick_flutter/features/home/data/home_repository.dart';
 import 'package:wishtick_flutter/features/onboarding/data/onboarding_repository.dart';
 import 'package:wishtick_flutter/features/onboarding/presentation/create_profile_screen.dart';
 import 'package:wishtick_flutter/features/splash/presentation/splash_screen.dart';
+import 'package:wishtick_flutter/features/wishlist/data/wishlist_repository.dart';
 
 import 'helpers/auth_fakes.dart';
+import 'helpers/home_fakes.dart';
 import 'helpers/onboarding_fakes.dart';
+import 'helpers/wishlist_fakes.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +56,12 @@ void main() {
           // network and every test waits out the connect timeout.
           onboardingRepositoryProvider.overrideWithValue(
             FakeOnboardingRepository(completed: onboarded),
+          ),
+          // Home reads four rails on first frame; without fakes each one
+          // reaches the real network and the test waits out a connect timeout.
+          homeRepositoryProvider.overrideWithValue(FakeHomeRepository()),
+          wishlistRepositoryProvider.overrideWithValue(
+            FakeWishlistRepository(),
           ),
         ],
         child: const WishtickApp(),
@@ -144,7 +154,8 @@ void main() {
           reason: '${item.label} tab is missing',
         );
       }
-      expect(find.text('Lands in Sprint 4 — Home & discovery'), findsOneWidget);
+      // Home is a real screen now; its delivery header is the stable marker.
+      expect(find.text('Where To Deliver?'), findsOneWidget);
     });
 
     testWidgets('switches tabs through the bottom navigation', (tester) async {

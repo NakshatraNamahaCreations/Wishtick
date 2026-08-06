@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { QUEUE } from 'src/infra/queue/queue.constants';
 import { ChatModule } from 'src/modules/chat/chat.module';
 import { GiftingModule } from 'src/modules/gifting/gifting.module';
+import { UserProfile, UserProfileSchema } from 'src/modules/profile/schemas/user-profile.schema';
 import { UsersModule } from 'src/modules/users/users.module';
 import {
   WishlistItem,
@@ -19,15 +20,22 @@ import { GroupGiftService } from './group-gift.service';
 import { PublicGroupGiftsController } from './public-group-gifts.controller';
 import { Contribution, ContributionSchema } from './schemas/contribution.schema';
 import { GroupGift, GroupGiftSchema } from './schemas/group-gift.schema';
+import { Settlement, SettlementSchema } from './schemas/settlement.schema';
+import { SettlementController } from './settlement.controller';
+import { SettlementService } from './settlement.service';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: GroupGift.name, schema: GroupGiftSchema },
       { name: Contribution.name, schema: ContributionSchema },
+      { name: Settlement.name, schema: SettlementSchema },
       // Registered here too so the service can re-read item status inside the
       // claim transaction and the preview can read the item title.
       { name: WishlistItem.name, schema: WishlistItemSchema },
+      // The saved UPI ID lives on the profile; settle-up reads and optionally
+      // writes it. Read-only coupling — this module never owns a profile.
+      { name: UserProfile.name, schema: UserProfileSchema },
     ]),
     BullModule.registerQueue({ name: QUEUE.SCHEDULER }),
     // GiftStatusService (the holder gift) and GiftingService (loadGiftableItem).
@@ -41,14 +49,15 @@ import { GroupGift, GroupGiftSchema } from './schemas/group-gift.schema';
     // gifts depend on chat; chat only reads the group-gift document.
     ChatModule,
   ],
-  controllers: [GroupGiftController, PublicGroupGiftsController],
+  controllers: [GroupGiftController, SettlementController, PublicGroupGiftsController],
   providers: [
     GroupGiftService,
     GroupGiftPreviewService,
     GroupGiftCardRenderer,
     GroupGiftReconcileService,
     GroupGiftReconcileRegistrar,
+    SettlementService,
   ],
-  exports: [GroupGiftService],
+  exports: [GroupGiftService, SettlementService],
 })
 export class GroupGiftModule {}

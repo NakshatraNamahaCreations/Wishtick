@@ -77,6 +77,14 @@ export class WishlistItem {
   @Prop({ type: String, default: null, trim: true, maxlength: 1000 })
   notes!: string | null;
 
+  /** Who this gift is for — free text, mirrors ImportantDate.personName. */
+  @Prop({ type: String, default: null, trim: true, maxlength: 140 })
+  recipientName!: string | null;
+
+  /** Free text, mirrors ImportantDate.relation. */
+  @Prop({ type: String, default: null, trim: true, maxlength: 60 })
+  relation!: string | null;
+
   @Prop({ type: [String], default: [] })
   imageUrls!: string[];
 
@@ -92,6 +100,10 @@ export class WishlistItem {
   /** A gift-category taxonomy key, validated on write. */
   @Prop({ type: String, default: null })
   category!: string | null;
+
+  /** An occasion taxonomy key (same taxonomy as ImportantDate), validated on write. */
+  @Prop({ type: String, default: null })
+  occasionKey!: string | null;
 
   /** 1 = highest. Lower sorts first, matching "priority 1" in speech. */
   @Prop({ type: Number, default: 3, min: 1, max: 5 })

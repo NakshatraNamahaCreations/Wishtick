@@ -114,6 +114,19 @@ export class UserProfile {
   @Prop({ type: String, enum: Object.values(Gender), default: null })
   gender!: Gender | null;
 
+  /**
+   * A saved UPI ID, so settling a group gift does not mean retyping it
+   * (`4095:611` — "Save this UPI ID in my profile. For faster refunds in the
+   * future.").
+   *
+   * A convenience default only. Every settlement copies the value it was raised
+   * with, so editing this never rewrites what a host was already told to pay.
+   * Wishtick sends nothing here — it is handed to another *person*, which is
+   * why it is shown to a group's host and to nobody else.
+   */
+  @Prop({ type: String, default: null, trim: true, maxlength: 120 })
+  upiId!: string | null;
+
   @Prop({ type: String, maxlength: 280, default: null, trim: true })
   bio!: string | null;
 

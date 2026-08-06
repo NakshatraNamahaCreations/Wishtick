@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import {
+  ContributionMode,
   ContributionStatus,
   GroupGiftStatus,
   GroupGiftVisibility,
@@ -57,10 +58,75 @@ export class GroupGiftShareLink {
 
 export const GroupGiftShareLinkSchema = SchemaFactory.createForClass(GroupGiftShareLink);
 
+/**
+ * A cost on the group gift that is not one of the items — delivery, wrapping,
+ * a courier charge someone fronted (`4007:568`, `4007:628`).
+ *
+ * Splittable like everything else, and part of the total the balance is
+ * measured against, which is why a charge added after funding can put an
+ * already-funded group back into shortfall.
+ */
+@Schema({ _id: true })
+export class GroupGiftCharge {
+  _id!: Types.ObjectId;
+
+  @Prop({ type: String, required: true, trim: true, maxlength: 120 })
+  label!: string;
+
+  @Prop({ type: Number, required: true })
+  amountMinor!: number;
+
+  /** Who added it — a charge changes what everyone owes, so it is attributable. */
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'User', required: true })
+  addedBy!: Types.ObjectId;
+
+  @Prop({ type: Date, default: Date.now })
+  addedAt!: Date;
+}
+
+export const GroupGiftChargeSchema = SchemaFactory.createForClass(GroupGiftCharge);
+
+/**
+ * One gift in a multi-gift group (`4007:720`).
+ *
+ * The group's own `itemId` remains the *primary* item — it is what the holder
+ * gift claims and what the item's status is driven from — and these are the
+ * additional ones. Modelling extras as a list rather than promoting every item
+ * to equal footing keeps the existing "one active claim per item" invariant
+ * intact, which is what stops a group gift and a single reservation colliding.
+ */
+@Schema({ _id: true })
+export class GroupGiftLine {
+  _id!: Types.ObjectId;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'WishlistItem', required: true })
+  itemId!: Types.ObjectId;
+
+  /** Snapshot of the item's price when it was added, in minor units. */
+  @Prop({ type: Number, default: null })
+  amountMinor!: number | null;
+
+  /** The holder Gift claiming this item, so it cannot be double-claimed. */
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'Gift', required: true })
+  giftId!: Types.ObjectId;
+
+  @Prop({ type: Date, default: Date.now })
+  addedAt!: Date;
+}
+
+export const GroupGiftLineSchema = SchemaFactory.createForClass(GroupGiftLine);
+
 @Schema({ collection: 'group_gifts', timestamps: true })
 export class GroupGift {
   _id!: Types.ObjectId;
 
+  /**
+   * The primary item. Additional items live in [lines].
+   *
+   * Kept as a single field rather than folded into the list because every
+   * existing index, projection and access check reads it, and because the
+   * holder gift's unique `(itemId, active)` constraint hangs off it.
+   */
   @Prop({ type: SchemaTypes.ObjectId, ref: 'WishlistItem', required: true })
   itemId!: Types.ObjectId;
 
@@ -87,9 +153,53 @@ export class GroupGift {
   @Prop({ type: SchemaTypes.ObjectId, ref: 'Gift', required: true })
   giftId!: Types.ObjectId;
 
-  /** Integer minor units, consistent with item.price.amountMinor. */
+  /** The host's name for it — "Siya's birthday gift" (`299:1658`, required). */
+  @Prop({ type: String, required: true, trim: true, maxlength: 120 })
+  title!: string;
+
+  /**
+   * What the group is collecting: the **Grand Total** off the summary screen —
+   * every gift plus every charge (`4006:463`).
+   *
+   * Derived, never set by hand: [recomputeTarget] rebuilds it whenever a gift
+   * or charge changes, so it cannot drift from the breakdown that justifies it.
+   * Charges are agreed up front, before the first contribution, which is why
+   * this is the collect target rather than the item price with extras bolted on.
+   */
   @Prop({ type: Number, required: true })
   targetAmountMinor!: number;
+
+  /**
+   * Where contributors send their share.
+   *
+   * The money goes host-to-host: *"All group payments will be collected in your
+   * account"* (`299:1658`). Wishtick never holds it, so this is a display
+   * string handed to members — copied onto the group rather than referenced
+   * from the profile, so a later profile edit cannot silently redirect an
+   * in-flight collection.
+   */
+  @Prop({ type: String, default: null, trim: true, maxlength: 120 })
+  hostUpiId!: string | null;
+
+  /** Split equally, or let people give what they like. Advisory. */
+  @Prop({
+    type: String,
+    enum: Object.values(ContributionMode),
+    default: ContributionMode.EQUAL,
+  })
+  contributionMode!: ContributionMode;
+
+  /** The ₹500 / ₹1,000 / ₹2,000 chips the host offers. Minor units. */
+  @Prop({ type: [Number], default: [] })
+  suggestedAmountsMinor!: number[];
+
+  /** Additional items beyond [itemId]. Empty for an ordinary single-gift group. */
+  @Prop({ type: [GroupGiftLineSchema], default: [] })
+  lines!: GroupGiftLine[];
+
+  /** Delivery, wrapping, and anything else that is not an item. */
+  @Prop({ type: [GroupGiftChargeSchema], default: [] })
+  charges!: GroupGiftCharge[];
 
   /**
    * A denormalized cache of the confirmed-contribution sum.

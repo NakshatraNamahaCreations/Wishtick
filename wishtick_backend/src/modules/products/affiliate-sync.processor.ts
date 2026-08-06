@@ -8,6 +8,11 @@ import {
   AffiliateSyncService,
   type SyncReport,
 } from './affiliate-sync.service';
+import {
+  CONVERSION_SYNC_JOB,
+  ConversionSyncService,
+  type ConversionSyncReport,
+} from './affiliate/conversion-sync.service';
 
 /**
  * Runs the nightly catalogue refresh.
@@ -23,6 +28,7 @@ export class AffiliateSyncProcessor extends WorkerHost implements OnModuleInit {
 
   constructor(
     private readonly sync: AffiliateSyncService,
+    private readonly conversions: ConversionSyncService,
     @InjectQueue(QUEUE.AFFILIATE_SYNC) private readonly queue: Queue,
   ) {
     super();
@@ -42,10 +48,26 @@ export class AffiliateSyncProcessor extends WorkerHost implements OnModuleInit {
       },
     );
     this.logger.log('Nightly affiliate sync scheduled (03:15 daily)');
+
+    // Conversions run far more often than the catalogue refresh: a sale is
+    // reported hours after the click, and a gifter watching for their order to
+    // register should not wait until tomorrow morning. Cheap, too — one page
+    // most runs, thanks to the cursor.
+    await this.queue.add(
+      CONVERSION_SYNC_JOB,
+      {},
+      {
+        repeat: { pattern: '40 * * * *' },
+        jobId: 'affiliate-conversion-sync-hourly',
+        removeOnComplete: true,
+      },
+    );
+    this.logger.log('Hourly conversion reconciliation scheduled (:40)');
   }
 
-  async process(job: Job): Promise<SyncReport | { skipped: true }> {
-    if (job.name !== AFFILIATE_SYNC_JOB) return { skipped: true };
-    return this.sync.syncReferencedProducts();
+  async process(job: Job): Promise<SyncReport | ConversionSyncReport | { skipped: true }> {
+    if (job.name === AFFILIATE_SYNC_JOB) return this.sync.syncReferencedProducts();
+    if (job.name === CONVERSION_SYNC_JOB) return this.conversions.sync();
+    return { skipped: true };
   }
 }

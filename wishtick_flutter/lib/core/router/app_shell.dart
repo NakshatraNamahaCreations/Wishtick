@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/quick_add_sheet.dart';
 import '../widgets/wishtick_bottom_nav.dart';
 
 /// Hosts the four tab branches and the bottom navigation.
@@ -33,26 +36,7 @@ class AppShell extends StatelessWidget {
   }
 
   /// The centre button opens the create menu (wishlist / event / memory).
-  /// Sprints 3, 7 and 8 fill in the destinations.
   void _showCreateSheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => const _CreatePlaceholderSheet(),
-    );
-  }
-}
-
-class _CreatePlaceholderSheet extends StatelessWidget {
-  const _CreatePlaceholderSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SafeArea(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text('Create — wired up in Sprints 3, 7 and 8.'),
-      ),
-    );
+    unawaited(QuickAddSheet.show(context));
   }
 }

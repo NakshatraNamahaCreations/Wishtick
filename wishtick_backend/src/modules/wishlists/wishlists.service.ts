@@ -88,6 +88,7 @@ export class WishlistsService {
       ownerId,
       title: dto.title,
       description: dto.description ?? null,
+      occasionLabel: dto.occasionLabel ?? null,
       visibility: dto.visibility ?? WishlistVisibility.PRIVATE,
       coverUrl,
       coverMediaId: dto.coverMediaId ? new Types.ObjectId(dto.coverMediaId) : null,
@@ -160,6 +161,7 @@ export class WishlistsService {
 
     if (dto.title !== undefined) wishlist.title = dto.title;
     if (dto.description !== undefined) wishlist.description = dto.description;
+    if (dto.occasionLabel !== undefined) wishlist.occasionLabel = dto.occasionLabel;
     if (dto.chatEnabled !== undefined) wishlist.chatEnabled = dto.chatEnabled;
 
     if (dto.visibility !== undefined && dto.visibility !== wishlist.visibility) {

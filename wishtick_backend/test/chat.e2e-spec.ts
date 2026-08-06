@@ -353,7 +353,7 @@ describe('Chat (e2e)', () => {
           .post(`${V1}/items/${item.data.id}/group-gift`)
           .set(auth(initiator.token))
           .set('Idempotency-Key', randomUUID())
-          .send({ targetAmountMinor: 1000, visibility: 'visible' })
+          .send({ title: 'Chat group gift', targetAmountMinor: 1000, visibility: 'visible' })
           .expect(201)
       ).body as Envelope<{ id: string; chatId?: string }>;
       const ggId = gg.data.id;
@@ -403,7 +403,7 @@ describe('Chat (e2e)', () => {
           .post(`${V1}/items/${item.data.id}/group-gift`)
           .set(auth(initiator.token))
           .set('Idempotency-Key', randomUUID())
-          .send({ targetAmountMinor: 5000 }) // hidden_from_owner by default
+          .send({ title: 'Chat group gift', targetAmountMinor: 5000 }) // hidden_from_owner by default
           .expect(201)
       ).body as Envelope<{ id: string; chatId?: string }>;
 

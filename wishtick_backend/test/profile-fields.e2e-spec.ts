@@ -39,10 +39,7 @@ describe('Profile fields: gender, avatar, email (e2e)', () => {
   /// Signs in by phone, the way a real user reaches this screen.
   const newPhoneUser = async (): Promise<{ token: string; phone: string }> => {
     const phone = uniquePhone();
-    await request(app.getHttpServer())
-      .post(`${V1}/auth/otp/request`)
-      .send({ phone })
-      .expect(202);
+    await request(app.getHttpServer()).post(`${V1}/auth/otp/request`).send({ phone }).expect(202);
     const res = await request(app.getHttpServer())
       .post(`${V1}/auth/otp/verify`)
       .send({ phone, code: ctx.sms.lastCode() })
@@ -170,9 +167,7 @@ describe('Profile fields: gender, avatar, email (e2e)', () => {
       const second = await newPhoneUser();
       const res = await saveProfileStep(second.token, { email }).expect(409);
 
-      expect((res.body as Envelope<unknown>).error?.code).toBe(
-        ErrorCode.EMAIL_ALREADY_REGISTERED,
-      );
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.EMAIL_ALREADY_REGISTERED);
     });
 
     it('is idempotent when re-sent unchanged', async () => {

@@ -21,6 +21,7 @@ interface Envelope<T> {
 interface WishlistView {
   id: string;
   title: string;
+  occasionLabel: string | null;
   visibility: WishlistVisibility;
   stats: { itemCount: number; fulfilledCount: number };
   access: { canView: boolean; canGift: boolean; canManage: boolean; relationship: string };
@@ -30,6 +31,9 @@ interface WishlistView {
 interface ItemView {
   id: string;
   title: string;
+  recipientName: string | null;
+  relation: string | null;
+  occasionKey: string | null;
   position: number;
   status: WishlistItemStatus;
   price: { amountMinor: number | null; currency: string };
@@ -106,6 +110,27 @@ describe('Wishlists (e2e)', () => {
       expect(wishlist.access).toMatchObject({ canManage: true, canGift: false });
       // Minted at creation so flipping to public later does not change the link.
       expect(wishlist.share?.slug).toHaveLength(16);
+    });
+
+    it('saves and updates occasionLabel as free text, no taxonomy involved', async () => {
+      const owner = await newUser();
+      const created = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists`)
+          .set(auth(owner.token))
+          .send({ title: 'Birthday 2026', occasionLabel: "Ananya's Birthday" })
+          .expect(201)
+      ).body as Envelope<WishlistView>;
+      expect(created.data.occasionLabel).toBe("Ananya's Birthday");
+
+      const updated = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/wishlists/${created.data.id}`)
+          .set(auth(owner.token))
+          .send({ occasionLabel: 'Anniversary' })
+          .expect(200)
+      ).body as Envelope<WishlistView>;
+      expect(updated.data.occasionLabel).toBe('Anniversary');
     });
 
     it('hides the share slug from everyone but the owner', async () => {
@@ -294,6 +319,51 @@ describe('Wishlists (e2e)', () => {
       expect((res.body as Envelope<never>).error?.code).toBe(ErrorCode.TAXONOMY_VALUE_INVALID);
     });
 
+    it('rejects an unknown occasionKey', async () => {
+      const owner = await newUser();
+      const wishlist = await createWishlist(owner);
+      const res = await request(app.getHttpServer())
+        .post(`${V1}/wishlists/${wishlist.id}/items`)
+        .set(auth(owner.token))
+        .send({ title: 'Mystery', occasionKey: 'not-a-real-occasion' })
+        .expect(400);
+      expect((res.body as Envelope<never>).error?.code).toBe(ErrorCode.TAXONOMY_VALUE_INVALID);
+    });
+
+    it('saves who a gift is for and why, same taxonomy as important-dates', async () => {
+      const owner = await newUser();
+      const wishlist = await createWishlist(owner);
+      const item = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists/${wishlist.id}/items`)
+          .set(auth(owner.token))
+          .send({
+            title: 'Noise-cancelling headphones',
+            recipientName: 'Ananya',
+            relation: 'Best Friend',
+            occasionKey: 'birthday',
+          })
+          .expect(201)
+      ).body as Envelope<ItemView>;
+
+      expect(item.data.recipientName).toBe('Ananya');
+      expect(item.data.relation).toBe('Best Friend');
+      expect(item.data.occasionKey).toBe('birthday');
+
+      const updated = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/wishlists/${wishlist.id}/items/${item.data.id}`)
+          .set(auth(owner.token))
+          .send({ recipientName: 'Rahul', relation: 'Brother', occasionKey: 'anniversary' })
+          .expect(200)
+      ).body as Envelope<ItemView>;
+      expect(updated.data).toMatchObject({
+        recipientName: 'Rahul',
+        relation: 'Brother',
+        occasionKey: 'anniversary',
+      });
+    });
+
     it('will not let a participant add items', async () => {
       const owner = await newUser();
       const guest = await newUser();
@@ -332,11 +402,18 @@ describe('Wishlists (e2e)', () => {
         .expect(409);
       expect((res.body as Envelope<never>).error?.code).toBe(ErrorCode.WISHLIST_ITEM_LOCKED);
 
-      // Presentation-only changes stay allowed.
+      // Presentation-only changes stay allowed — recipient/relation/occasion
+      // describe why the item was added, not what it is, so a claim does not
+      // freeze them the way title/price/productLink are frozen.
       await request(app.getHttpServer())
         .patch(`${V1}/wishlists/${wishlist.id}/items/${item.id}`)
         .set(auth(owner.token))
-        .send({ notes: 'Thank you!' })
+        .send({
+          notes: 'Thank you!',
+          recipientName: 'Ananya',
+          relation: 'Best Friend',
+          occasionKey: 'birthday',
+        })
         .expect(200);
     });
 
