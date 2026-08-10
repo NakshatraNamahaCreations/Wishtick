@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -29,7 +30,9 @@ import {
   GroupGiftActionDto,
   ListMyGroupGiftsQueryDto,
   ShareGroupGiftDto,
+  ThankYouDto,
 } from './dto/group-gift.dto';
+import { ImportProductDto } from 'src/modules/products/dto/product.dto';
 import { GroupGiftService } from './group-gift.service';
 import type { GroupGiftShareView, GroupGiftView } from './group-gift.views';
 
@@ -177,17 +180,35 @@ export class GroupGiftController {
   @ApiOperation({
     summary: 'Add a non-item cost — delivery, wrapping (initiator only)',
     description:
-      'Allowed after funding on purpose: delivery is usually only known at checkout, and ' +
-      'adding it raises the true cost — which puts a funded group into shortfall rather ' +
-      'than quietly absorbing it.',
+      'Raises the Grand Total. Only legal before anyone has contributed: the bill is ' +
+      'agreed on the way to "Proceed to Contribution", so changing it afterwards would ' +
+      'move the goalposts under people who already committed against the old number.',
   })
   @ApiResponseDoc({ status: 403, description: 'Only the initiator can add a charge' })
+  @ApiResponseDoc({ status: 409, description: 'GROUP_GIFT_BILL_LOCKED — someone has contributed' })
   addCharge(
     @CurrentUser('id') userId: string,
     @Param('id') id: string,
     @Body() dto: AddChargeDto,
   ): Promise<GroupGiftView> {
     return this.groupGifts.addCharge(id, userId, dto);
+  }
+
+  @Patch('group-gifts/:id/charges/:chargeId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Edit a charge in place (initiator only)',
+    description:
+      'Atomic on purpose — remove-then-add would leave the charge deleted if the second ' +
+      'call failed, silently lowering the Grand Total.',
+  })
+  updateCharge(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Param('chargeId') chargeId: string,
+    @Body() dto: AddChargeDto,
+  ): Promise<GroupGiftView> {
+    return this.groupGifts.updateCharge(id, chargeId, userId, dto);
   }
 
   @Delete('group-gifts/:id/charges/:chargeId')
@@ -218,6 +239,26 @@ export class GroupGiftController {
     return this.groupGifts.addGiftLine(id, dto.itemId, userId);
   }
 
+  @Post('group-gifts/:id/gifts/from-product')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Fold a catalogue product into this group gift (initiator only)',
+    description:
+      'The picker on `4007:720` searches the catalogue, so the recipient never listed this ' +
+      'item and it has to be created before it can be claimed. The only path on which a ' +
+      'non-owner writes to another person’s wishlist — the authority is having initiated ' +
+      'this group gift. The item is hidden from the recipient whenever the group gift is.',
+  })
+  @ApiResponseDoc({ status: 403, description: 'Only the initiator can add a gift' })
+  @ApiResponseDoc({ status: 409, description: 'GROUP_GIFT_BILL_LOCKED / ITEM_NOT_AVAILABLE' })
+  addGiftLineFromProduct(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: ImportProductDto,
+  ): Promise<GroupGiftView> {
+    return this.groupGifts.addGiftLineFromProduct(id, userId, dto);
+  }
+
   @Delete('group-gifts/:id/gifts/:lineId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -232,6 +273,24 @@ export class GroupGiftController {
     @Param('lineId') lineId: string,
   ): Promise<GroupGiftView> {
     return this.groupGifts.removeGiftLine(id, lineId, userId);
+  }
+
+  @Post('group-gifts/:id/thank-you')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Write the thank-you note (recipient only)',
+    description:
+      "Gated on the item's owner, not the initiator — the note comes from the person the " +
+      'gift was for. Only legal once the gift has been bought.',
+  })
+  @ApiResponseDoc({ status: 403, description: 'Only the recipient can write it' })
+  @ApiResponseDoc({ status: 409, description: 'The gift has not been bought yet' })
+  thankYou(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: ThankYouDto,
+  ): Promise<GroupGiftView> {
+    return this.groupGifts.setThankYou(id, userId, dto.note);
   }
 
   @Post('group-gifts/:id/share')

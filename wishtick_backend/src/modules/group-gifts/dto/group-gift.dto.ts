@@ -240,6 +240,15 @@ export class RequestTopUpDto {
   note?: string;
 }
 
+/** The recipient's thank-you note (`2219:603`). */
+export class ThankYouDto {
+  @ApiProperty({ maxLength: 1000 })
+  @IsString()
+  @MaxLength(1000)
+  @Transform(trim)
+  note!: string;
+}
+
 export class ShareUpiDto {
   @ApiProperty({ example: 'name@okhdfc' })
   @IsString()

@@ -83,6 +83,22 @@ void main() {
           'textPrimary/surface': (colors.textPrimary, colors.surface),
           'textPrimary/surfaceAlt': (colors.textPrimary, colors.surfaceAlt),
           'textSecondary/surface': (colors.textSecondary, colors.surface),
+          // Regression: the RSVP pills on the guest list took `success` on
+          // `successSubtle` — #3FBFA6 on #7FD9C6, 1.7:1 — and the label was
+          // unreadable on the phone. These two tokens exist so the ink can
+          // invert with the fill between themes.
+          'onSuccessSubtle/successSubtle': (
+            colors.onSuccessSubtle,
+            colors.successSubtle,
+          ),
+          'onWarningSubtle/warningSubtle': (
+            colors.onWarningSubtle,
+            colors.warningSubtle,
+          ),
+          'onDangerSubtle/dangerSubtle': (
+            colors.onDangerSubtle,
+            colors.dangerSubtle,
+          ),
         };
 
         pairs.forEach((name, pair) {
@@ -93,6 +109,47 @@ void main() {
             reason: '$name falls below AA (4.5:1) in ${colors.brightness} mode',
           );
         });
+      }
+    });
+
+    // Regression: outlined and text buttons took `primary` as their
+    // foreground in both themes. In dark that is #5B1A6E on #17101B — 1.61:1,
+    // and on a real phone the label all but disappeared. Found by walking the
+    // app in dark mode, not by any test.
+    test('outlined and text button labels meet AA on the page', () {
+      for (final theme in [AppTheme.light, AppTheme.dark]) {
+        final colors = theme.extension<WishtickColors>()!;
+        final outlined = theme.outlinedButtonTheme.style!.foregroundColor!
+            .resolve({})!;
+        final text = theme.textButtonTheme.style!.foregroundColor!.resolve({})!;
+
+        for (final entry in {'outlined': outlined, 'text': text}.entries) {
+          expect(
+            contrastRatio(entry.value, colors.background),
+            greaterThanOrEqualTo(4.5),
+            reason:
+                '${entry.key} button label falls below AA on the page in '
+                '${colors.brightness} mode',
+          );
+        }
+      }
+    });
+
+    // Regression: the floating label and the focused border both took
+    // `primary`. On the dark field (#2E2233) that is ~1.2:1 — every labelled
+    // input in the app lost its label in dark mode. Found on a phone, on the
+    // relation field of `257:733`.
+    test('the input label reads on its own field in both themes', () {
+      for (final theme in [AppTheme.light, AppTheme.dark]) {
+        final colors = theme.extension<WishtickColors>()!;
+        final label = theme.inputDecorationTheme.floatingLabelStyle!.color!;
+        expect(
+          contrastRatio(label, colors.surfaceAlt),
+          greaterThanOrEqualTo(4.5),
+          reason:
+              'the floating label falls below AA on the field in '
+              '${colors.brightness} mode',
+        );
       }
     });
 

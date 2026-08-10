@@ -158,7 +158,10 @@ export class InvitePreviewService {
       headline: get('headline', event.title) ?? event.title,
       subtitle: get('subtitle', null),
       hostLine: get('hostLine', null),
-      venue: get('venue', null),
+      // Falls back to the event's own venue (Sprint 7 put one on the event).
+      // Before that field existed the only place a location could come from was
+      // this slot, which is why an invite could show a time and no place.
+      venue: get('venue', event.venue),
       note: get('note', null),
       // Always rendered in the event's own timezone — the card says when the
       // party is, not when the server thinks it is.

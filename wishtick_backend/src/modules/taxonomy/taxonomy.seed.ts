@@ -52,6 +52,31 @@ const colours = (
  * starting set, and re-running it never clobbers admin edits (see the upsert
  * in the seed migration).
  */
+/**
+ * Flattens the grouped relation picker into seed rows.
+ *
+ * The key is prefixed by its group so labels that repeat across groups — a
+ * "Cousin" under Siblings and one that may later appear elsewhere — cannot
+ * collide, the same reason INTEREST keys carry their category.
+ */
+const relations = (groups: [group: string, groupLabel: string, members: string[]][]): SeedTerm[] =>
+  groups.flatMap(([group, groupLabel, members], groupIndex) =>
+    members.map((label, i) => ({
+      kind: TaxonomyKind.RELATION,
+      // Accents are folded before slugging, or "Fiancé" keys as `fianc_` — a
+      // trailing underscore where a letter was dropped.
+      key: `${group}_${label
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '')}`,
+      label,
+      meta: { group, groupLabel },
+      sortOrder: groupIndex * 100 + i * 10,
+    })),
+  );
+
 export const TAXONOMY_SEED: SeedTerm[] = [
   // ── Interest categories (Figma 36:839, in display order) ──────────────────
   ...rows(TaxonomyKind.INTEREST_CATEGORY, [
@@ -323,6 +348,25 @@ export const TAXONOMY_SEED: SeedTerm[] = [
     ['anniversary', 'Anniversary'],
     ['generic', 'Custom Event'],
     ['special', 'Special Celebration'],
+  ]),
+
+  // ── Relations (Figma `2252:423`) ──────────────────────────────────────────
+  //
+  // Grouped exactly as the picker draws them, with `meta.group`/`groupLabel`
+  // driving the collapsible sections — the same shape COLOR already uses.
+  //
+  // ⚠️ Only **Partner** has designed options: `2252:485` is the one expanded
+  // state exported, and the other five groups are shown collapsed in every
+  // frame. Their members below are filled in, not designed. They live in the
+  // taxonomy precisely so correcting them is a seed edit rather than an app
+  // release — see sprints.md.
+  ...relations([
+    ['partner', 'Partner', ['Boyfriend', 'Girlfriend', 'Husband', 'Wife', 'Fiancé']],
+    ['friends', 'Friends', ['Best friend', 'Close friend', 'Friend', 'Flatmate', 'Neighbour']],
+    ['parents', 'Parents', ['Mother', 'Father', 'Step-mother', 'Step-father', 'Guardian']],
+    ['siblings', 'Siblings', ['Sister', 'Brother', 'Step-sister', 'Step-brother', 'Cousin']],
+    ['colleagues', 'Colleagues', ['Colleague', 'Manager', 'Team-mate', 'Client', 'Mentor']],
+    ['kids', 'Kids', ['Daughter', 'Son', 'Niece', 'Nephew', 'Grandchild']],
   ]),
 ];
 

@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { QUEUE } from 'src/infra/queue/queue.constants';
 import { ChatModule } from 'src/modules/chat/chat.module';
 import { GiftingModule } from 'src/modules/gifting/gifting.module';
+import { ProductsModule } from 'src/modules/products/products.module';
 import { UserProfile, UserProfileSchema } from 'src/modules/profile/schemas/user-profile.schema';
 import { UsersModule } from 'src/modules/users/users.module';
 import {
@@ -43,6 +44,11 @@ import { SettlementService } from './settlement.service';
     GiftingModule,
     // AccessPolicyService + WishlistsService for authorization and recounts.
     WishlistsModule,
+    // For ProductImportService — "Add Another Gift" turns a catalogue product
+    // into a wishlist item before claiming it. One-way, as ever: products know
+    // about wishlists, group gifts know about products, and neither knows
+    // about group gifts in return.
+    ProductsModule,
     // UsersService for resolving participant display names.
     UsersModule,
     // ChatService, to provision the group-gift chat on create. One-way: group

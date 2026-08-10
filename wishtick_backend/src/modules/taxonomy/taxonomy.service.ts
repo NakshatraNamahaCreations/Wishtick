@@ -9,7 +9,13 @@ import { TaxonomyKind, type TaxonomyOption, type TaxonomyOptions } from './taxon
 
 // v2: the Wishtick-UI-v2 reseed added kinds (interest_category, fit_preference)
 // — bumping the key stops a warm v1 cache from hiding them for up to an hour.
-const CACHE_KEY = 'taxonomy:options:v2';
+// v3: Sprint 7 added `relation` for the event-creation picker (`2252:423`).
+// Same reason: without the bump, the picker would be empty on any instance
+// whose cache was warm at deploy.
+// Exported so a test asserting the cache was written cannot go stale silently
+// the next time this is bumped.
+export const TAXONOMY_CACHE_KEY = 'taxonomy:options:v3';
+const CACHE_KEY = TAXONOMY_CACHE_KEY;
 const CACHE_TTL_SECONDS = 3_600;
 
 @Injectable()

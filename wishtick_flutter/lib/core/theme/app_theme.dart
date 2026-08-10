@@ -15,6 +15,20 @@ abstract final class AppTheme {
   static ThemeData get dark =>
       _build(WishtickColors.dark, WishtickGradients.dark);
 
+  /// Brand colour for a label drawn straight on the page — outlined and text
+  /// buttons.
+  ///
+  /// In dark mode `primary` is #5B1A6E, which measures **1.61:1** against the
+  /// #17101B background: well under the 4.5:1 floor, and in practice unreadable
+  /// on a phone. It steps to [WishtickColors.brandMark] there (5.89:1), the
+  /// token whose job is to stay legible in both themes — the same substitution
+  /// `context.headlineBrandColor` already makes for headlines.
+  ///
+  /// A workaround, not a fix: the underlying problem is that the dark palette's
+  /// `primary` is too dark to sit on its own background at all.
+  static Color _onPageBrand(WishtickColors c) =>
+      c.brightness == Brightness.dark ? c.brandMark : c.primary;
+
   static ThemeData _build(WishtickColors c, WishtickGradients g) {
     final textTheme = AppTypography.buildTextTheme(
       primary: c.textPrimary,
@@ -102,7 +116,7 @@ abstract final class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: c.primary,
+          foregroundColor: _onPageBrand(c),
           minimumSize: const Size.fromHeight(AppSizes.buttonHeight),
           side: BorderSide(color: c.border),
           textStyle: AppTypography.labelLarge,
@@ -113,7 +127,7 @@ abstract final class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: c.primary,
+          foregroundColor: _onPageBrand(c),
           textStyle: AppTypography.labelMedium,
         ),
       ),
@@ -145,10 +159,15 @@ abstract final class AppTheme {
           minHeight: AppSizes.iconLg,
         ),
         labelStyle: AppTypography.bodyMedium.copyWith(color: c.textMuted),
-        floatingLabelStyle: AppTypography.bodySmall.copyWith(color: c.primary),
+        // Same substitution as the buttons and the headlines: dark-mode
+        // `primary` is #5B1A6E, which on the #2E2233 field measures ~1.2:1 —
+        // the floating label all but vanished on a real phone.
+        floatingLabelStyle: AppTypography.bodySmall.copyWith(
+          color: _onPageBrand(c),
+        ),
         border: _inputBorder(c.border),
         enabledBorder: _inputBorder(c.border),
-        focusedBorder: _inputBorder(c.primary, width: 1.5),
+        focusedBorder: _inputBorder(_onPageBrand(c), width: 1.5),
         errorBorder: _inputBorder(c.danger),
         focusedErrorBorder: _inputBorder(c.danger, width: 1.5),
       ),

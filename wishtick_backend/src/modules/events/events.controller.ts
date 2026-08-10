@@ -9,19 +9,24 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse as ApiResponseDoc,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import { Public } from 'src/common/decorators/public.decorator';
 import {
   BulkInviteDto,
   CreateEventDto,
+  ExportGuestListQueryDto,
   ListTemplatesQueryDto,
   PreviewInviteDto,
   UpdateEventDto,
@@ -30,6 +35,7 @@ import { EventsService } from './events.service';
 import type { EventView, InvitedEventView, InviteView } from './event.views';
 import { InvitePreviewService, type InvitePreview } from './invite-preview.service';
 import { InvitesService, type BulkInviteResult } from './invites.service';
+import { GuestListExportService, GuestListFormat } from './guest-list-export.service';
 import { templatesForType, type InviteTemplate } from './invite-templates.data';
 import { InviteNotificationsService } from './invite-notifications.service';
 
@@ -46,6 +52,7 @@ export class EventsController {
     private readonly invites: InvitesService,
     private readonly previews: InvitePreviewService,
     private readonly notifications: InviteNotificationsService,
+    private readonly guestListExport: GuestListExportService,
   ) {}
 
   // ── Templates ─────────────────────────────────────────────────────────────
@@ -180,6 +187,37 @@ export class EventsController {
   @ApiOperation({ summary: 'The guest list (host only)' })
   listInvites(@CurrentUser('id') userId: string, @Param('id') id: string): Promise<InviteView[]> {
     return this.invites.list(id, userId);
+  }
+
+  @Get('events/:id/invites/export')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Download the guest list (host only)',
+    description:
+      'PDF, Excel or CSV, as offered by "Download Guest List" (`4096:206`). All three are ' +
+      'built from one projection, so the columns cannot drift between formats.',
+  })
+  @ApiQuery({ name: 'format', enum: GuestListFormat, required: false })
+  async exportInvites(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Query() query: ExportGuestListQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { event, invites } = await this.invites.listForExport(id, userId);
+    const file = await this.guestListExport.render(
+      event,
+      invites,
+      query.format ?? GuestListFormat.PDF,
+    );
+    res.set({
+      'Content-Type': file.contentType,
+      // `attachment` so a browser saves it rather than trying to render a
+      // spreadsheet inline; the quoted filename survives spaces.
+      'Content-Disposition': `attachment; filename="${file.filename}"`,
+      'Content-Length': String(file.buffer.length),
+    });
+    return new StreamableFile(file.buffer);
   }
 
   @Post('events/:id/invites')

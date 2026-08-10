@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../group_gift/domain/group_gift.dart';
 import '../domain/address.dart';
-import '../domain/group_gift.dart';
 import '../domain/upcoming_occasion.dart';
 import '../domain/wishtick_event.dart';
 

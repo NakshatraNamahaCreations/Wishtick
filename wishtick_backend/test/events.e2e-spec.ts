@@ -9,6 +9,11 @@ import { WishlistVisibility } from 'src/modules/wishlists/wishlist.types';
 import { createTestApp, V1, type TestApp } from './utils/test-app';
 
 const PASSWORD = 'correct-horse-battery-staple';
+/** A 1x1 PNG â the smallest thing the media pipeline will accept as real bytes. */
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 const IN_A_MONTH = (): string => new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString();
 
 interface Envelope<T> {
@@ -362,6 +367,328 @@ describe('Events & invites (e2e)', () => {
   });
 
   // ── Exit criterion: event-only wishlist opens exactly to accepted invitees ─
+
+  describe('venue, person and relation (257:733, 257:755)', () => {
+    it('round-trips the fields the create flow marks required', async () => {
+      const host = await newUser();
+      const created = (
+        await request(app.getHttpServer())
+          .post(`${V1}/events`)
+          .set(auth(host.token))
+          .send({
+            title: "Rahul & Priya's Anniversary",
+            type: 'anniversary',
+            startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+            timezone: 'Asia/Kolkata',
+            venue: 'Mysore Socials',
+            personName: 'Priya',
+            relation: 'partner_wife',
+          })
+          .expect(201)
+      ).body as Envelope<{ id: string; venue: string; personName: string; relation: string }>;
+
+      expect(created.data.venue).toBe('Mysore Socials');
+      expect(created.data.personName).toBe('Priya');
+      expect(created.data.relation).toBe('partner_wife');
+
+      const moved = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/events/${created.data.id}`)
+          .set(auth(host.token))
+          .send({ venue: 'The Grand Ballroom' })
+          .expect(200)
+      ).body as Envelope<{ venue: string; personName: string }>;
+
+      expect(moved.data.venue).toBe('The Grand Ballroom');
+      // Untouched fields survive a partial update.
+      expect(moved.data.personName).toBe('Priya');
+    });
+
+    it('shows the venue to the invitee — the gap that made an invite all time and no place', async () => {
+      const host = await newUser();
+      const event = (
+        await request(app.getHttpServer())
+          .post(`${V1}/events`)
+          .set(auth(host.token))
+          .send({
+            title: 'Housewarming',
+            type: 'generic',
+            startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+            timezone: 'Asia/Kolkata',
+            venue: 'Mysore Socials',
+          })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      await publish(host, event.data.id);
+
+      const invited = (
+        await request(app.getHttpServer())
+          .post(`${V1}/events/${event.data.id}/invites`)
+          .set(auth(host.token))
+          .send({ recipients: [{ email: 'guest@example.com' }] })
+          .expect(200)
+      ).body as Envelope<{ created: { id: string }[] }>;
+
+      const link = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.data.id}/invites/${invited.data.created[0].id}/link`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ url: string }>;
+      const token = link.data.url.split('/').pop()!;
+
+      const publicView = (
+        await request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).expect(200)
+      ).body as Envelope<{ event: { venue: string | null } }>;
+
+      expect(publicView.data.event.venue).toBe('Mysore Socials');
+    });
+  });
+
+  describe('guest details (4096:162)', () => {
+    it('every guest carries the date they were added', async () => {
+      const host = await newUser();
+      const event = await createEvent(host);
+      await publish(host, event.id);
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({ recipients: [{ email: 'added.on@example.com', name: 'Rohan' }] })
+        .expect(200);
+
+      const list = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}/invites`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ name: string | null; createdAt: string }[]>;
+
+      // "Added on" has no other source: an invite with no createdAt renders a
+      // dash where the design shows a timestamp.
+      expect(list.data[0].createdAt).toEqual(expect.any(String));
+      expect(Number.isNaN(Date.parse(list.data[0].createdAt))).toBe(false);
+    });
+  });
+
+  describe('uploaded invitation (2248:70)', () => {
+    /** Presign â PUT the real bytes â confirm, for one purpose. */
+    const uploadMedia = async (actor: Actor, purpose: string): Promise<string> => {
+      const ticket = (
+        await request(app.getHttpServer())
+          .post(`${V1}/media/upload-url`)
+          .set(auth(actor.token))
+          .send({ purpose, contentType: 'image/png' })
+          .expect(201)
+      ).body as Envelope<{ mediaId: string; uploadUrl: string }>;
+
+      const url = new URL(ticket.data.uploadUrl);
+      await request(app.getHttpServer())
+        .put(url.pathname + url.search)
+        .set('Content-Type', 'image/png')
+        .send(PNG_BYTES)
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/media/confirm`)
+        .set(auth(actor.token))
+        .send({ mediaId: ticket.data.mediaId })
+        .expect(201);
+
+      return ticket.data.mediaId;
+    };
+
+    it("carries the host's own artwork all the way to the invitee", async () => {
+      const host = await newUser();
+      const event = await createEvent(host);
+      const mediaId = await uploadMedia(host, 'event_invite');
+
+      const patched = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .send({ inviteMediaId: mediaId })
+          .expect(200)
+      ).body as Envelope<{ inviteMediaUrl: string | null }>;
+
+      expect(patched.data.inviteMediaUrl).toEqual(expect.any(String));
+
+      await publish(host, event.id);
+      const invited = (
+        await request(app.getHttpServer())
+          .post(`${V1}/events/${event.id}/invites`)
+          .set(auth(host.token))
+          .send({ recipients: [{ email: 'guest.upload@example.com' }] })
+          .expect(200)
+      ).body as Envelope<{ created: { id: string }[] }>;
+
+      const link = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}/invites/${invited.data.created[0].id}/link`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ url: string }>;
+      const token = link.data.url.split('/').pop()!;
+
+      const publicView = (
+        await request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).expect(200)
+      ).body as Envelope<{ event: { inviteMediaUrl: string | null } }>;
+
+      expect(publicView.data.event.inviteMediaUrl).toBe(patched.data.inviteMediaUrl);
+    });
+
+    it('refuses a cover image passed off as an invitation', async () => {
+      // event_invite is the only purpose that admits GIF, MP4 and PDF, so
+      // accepting any ready media here would smuggle those types in.
+      const host = await newUser();
+      const event = await createEvent(host);
+      const coverId = await uploadMedia(host, 'event_cover');
+
+      const res = await request(app.getHttpServer())
+        .patch(`${V1}/events/${event.id}`)
+        .set(auth(host.token))
+        .send({ inviteMediaId: coverId })
+        .expect(400);
+
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEDIA_TYPE_NOT_ALLOWED);
+    });
+
+    it("refuses somebody else's upload", async () => {
+      const host = await newUser();
+      const stranger = await newUser();
+      const event = await createEvent(host);
+      const theirs = await uploadMedia(stranger, 'event_invite');
+
+      await request(app.getHttpServer())
+        .patch(`${V1}/events/${event.id}`)
+        .set(auth(host.token))
+        .send({ inviteMediaId: theirs })
+        .expect(404);
+    });
+  });
+
+  describe('guest list export (4096:206)', () => {
+    const seedGuests = async (): Promise<{ host: Actor; eventId: string }> => {
+      const host = await newUser();
+      const event = await createEvent(host);
+      await publish(host, event.id);
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({
+          recipients: [
+            { email: 'rohan@example.com', name: 'Rohan' },
+            { email: 'sona@example.com', name: 'Sona' },
+          ],
+        })
+        .expect(200);
+      return { host, eventId: event.id };
+    };
+
+    it('produces a CSV with a header and one row per guest', async () => {
+      const { host, eventId } = await seedGuests();
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/events/${eventId}/invites/export?format=csv`)
+        .set(auth(host.token))
+        .expect(200);
+
+      expect(res.headers['content-type']).toContain('text/csv');
+      expect(res.headers['content-disposition']).toContain('attachment;');
+      expect(res.headers['content-disposition']).toContain('guest-list.csv');
+
+      const text = res.text ?? res.body.toString();
+      const lines = text.trim().split(String.fromCharCode(13, 10));
+      expect(lines[0]).toContain('"Name"');
+      expect(lines).toHaveLength(3);
+      expect(lines[1]).toContain('"Rohan"');
+      // Nobody has replied yet, so nobody is counted as attending.
+      expect(lines[1]).toContain('"No reply"');
+    });
+
+    it('quotes a formula so a spreadsheet cannot execute a guest’s name', async () => {
+      const host = await newUser();
+      const event = await createEvent(host);
+      await publish(host, event.id);
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({
+          recipients: [{ email: 'x@example.com', name: '=cmd|calc!A1' }],
+        })
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/events/${event.id}/invites/export?format=csv`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const text = res.text ?? res.body.toString();
+      // Prefixed with an apostrophe: Excel then treats it as text, not a
+      // formula to run.
+      expect(text).toContain(`"'=cmd|calc!A1"`);
+      expect(text).not.toContain('"=cmd|calc!A1"');
+    });
+
+    it('produces a real xlsx and a real pdf', async () => {
+      const { host, eventId } = await seedGuests();
+
+      const xlsx = await request(app.getHttpServer())
+        .get(`${V1}/events/${eventId}/invites/export?format=xlsx`)
+        .set(auth(host.token))
+        .buffer()
+        .parse((res, cb) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => cb(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+      // A zip container — every xlsx is one, and "PK" is its magic number.
+      expect((xlsx.body as Buffer).subarray(0, 2).toString()).toBe('PK');
+
+      const pdf = await request(app.getHttpServer())
+        .get(`${V1}/events/${eventId}/invites/export?format=pdf`)
+        .set(auth(host.token))
+        .buffer()
+        .parse((res, cb) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => cb(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+      expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+      expect(pdf.headers['content-type']).toContain('application/pdf');
+    });
+
+    it('defaults to PDF, as the sheet pre-selects', async () => {
+      const { host, eventId } = await seedGuests();
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/events/${eventId}/invites/export`)
+        .set(auth(host.token))
+        .expect(200);
+
+      expect(res.headers['content-type']).toContain('application/pdf');
+    });
+
+    it('is host-only — a guest list is not public information', async () => {
+      const { eventId } = await seedGuests();
+      const stranger = await newUser();
+
+      await request(app.getHttpServer())
+        .get(`${V1}/events/${eventId}/invites/export?format=csv`)
+        .set(auth(stranger.token))
+        .expect(404);
+    });
+
+    it('rejects a format it does not produce', async () => {
+      const { host, eventId } = await seedGuests();
+
+      await request(app.getHttpServer())
+        .get(`${V1}/events/${eventId}/invites/export?format=docx`)
+        .set(auth(host.token))
+        .expect(400);
+    });
+  });
 
   describe('event_only wishlist access', () => {
     it('opens an event-only wishlist to an invitee only after they RSVP yes', async () => {

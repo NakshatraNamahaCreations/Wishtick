@@ -26,6 +26,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.surface,
     required this.surfaceAlt,
     required this.optionFill,
+    required this.chipFill,
+    required this.payment,
+    required this.paymentSubtle,
     required this.surfaceSunken,
     required this.border,
     required this.outline,
@@ -36,11 +39,14 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.textOnDark,
     required this.success,
     required this.successSubtle,
+    required this.onSuccessSubtle,
     required this.danger,
     required this.onDanger,
     required this.dangerSubtle,
+    required this.onDangerSubtle,
     required this.warning,
     required this.warningSubtle,
+    required this.onWarningSubtle,
     required this.info,
     required this.infoSubtle,
     required this.celebration,
@@ -97,6 +103,22 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   /// use [primary].
   final Color optionFill;
 
+  /// Fill of a value chip — the suggested-contribution amounts on `299:1658`.
+  /// Sits on the page rather than on a card, so it is deeper than
+  /// [optionFill], which would vanish against beige.
+  final Color chipFill;
+
+  /// The money-handling accent: UPI panels, "collected in your account",
+  /// settle-up amounts. Text and icons.
+  ///
+  /// Separate from [success] on purpose — a UPI panel is not a success state,
+  /// and reusing the tick colour for "where the money goes" makes an unpaid
+  /// settlement look settled.
+  final Color payment;
+
+  /// Fill behind [payment].
+  final Color paymentSubtle;
+
   /// Recessed areas — search fields, image placeholders.
   final Color surfaceSunken;
 
@@ -119,14 +141,27 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
 
   final Color success;
   final Color successSubtle;
+
+  /// Text drawn on [successSubtle]. Its own token for the same reason
+  /// [onDanger] is: the fill is a near-white tint in light mode and a deep one
+  /// in dark, so the ink has to invert with it rather than follow [success].
+  final Color onSuccessSubtle;
+
   final Color danger;
 
   /// Text/icons drawn on top of [danger] — inverts between themes because
   /// [danger] is a deep red in light mode and a light red in dark mode.
   final Color onDanger;
   final Color dangerSubtle;
+
+  /// Text drawn on [dangerSubtle]. See [onSuccessSubtle].
+  final Color onDangerSubtle;
   final Color warning;
   final Color warningSubtle;
+
+  /// Text drawn on [warningSubtle]. See [onSuccessSubtle].
+  final Color onWarningSubtle;
+
   final Color info;
   final Color infoSubtle;
 
@@ -166,6 +201,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     surface: AppPalette.white,
     surfaceAlt: AppPalette.violetPale,
     optionFill: AppPalette.lavenderTile,
+    chipFill: AppPalette.lavenderChip,
+    payment: AppPalette.payTeal,
+    paymentSubtle: AppPalette.payMint,
     surfaceSunken: AppPalette.ivory,
     border: AppPalette.border,
     outline: AppPalette.lilacLine,
@@ -175,13 +213,16 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     textMuted: AppPalette.textMuted,
     textOnDark: AppPalette.ivory,
     success: AppPalette.teal,
-    successSubtle: AppPalette.tealSoft,
+    successSubtle: AppPalette.rsvpYesFill,
+    onSuccessSubtle: AppPalette.rsvpYesInk,
     // The alarm red from the screens, not the brand coral — see AppPalette.
     danger: AppPalette.redAlert,
     onDanger: AppPalette.white,
     dangerSubtle: AppPalette.redAlertSubtle,
+    onDangerSubtle: AppPalette.redAlertInk,
     warning: AppPalette.amber,
-    warningSubtle: AppPalette.amberSoft,
+    warningSubtle: AppPalette.rsvpMaybeFill,
+    onWarningSubtle: AppPalette.rsvpMaybeInk,
     info: AppPalette.blue,
     infoSubtle: AppPalette.bluePale,
     celebration: AppPalette.goldDeep,
@@ -219,6 +260,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     surfaceAlt: AppPalette.darkSurfaceAlt,
     // No separate lavender in dark — a raised grey already reads as tappable.
     optionFill: AppPalette.darkSurfaceAlt,
+    chipFill: AppPalette.darkSurfaceAlt,
+    payment: AppPalette.darkPayTeal,
+    paymentSubtle: AppPalette.darkPaySubtle,
     surfaceSunken: AppPalette.darkSurfaceSunken,
     border: AppPalette.darkBorder,
     // No lilac tint survives on the dark ramp; the neutral border is the
@@ -231,11 +275,14 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     textOnDark: AppPalette.ivory,
     success: AppPalette.darkTeal,
     successSubtle: AppPalette.darkTealSubtle,
+    onSuccessSubtle: AppPalette.darkTeal,
     danger: AppPalette.darkCoral,
     onDanger: AppPalette.navyDeep,
     dangerSubtle: AppPalette.darkCoralSubtle,
+    onDangerSubtle: AppPalette.darkCoral,
     warning: AppPalette.amber,
     warningSubtle: AppPalette.darkAmberSubtle,
+    onWarningSubtle: AppPalette.amber,
     info: AppPalette.blueSoft,
     infoSubtle: AppPalette.darkBlueSubtle,
     celebration: AppPalette.goldSoft,
@@ -263,6 +310,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color? surface,
     Color? surfaceAlt,
     Color? optionFill,
+    Color? chipFill,
+    Color? payment,
+    Color? paymentSubtle,
     Color? surfaceSunken,
     Color? border,
     Color? outline,
@@ -273,11 +323,14 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color? textOnDark,
     Color? success,
     Color? successSubtle,
+    Color? onSuccessSubtle,
     Color? danger,
     Color? onDanger,
     Color? dangerSubtle,
+    Color? onDangerSubtle,
     Color? warning,
     Color? warningSubtle,
+    Color? onWarningSubtle,
     Color? info,
     Color? infoSubtle,
     Color? celebration,
@@ -303,6 +356,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       surface: surface ?? this.surface,
       surfaceAlt: surfaceAlt ?? this.surfaceAlt,
       optionFill: optionFill ?? this.optionFill,
+      chipFill: chipFill ?? this.chipFill,
+      payment: payment ?? this.payment,
+      paymentSubtle: paymentSubtle ?? this.paymentSubtle,
       surfaceSunken: surfaceSunken ?? this.surfaceSunken,
       border: border ?? this.border,
       outline: outline ?? this.outline,
@@ -313,11 +369,14 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       textOnDark: textOnDark ?? this.textOnDark,
       success: success ?? this.success,
       successSubtle: successSubtle ?? this.successSubtle,
+      onSuccessSubtle: onSuccessSubtle ?? this.onSuccessSubtle,
       danger: danger ?? this.danger,
       onDanger: onDanger ?? this.onDanger,
       dangerSubtle: dangerSubtle ?? this.dangerSubtle,
+      onDangerSubtle: onDangerSubtle ?? this.onDangerSubtle,
       warning: warning ?? this.warning,
       warningSubtle: warningSubtle ?? this.warningSubtle,
+      onWarningSubtle: onWarningSubtle ?? this.onWarningSubtle,
       info: info ?? this.info,
       infoSubtle: infoSubtle ?? this.infoSubtle,
       celebration: celebration ?? this.celebration,
@@ -349,6 +408,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       surface: c(surface, other.surface),
       surfaceAlt: c(surfaceAlt, other.surfaceAlt),
       optionFill: c(optionFill, other.optionFill),
+      chipFill: c(chipFill, other.chipFill),
+      payment: c(payment, other.payment),
+      paymentSubtle: c(paymentSubtle, other.paymentSubtle),
       surfaceSunken: c(surfaceSunken, other.surfaceSunken),
       border: c(border, other.border),
       outline: c(outline, other.outline),
@@ -359,11 +421,14 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       textOnDark: c(textOnDark, other.textOnDark),
       success: c(success, other.success),
       successSubtle: c(successSubtle, other.successSubtle),
+      onSuccessSubtle: c(onSuccessSubtle, other.onSuccessSubtle),
       danger: c(danger, other.danger),
       onDanger: c(onDanger, other.onDanger),
       dangerSubtle: c(dangerSubtle, other.dangerSubtle),
+      onDangerSubtle: c(onDangerSubtle, other.onDangerSubtle),
       warning: c(warning, other.warning),
       warningSubtle: c(warningSubtle, other.warningSubtle),
+      onWarningSubtle: c(onWarningSubtle, other.onWarningSubtle),
       info: c(info, other.info),
       infoSubtle: c(infoSubtle, other.infoSubtle),
       celebration: c(celebration, other.celebration),

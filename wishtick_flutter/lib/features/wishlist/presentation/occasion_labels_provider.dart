@@ -1,11 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../onboarding/data/onboarding_repository.dart';
+import '../../onboarding/presentation/onboarding_options_provider.dart';
 
-/// `occasionKey` → display label, from the same taxonomy important-dates
-/// uses (`GET /onboarding/options`). One shared fetch rather than every
-/// screen that shows an occasion re-requesting the whole catalogue.
+/// `occasionKey` → display label, from the same taxonomy important-dates uses.
+///
+/// Derived from [onboardingOptionsProvider] rather than fetching again, so a
+/// screen showing occasions and one showing relations share a single request.
 final occasionLabelsProvider = FutureProvider<Map<String, String>>((ref) async {
-  final options = await ref.read(onboardingRepositoryProvider).options();
+  final options = await ref.watch(onboardingOptionsProvider.future);
   return {for (final o in options.occasions) o.key: o.label};
 });

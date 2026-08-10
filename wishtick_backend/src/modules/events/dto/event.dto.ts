@@ -20,6 +20,7 @@ import {
 } from 'class-validator';
 import { IsTimezone } from 'src/common/validators/is-timezone.validator';
 import { EventType, EventVisibility, RsvpResponse } from '../event.types';
+import { GuestListFormat } from '../guest-list-export.service';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -97,6 +98,26 @@ export class CreateEventDto {
   @ValidateNested()
   @Type(() => InviteTemplateChoiceDto)
   inviteTemplate?: InviteTemplateChoiceDto;
+  @ApiPropertyOptional({ description: 'Where it is happening (`257:755`)', maxLength: 200 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  @Transform(trim)
+  venue?: string | null;
+
+  @ApiPropertyOptional({ description: 'Who the event is for (`257:733`)', maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Transform(trim)
+  personName?: string | null;
+
+  @ApiPropertyOptional({ description: 'A `relation` taxonomy key (`2252:423`)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  @Transform(trim)
+  relation?: string | null;
 }
 
 export class UpdateEventDto {
@@ -144,6 +165,13 @@ export class UpdateEventDto {
   @IsMongoId()
   coverMediaId?: string | null;
 
+  @ApiPropertyOptional({
+    description: 'A confirmed media id you own (purpose: event_invite) — your own invitation',
+  })
+  @IsOptional()
+  @IsMongoId()
+  inviteMediaId?: string | null;
+
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
@@ -156,6 +184,26 @@ export class UpdateEventDto {
   @ValidateNested()
   @Type(() => InviteTemplateChoiceDto)
   inviteTemplate?: InviteTemplateChoiceDto;
+  @ApiPropertyOptional({ description: 'Where it is happening (`257:755`)', maxLength: 200 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  @Transform(trim)
+  venue?: string | null;
+
+  @ApiPropertyOptional({ description: 'Who the event is for (`257:733`)', maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Transform(trim)
+  personName?: string | null;
+
+  @ApiPropertyOptional({ description: 'A `relation` taxonomy key (`2252:423`)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  @Transform(trim)
+  relation?: string | null;
 }
 
 export class InviteRecipientDto {
@@ -247,4 +295,12 @@ export class ListTemplatesQueryDto {
   @IsOptional()
   @IsEnum(EventType)
   eventType?: EventType;
+}
+
+/** Which file "Download Guest List" should produce (`4096:206`). */
+export class ExportGuestListQueryDto {
+  @ApiPropertyOptional({ enum: GuestListFormat, default: GuestListFormat.PDF })
+  @IsOptional()
+  @IsEnum(GuestListFormat)
+  format?: GuestListFormat;
 }

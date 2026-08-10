@@ -25,6 +25,12 @@ export enum TaxonomyKind {
   LIFESTYLE = 'lifestyle',
   OCCASION = 'occasion',
   EVENT_TYPE = 'event_type',
+  /**
+   * Who someone is to you — the grouped picker on `2252:423`. Carries
+   * `meta.group`/`groupLabel` for the collapsible section, exactly as [COLOR]
+   * does for its swatch groups.
+   */
+  RELATION = 'relation',
 }
 
 export interface TaxonomyOption {

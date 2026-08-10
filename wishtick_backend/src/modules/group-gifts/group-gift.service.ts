@@ -34,6 +34,8 @@ import type { OpenGraphPreview } from 'src/modules/wishlists/wishlist.views';
 import { UsersService } from 'src/modules/users/users.service';
 import type { UserDocument } from 'src/modules/users/schemas/user.schema';
 import { ChatService } from 'src/modules/chat/chat.service';
+import { ProductImportService } from 'src/modules/products/product-import.service';
+import type { ImportProductDto } from 'src/modules/products/dto/product.dto';
 import { GroupGiftPreviewService } from './group-gift-preview.service';
 import type {
   ContributeDto,
@@ -96,6 +98,7 @@ export class GroupGiftService {
     private readonly users: UsersService,
     private readonly preview: GroupGiftPreviewService,
     private readonly chat: ChatService,
+    private readonly imports: ProductImportService,
     private readonly emitter: EventEmitter2,
     private readonly config: ConfigService<AppConfig, true>,
   ) {
@@ -639,7 +642,7 @@ export class GroupGiftService {
     }
     if (gift.contributorCount > 0 || gift.collectedAmountMinor > 0) {
       throw new AppException(
-        ErrorCode.GROUP_GIFT_NOT_OPEN,
+        ErrorCode.GROUP_GIFT_BILL_LOCKED,
         'The bill is fixed once people start contributing — raise a contribution request instead',
         409,
       );
@@ -666,6 +669,70 @@ export class GroupGiftService {
       addedBy: new Types.ObjectId(userId),
       addedAt: new Date(),
     });
+    GroupGiftService.recomputeTarget(gift, primary);
+    await gift.save();
+    return this.assembleView(gift, userId);
+  }
+
+  /**
+   * The recipient's thank-you note (`2219:603`).
+   *
+   * Gated on the *item's owner*, not the initiator — the note comes from the
+   * person the gift was for, and the host is usually not that person. Also
+   * gated on the gift having actually been bought: a thank-you for something
+   * that has not arrived is worse than none.
+   */
+  async setThankYou(groupGiftId: string, userId: string, note: string): Promise<GroupGiftView> {
+    const gift = await this.loadOrFail(groupGiftId);
+    const item = await this.itemModel.findById(gift.itemId).exec();
+    if (!item || item.ownerId.toString() !== userId) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only the person the gift is for can write the thank-you note',
+        403,
+      );
+    }
+    const thankable: GroupGiftStatus[] = [GroupGiftStatus.PURCHASED, GroupGiftStatus.FULFILLED];
+    if (!thankable.includes(gift.status)) {
+      throw new AppException(
+        ErrorCode.GROUP_GIFT_NOT_OPEN,
+        'You can thank the group once the gift has been bought',
+        409,
+      );
+    }
+    gift.thankYouNote = note;
+    gift.thankYouAt = new Date();
+    await gift.save();
+    return this.assembleView(gift, userId);
+  }
+
+  /**
+   * Edits a charge in place — the pencil on `4007:568`.
+   *
+   * A distinct operation rather than remove-then-add so an edit is atomic: two
+   * calls would leave the charge deleted if the second one failed, silently
+   * lowering the Grand Total the host is looking at.
+   */
+  async updateCharge(
+    groupGiftId: string,
+    chargeId: string,
+    userId: string,
+    input: { label: string; amountMinor: number },
+  ): Promise<GroupGiftView> {
+    const gift = await this.loadOrFail(groupGiftId);
+    if (gift.initiatorId.toString() !== userId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only the initiator can edit a charge', 403);
+    }
+    this.assertBillEditable(gift);
+    const primary = GroupGiftService.primaryItemMinor(gift);
+
+    const charge = gift.charges.find((c) => c._id.toString() === chargeId);
+    if (!charge) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'Charge not found', 404);
+    }
+    charge.label = input.label;
+    charge.amountMinor = input.amountMinor;
+    gift.markModified('charges');
     GroupGiftService.recomputeTarget(gift, primary);
     await gift.save();
     return this.assembleView(gift, userId);
@@ -701,6 +768,48 @@ export class GroupGiftService {
    * `(itemId, active)` index. Anything less and a multi-gift group would be the
    * one way to claim an item somebody else has already reserved.
    */
+  /**
+   * "Add Another Gift" from the catalogue (`4007:720`).
+   *
+   * The host picks a product the recipient never listed, so the item has to be
+   * created before it can be claimed. This is the **only** path on which a
+   * non-owner writes to someone else's wishlist: the authority is having
+   * initiated this group gift, which is checked here, and
+   * `ProductImportService.importForWishlist` deliberately does no access check
+   * of its own.
+   *
+   * The item is hidden from the recipient whenever the group gift is — they
+   * did not ask for it, and a mystery item appearing on their own list would
+   * both confuse them and give the surprise away.
+   */
+  async addGiftLineFromProduct(
+    groupGiftId: string,
+    userId: string,
+    dto: ImportProductDto,
+  ): Promise<GroupGiftView> {
+    const gift = await this.loadOrFail(groupGiftId);
+    if (gift.initiatorId.toString() !== userId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only the initiator can add a gift', 403);
+    }
+    this.assertBillEditable(gift);
+
+    const wishlist = await this.wishlists.findOrFail(gift.wishlistId.toString());
+    const item = await this.imports.importForWishlist(wishlist, dto, {
+      hiddenFromOwner: gift.visibility === GroupGiftVisibility.HIDDEN_FROM_OWNER,
+    });
+
+    try {
+      return await this.addGiftLine(groupGiftId, item._id.toString(), userId);
+    } catch (err) {
+      // The item exists only to be claimed. If the claim fails — a race on the
+      // item, a bill that just locked — leaving it behind would put a stray
+      // entry on someone's wishlist that nobody asked for and nobody can see.
+      await this.itemModel.deleteOne({ _id: item._id }).exec();
+      await this.wishlists.recount(wishlist._id);
+      throw err;
+    }
+  }
+
   async addGiftLine(groupGiftId: string, itemId: string, userId: string): Promise<GroupGiftView> {
     const gift = await this.loadOrFail(groupGiftId);
     if (gift.initiatorId.toString() !== userId) {
@@ -1193,9 +1302,11 @@ export class GroupGiftService {
     return when;
   }
 
-  private async resolveViewData(
-    gift: GroupGiftDocument,
-  ): Promise<{ users: Map<string, UserDocument>; recentContributions: ContributionDocument[] }> {
+  private async resolveViewData(gift: GroupGiftDocument): Promise<{
+    users: Map<string, UserDocument>;
+    items: Map<string, WishlistItemDocument>;
+    recentContributions: ContributionDocument[];
+  }> {
     const recentContributions = await this.contributionModel
       .find({ groupGiftId: gift._id, status: ContributionStatus.CONFIRMED })
       .sort({ createdAt: -1 })
@@ -1207,13 +1318,28 @@ export class GroupGiftService {
     for (const c of recentContributions) {
       if (!c.anonymous) ids.add(c.userId.toString());
     }
+    // The primary item plus every extra line, in one query — "Selected Gifts"
+    // needs a title and a thumbnail for each, and a per-row lookup would make
+    // rendering the summary cost one round trip per gift.
+    const itemIds = [gift.itemId, ...gift.lines.map((line) => line.itemId)];
+    const itemDocs = await this.itemModel.find({ _id: { $in: itemIds } }).exec();
+
+    // The recipient signs the thank-you card (`2219:603`), and they are the
+    // *item's owner* — an id only knowable after the items are loaded, which is
+    // why this one query is sequential rather than parallel.
+    const primary = itemDocs.find((i) => i._id.toString() === gift.itemId.toString());
+    if (primary) ids.add(primary.ownerId.toString());
+
     const userDocs = await this.users.findManyByIds([...ids]);
-    const users = new Map(userDocs.map((u) => [u._id.toString(), u]));
-    return { users, recentContributions };
+    return {
+      users: new Map(userDocs.map((u) => [u._id.toString(), u])),
+      items: new Map(itemDocs.map((i) => [i._id.toString(), i])),
+      recentContributions,
+    };
   }
 
   private async assembleView(gift: GroupGiftDocument, userId: string): Promise<GroupGiftView> {
-    const { users, recentContributions } = await this.resolveViewData(gift);
+    const { users, items, recentContributions } = await this.resolveViewData(gift);
     const mine = await this.contributionModel
       .aggregate<{ total: number }>([
         {
@@ -1229,6 +1355,7 @@ export class GroupGiftService {
     return toGroupGiftView({
       gift,
       users,
+      items,
       recentContributions,
       myContributionMinor: mine[0]?.total ?? 0,
       canManage: gift.initiatorId.toString() === userId,

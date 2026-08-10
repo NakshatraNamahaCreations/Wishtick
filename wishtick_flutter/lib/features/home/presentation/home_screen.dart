@@ -9,6 +9,7 @@ import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../discover/presentation/explore_products_screen.dart';
+import '../../group_gift/domain/group_gift.dart';
 import '../domain/wishtick_event.dart';
 import 'home_controller.dart';
 import 'widgets/carousel_dots.dart';
@@ -106,7 +107,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const SizedBox(height: AppSpacing.xl),
                 _GroupGiftRail(
                   state: state,
-                  onChipIn: () => _notYet('Chipping in'),
+                  onChipIn: (gift) => unawaited(
+                    context.push<void>(AppRoutes.groupGift(gift.id)),
+                  ),
                 ),
                 _EventRail(
                   state: state,
@@ -140,7 +143,7 @@ class _GroupGiftRail extends StatelessWidget {
   const _GroupGiftRail({required this.state, required this.onChipIn});
 
   final HomeState state;
-  final VoidCallback onChipIn;
+  final ValueChanged<GroupGift> onChipIn;
 
   @override
   Widget build(BuildContext context) {
@@ -151,10 +154,12 @@ class _GroupGiftRail extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: GroupGiftCard(
         gift: gift,
-        // The list endpoint carries no item title, so the gift's own message
-        // names it; failing that, a neutral label rather than a guess.
-        title: gift.message ?? 'Group Gift',
-        onChipIn: onChipIn,
+        // The host's own name for it (Sprint 6b). Older group gifts predate
+        // the field, so the message and then a neutral label stand in.
+        title: gift.title.trim().isNotEmpty
+            ? gift.title
+            : (gift.message ?? 'Group Gift'),
+        onChipIn: () => onChipIn(gift),
       ),
     );
   }

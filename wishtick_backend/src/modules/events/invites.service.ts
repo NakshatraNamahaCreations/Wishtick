@@ -7,6 +7,7 @@ import { ErrorCode } from 'src/common/errors/error-codes';
 import { UsersService } from 'src/modules/users/users.service';
 import type { BulkInviteDto, InviteRecipientDto } from './dto/event.dto';
 import { EventStatus, RsvpResponse } from './event.types';
+import type { EventDocument } from './schemas/event.schema';
 import { toInviteView, type InviteView } from './event.views';
 import { EventInvite, type EventInviteDocument } from './schemas/event-invite.schema';
 import { EventsService } from './events.service';
@@ -48,6 +49,24 @@ export class InvitesService {
       .sort({ createdAt: 1 })
       .exec();
     return invites.map((invite) => toInviteView(invite));
+  }
+
+  /**
+   * The guest list plus the event itself, for the export.
+   *
+   * Returns the document rather than the view because the PDF header needs the
+   * event's title, and re-fetching it in the controller would authorize twice.
+   */
+  async listForExport(
+    eventId: string,
+    userId: string,
+  ): Promise<{ event: EventDocument; invites: InviteView[] }> {
+    const event = await this.events.findOwnedOrFail(eventId, userId);
+    const invites = await this.model
+      .find({ eventId: event._id, revokedAt: null })
+      .sort({ createdAt: 1 })
+      .exec();
+    return { event, invites: invites.map((invite) => toInviteView(invite)) };
   }
 
   async findByToken(token: string): Promise<EventInviteDocument | null> {

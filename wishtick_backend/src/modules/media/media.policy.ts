@@ -37,6 +37,19 @@ export const MEDIA_RULES: Record<MediaPurpose, PurposeRule> = {
     maxBytes: 8 * MB,
     extensions: IMAGE_EXTENSIONS,
   },
+  // `2248:70` offers JPG, PNG, GIF, MP4 and PDF up to 10 MB. GIF and PDF are
+  // allowed *here only*: both are served as attachments from the media origin,
+  // never inlined into a page, so neither becomes stored XSS.
+  [MediaPurpose.EVENT_INVITE]: {
+    mimeTypes: [...IMAGE_TYPES, 'image/gif', 'video/mp4', 'application/pdf'],
+    maxBytes: 10 * MB,
+    extensions: {
+      ...IMAGE_EXTENSIONS,
+      'image/gif': 'gif',
+      'video/mp4': 'mp4',
+      'application/pdf': 'pdf',
+    },
+  },
   [MediaPurpose.WISHLIST_ITEM]: {
     mimeTypes: IMAGE_TYPES,
     maxBytes: 8 * MB,

@@ -93,6 +93,9 @@ export class EventsService {
       endsAt,
       timezone: dto.timezone,
       description: dto.description ?? null,
+      venue: dto.venue ?? null,
+      personName: dto.personName ?? null,
+      relation: dto.relation ?? null,
       visibility: dto.visibility ?? EventVisibility.PRIVATE,
       coverUrl: dto.coverMediaId ? await this.resolveCover(userId, dto.coverMediaId) : null,
       coverMediaId: dto.coverMediaId ? new Types.ObjectId(dto.coverMediaId) : null,
@@ -148,6 +151,9 @@ export class EventsService {
     if (dto.title !== undefined) event.title = dto.title;
     if (dto.type !== undefined) event.type = dto.type;
     if (dto.description !== undefined) event.description = dto.description;
+    if (dto.venue !== undefined) event.venue = dto.venue;
+    if (dto.personName !== undefined) event.personName = dto.personName;
+    if (dto.relation !== undefined) event.relation = dto.relation;
     if (dto.timezone !== undefined) event.timezone = dto.timezone;
     if (dto.visibility !== undefined) event.visibility = dto.visibility;
 
@@ -173,6 +179,17 @@ export class EventsService {
       event.coverUrl = dto.coverMediaId ? await this.resolveCover(userId, dto.coverMediaId) : null;
       event.coverMediaId = dto.coverMediaId ? new Types.ObjectId(dto.coverMediaId) : null;
       if (previous && previous.toString() !== dto.coverMediaId) {
+        await this.media.markOrphaned(previous).catch(() => undefined);
+      }
+    }
+
+    if (dto.inviteMediaId !== undefined) {
+      const previous = event.inviteMediaId;
+      event.inviteMediaUrl = dto.inviteMediaId
+        ? await this.resolveInviteMedia(userId, dto.inviteMediaId)
+        : null;
+      event.inviteMediaId = dto.inviteMediaId ? new Types.ObjectId(dto.inviteMediaId) : null;
+      if (previous && previous.toString() !== dto.inviteMediaId) {
         await this.media.markOrphaned(previous).catch(() => undefined);
       }
     }
@@ -370,6 +387,25 @@ export class EventsService {
       throw new AppException(
         ErrorCode.MEDIA_TYPE_NOT_ALLOWED,
         'This media was not uploaded as an event cover',
+        400,
+      );
+    }
+    return media.url;
+  }
+
+  /**
+   * The host's own invitation artwork (`2248:70`).
+   *
+   * Checked against EVENT_INVITE specifically: that purpose is the only one
+   * whose allowlist admits GIF, MP4 and PDF, so accepting any ready media here
+   * would let those types in wherever a cover is shown.
+   */
+  private async resolveInviteMedia(userId: string, mediaId: string): Promise<string | null> {
+    const media = await this.media.getReadyOwned(userId, mediaId);
+    if (media.purpose !== MediaPurpose.EVENT_INVITE) {
+      throw new AppException(
+        ErrorCode.MEDIA_TYPE_NOT_ALLOWED,
+        'This media was not uploaded as an invitation',
         400,
       );
     }

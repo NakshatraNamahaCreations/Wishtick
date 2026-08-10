@@ -13,10 +13,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { IsTimezone } from 'src/common/validators/is-timezone.validator';
-import {
-  AVATAR_KEY_PATTERN,
-  Gender,
-} from 'src/modules/profile/schemas/user-profile.schema';
+import { AVATAR_KEY_PATTERN, Gender } from 'src/modules/profile/schemas/user-profile.schema';
 
 /**
  * One permissive DTO covering every step's fields.

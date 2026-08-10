@@ -42,6 +42,9 @@ interface GroupGiftView {
     contributor: { userId: string; name: string } | null;
   }[];
   myContributionMinor: number;
+  items: { lineId: string | null; itemId: string; title: string; removable: boolean }[];
+  thankYouNote: string | null;
+  thankYouAt: string | null;
   share?: { slug: string; url: string; hasPasscode: boolean };
 }
 
@@ -461,6 +464,154 @@ describe('Group gifting (e2e)', () => {
   });
 
   // ── Owner masking ───────────────────────────────────────────────────────────
+
+  describe('add a catalogue product (4007:720)', () => {
+    it('creates the item, claims it, and hides it from the recipient', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const { itemId, wishlistId } = await wishlistWithItem(owner);
+      const gg = (await createGroupGift(initiator, itemId, { targetAmountMinor: 1000 }).expect(201))
+        .body as Envelope<GroupGiftView>;
+
+      const updated = (
+        await request(app.getHttpServer())
+          .post(`${V1}/group-gifts/${gg.data.id}/gifts/from-product`)
+          .set(auth(initiator.token))
+          .send({ provider: 'fixture', externalId: 'hp-001' })
+          .expect(201)
+      ).body as Envelope<GroupGiftView>;
+
+      // Folded in as a second gift, and the Grand Total grew by its price.
+      expect(updated.data.items).toHaveLength(2);
+      expect(updated.data.items[1].title).toContain('Headphones');
+      expect(updated.data.items[1].removable).toBe(true);
+      expect(updated.data.targetAmountMinor).toBe(1000 + 2_499_00);
+
+      // The recipient never asked for it: their own list must not show it, and
+      // guessing the id must not reach it either.
+      const ownerItems = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${wishlistId}/items`)
+          .set(auth(owner.token))
+          .expect(200)
+      ).body as Envelope<{ id: string; title: string }[]>;
+      expect(ownerItems.data.map((i) => i.title)).toEqual(['Espresso machine']);
+
+      const hiddenId = updated.data.items[1].itemId;
+      await request(app.getHttpServer())
+        .get(`${V1}/wishlists/${wishlistId}/items/${hiddenId}`)
+        .set(auth(owner.token))
+        .expect(404);
+
+      // Everyone else still sees it — otherwise two people buy the same thing.
+      const gifterItems = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${wishlistId}/items`)
+          .set(auth(initiator.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+      expect(gifterItems.data).toHaveLength(2);
+    });
+
+    it('refuses anyone but the initiator, and leaves no stray item behind', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const other = await newUser();
+      const { itemId, wishlistId } = await wishlistWithItem(owner);
+      const gg = (await createGroupGift(initiator, itemId, { targetAmountMinor: 1000 }).expect(201))
+        .body as Envelope<GroupGiftView>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/gifts/from-product`)
+        .set(auth(other.token))
+        .send({ provider: 'fixture', externalId: 'hp-001' })
+        .expect(403);
+
+      // The refusal happens before anything is created.
+      const items = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${wishlistId}/items`)
+          .set(auth(initiator.token))
+          .expect(200)
+      ).body as Envelope<unknown[]>;
+      expect(items.data).toHaveLength(1);
+    });
+
+    it('is refused once the bill is locked', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const a = await newUser();
+      const { itemId, wishlistId } = await wishlistWithItem(owner);
+      const gg = (await createGroupGift(initiator, itemId, { targetAmountMinor: 1000 }).expect(201))
+        .body as Envelope<GroupGiftView>;
+      await contribute(a, gg.data.id, { amountMinor: 500 }).expect(201);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/gifts/from-product`)
+        .set(auth(initiator.token))
+        .send({ provider: 'fixture', externalId: 'hp-001' })
+        .expect(409);
+
+      // Nothing half-created: the item is only made once the claim can succeed.
+      const items = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${wishlistId}/items`)
+          .set(auth(initiator.token))
+          .expect(200)
+      ).body as Envelope<unknown[]>;
+      expect(items.data).toHaveLength(1);
+    });
+  });
+
+  describe('thank-you note (2219:603)', () => {
+    it('only the recipient may write it, and only once the gift is bought', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const a = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      const gg = (await createGroupGift(initiator, itemId, { targetAmountMinor: 1000 }).expect(201))
+        .body as Envelope<GroupGiftView>;
+
+      // Too early: nothing has been bought to thank anyone for.
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/thank-you`)
+        .set(auth(owner.token))
+        .send({ note: 'Thanks!' })
+        .expect(409);
+
+      await contribute(a, gg.data.id, { amountMinor: 1000 }).expect(201);
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/purchase`)
+        .set(auth(initiator.token))
+        .send({})
+        .expect(200);
+
+      // The host is not the recipient, however much they organised it.
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/thank-you`)
+        .set(auth(initiator.token))
+        .send({ note: 'Thanks from me' })
+        .expect(403);
+
+      // A contributor is not the recipient either.
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/thank-you`)
+        .set(auth(a.token))
+        .send({ note: 'Thanks from me' })
+        .expect(403);
+
+      const res = (
+        await request(app.getHttpServer())
+          .post(`${V1}/group-gifts/${gg.data.id}/thank-you`)
+          .set(auth(owner.token))
+          .send({ note: "I've wanted this for so long." })
+          .expect(200)
+      ).body as Envelope<GroupGiftView>;
+
+      expect(res.data.thankYouNote).toBe("I've wanted this for so long.");
+      expect(res.data.thankYouAt).not.toBeNull();
+    });
+  });
 
   describe('owner masking', () => {
     it('hides a hidden group gift from the recipient but shows a visible one', async () => {

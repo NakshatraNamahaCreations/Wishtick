@@ -2,6 +2,7 @@ import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import { MediaPurpose } from 'src/modules/media/schemas/media.schema';
+import { TAXONOMY_CACHE_KEY } from 'src/modules/taxonomy/taxonomy.service';
 import { createTestApp, V1, type TestApp } from './utils/test-app';
 
 const PASSWORD = 'correct-horse-battery-staple';
@@ -125,7 +126,9 @@ describe('Onboarding, profile & media (e2e)', () => {
 
     it('serves the second request from cache', async () => {
       await request(app.getHttpServer()).get(`${V1}/onboarding/options`).expect(200);
-      const cached = await ctx.redis.get('taxonomy:options:v2');
+      // The real key, not a copy of it: the key is bumped whenever a new kind
+      // is added, and a hardcoded one silently stops testing anything.
+      const cached = await ctx.redis.get(TAXONOMY_CACHE_KEY);
       expect(cached).toBeTruthy();
     });
   });

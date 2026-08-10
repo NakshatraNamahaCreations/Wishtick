@@ -13,6 +13,10 @@ enum MediaPurpose {
   eventCover('event_cover'),
   wishlistItem('wishlist_item'),
   wishlistCover('wishlist_cover'),
+
+  /// A host's own invitation artwork (`2248:70`). The only purpose that admits
+  /// GIF, MP4 and PDF as well as still images.
+  eventInvite('event_invite'),
   reelWish('reel_wish');
 
   const MediaPurpose(this.wireValue);
@@ -54,7 +58,7 @@ class MediaView {
 ///
 /// One repository for every feature that uploads an image (wishlist covers
 /// today; profile photos and event covers were deferred but would plug into
-/// the same [uploadImage] call), rather than one per feature.
+/// the same [uploadFile] call), rather than one per feature.
 class MediaRepository {
   MediaRepository(this._api, this._transferDio);
 
@@ -65,7 +69,7 @@ class MediaRepository {
   /// so it must not carry this app's bearer token or retry/refresh logic.
   final Dio _transferDio;
 
-  Future<MediaView> uploadImage({
+  Future<MediaView> uploadFile({
     required XFile file,
     required MediaPurpose purpose,
   }) async {
@@ -106,11 +110,17 @@ class MediaRepository {
     return MediaView.fromJson(confirmed);
   }
 
+  /// Only consulted when the picker gave no mime type — which `file_picker`
+  /// routinely does on Android for anything it did not open through the
+  /// gallery.
   static String _guessContentType(String fileName) {
     final lower = fileName.toLowerCase();
     if (lower.endsWith('.png')) return 'image/png';
     if (lower.endsWith('.webp')) return 'image/webp';
     if (lower.endsWith('.heic')) return 'image/heic';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    if (lower.endsWith('.pdf')) return 'application/pdf';
     return 'image/jpeg';
   }
 }

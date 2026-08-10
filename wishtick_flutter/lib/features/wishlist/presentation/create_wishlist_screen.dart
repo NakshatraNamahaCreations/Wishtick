@@ -78,7 +78,7 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
     try {
       final media = await ref
           .read(mediaRepositoryProvider)
-          .uploadImage(file: picked, purpose: MediaPurpose.wishlistCover);
+          .uploadFile(file: picked, purpose: MediaPurpose.wishlistCover);
       if (!mounted) return;
       setState(() {
         _cover = media;

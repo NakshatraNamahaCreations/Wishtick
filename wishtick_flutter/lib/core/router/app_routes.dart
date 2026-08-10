@@ -73,6 +73,76 @@ abstract final class AppRoutes {
   /// "Gift Delivered!" (`299:1620`).
   static String orderDelivered(String orderId) => '/orders/$orderId/delivered';
 
+  // Group gifting (Sprint 6b)
+  //
+  // Creation is a four-step flow: the group gift exists from step 1, and the
+  // summary and charges screens edit its bill before anyone is asked to pay.
+  // Each step is its own route so backing out lands on the previous one rather
+  // than dumping the host out of a half-configured group.
+
+  /// "Create Group Gift" (`299:1658`) — step 1, still keyed by the item
+  /// because no group gift exists yet.
+  static String createGroupGift(String wishlistId, String itemId) =>
+      '/gift/$wishlistId/items/$itemId/group';
+
+  /// "Group Gift Summary" (`4007:801`, `4006:463`) — step 2.
+  static String groupGiftSummary(String id) => '/group-gifts/$id/summary';
+
+  /// "Add Another Gift" (`4007:720`) — the picker step 2 pushes.
+  static String groupGiftAddItem(String id) => '/group-gifts/$id/summary/add';
+
+  /// "Miscellaneous Charges" (`4007:568`) — step 3.
+  static String groupGiftCharges(String id) => '/group-gifts/$id/charges';
+
+  /// "Add a Charge" (`4007:628`).
+  static String groupGiftAddCharge(String id) => '/group-gifts/$id/charges/add';
+
+  /// "Group Gift Created" (`299:1735`) — step 4.
+  static String groupGiftCreated(String id) => '/group-gifts/$id/created';
+
+  /// "Group Gift Details" (`316:166`) — the live group everyone else sees.
+  static String groupGift(String id) => '/group-gifts/$id';
+
+  /// The participant list (`316:536`).
+  static String groupGiftParticipants(String id) =>
+      '/group-gifts/$id/participants';
+
+  /// "Group Chat" (`316:640`). Takes the chat id as `extra` — a group gift
+  /// carries its own `chatId`, so there is nothing to look up.
+  static String groupGiftChat(String id) => '/group-gifts/$id/chat';
+
+  /// "Thank You from …" (`2219:603`).
+  static String groupGiftThankYou(String id) => '/group-gifts/$id/thank-you';
+
+  /// The settle-up ledger — both directions (`4092:174`, `4093:444`).
+  static String groupGiftSettle(String id) => '/group-gifts/$id/settle';
+
+  // Events, host side (Sprint 7). Creation is a wizard held in one controller,
+  // so each step is a sibling route rather than a nested one — backing out of
+  // step 2 returns to step 1 with what was typed still there.
+
+  /// "What are you celebrating?" (`257:733`) — step 1.
+  static const createEvent = '/events/create';
+
+  /// "Tell us about your event" (`257:755`) — step 2.
+  static const createEventDetails = '/events/create/details';
+
+  /// "Choose a Template" (`263:900`).
+  static String eventInviteTemplates(String id) => '/events/$id/invite';
+
+  /// "Upload Invitation" (`2248:70`) — the other answer to the method sheet.
+  static String eventInviteUpload(String id) => '/events/$id/invite/upload';
+
+  /// "Preview Your Invite" (`263:1014`).
+  static String eventInvitePreview(String id) => '/events/$id/invite/preview';
+
+  /// The guest list (`4099:1256`).
+  static String eventGuests(String id) => '/events/$id/guests';
+
+  /// One guest (`4096:162`).
+  static String eventGuest(String id, String inviteId) =>
+      '/events/$id/guests/$inviteId';
+
   /// An event invite. Public and unauthenticated — the token is the
   /// authorization, and requiring a signup to answer an invitation is the
   /// fastest way to collect no RSVPs at all.

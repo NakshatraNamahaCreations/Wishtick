@@ -93,8 +93,8 @@ class _GiftItemScreenState extends ConsumerState<GiftItemScreen> {
   }
 
   void _startGroupGift() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Group gifts arrive in Sprint 6.')),
+    context.push<void>(
+      AppRoutes.createGroupGift(widget.wishlistId, widget.itemId),
     );
   }
 

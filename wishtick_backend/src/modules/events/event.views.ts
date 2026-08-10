@@ -20,7 +20,17 @@ export interface EventView {
   endsAt: Date | null;
   timezone: string;
   description: string | null;
+  /** Where it is happening (`257:755`). */
+  venue: string | null;
+  /** Who the event is for, and how the host knows them (`257:733`). */
+  personName: string | null;
+  relation: string | null;
   coverUrl: string | null;
+  /**
+   * The host's own invitation artwork (`2248:70`). When set it replaces the
+   * template card — the host chose one path or the other.
+   */
+  inviteMediaUrl: string | null;
   visibility: EventVisibility;
   status: EventStatus;
   wishlistIds: string[];
@@ -60,6 +70,8 @@ export interface InviteView {
   message: string | null;
   respondedAt: Date | null;
   sendCount: number;
+  /** When they were added to the guest list — the "Added on" row of `4096:162`. */
+  createdAt: Date;
 }
 
 /** The unauthenticated view an invitee gets from their token. */
@@ -71,7 +83,11 @@ export interface PublicInviteView {
     endsAt: Date | null;
     timezone: string;
     description: string | null;
+    /** Where it is. Before this, an invitation showed a time and no place. */
+    venue: string | null;
     coverUrl: string | null;
+    /** The host's own invitation artwork, when they uploaded one (`2248:70`). */
+    inviteMediaUrl: string | null;
     ogImageUrl: string | null;
     status: EventStatus;
   };
@@ -98,7 +114,11 @@ export const toEventView = (
     endsAt: event.endsAt,
     timezone: event.timezone,
     description: event.description,
+    venue: event.venue,
+    personName: event.personName,
+    relation: event.relation,
     coverUrl: event.coverUrl,
+    inviteMediaUrl: event.inviteMediaUrl,
     visibility: event.visibility,
     status: event.status,
     wishlistIds: event.wishlistIds.map((id) => id.toString()),
@@ -133,4 +153,5 @@ export const toInviteView = (invite: EventInviteDocument): InviteView => ({
   message: invite.message,
   respondedAt: invite.respondedAt,
   sendCount: invite.sendCount,
+  createdAt: invite.createdAt,
 });

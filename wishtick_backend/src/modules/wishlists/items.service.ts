@@ -46,9 +46,17 @@ export class ItemsService {
     const wishlist = await this.wishlists.findOrFail(wishlistId);
     await this.access.assertCanView(wishlist, ctx);
 
+    // The owner's view masks surprise reservations (see toItemView); everyone
+    // else sees the true claimed status so duplicate gifting is still
+    // prevented.
+    const maskForOwner = wishlist.ownerId.toString() === ctx.userId;
+
     const filter: FilterQuery<WishlistItemDocument> = {
       wishlistId: wishlist._id,
       archivedAt: null,
+      // Items a *host* added for a group gift are not the owner's own, and
+      // showing them would spoil the surprise — see WishlistItem.hiddenFromOwner.
+      ...(maskForOwner ? { hiddenFromOwner: { $ne: true } } : {}),
       ...(query.category ? { category: query.category } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
@@ -60,9 +68,6 @@ export class ItemsService {
       .limit(MAX_ITEMS_PER_WISHLIST)
       .exec();
 
-    // The owner's view masks surprise reservations (see toItemView); everyone
-    // else sees the true claimed status so duplicate gifting is still prevented.
-    const maskForOwner = wishlist.ownerId.toString() === ctx.userId;
     return items.map((item) => toItemView(item, maskForOwner));
   }
 
@@ -70,7 +75,13 @@ export class ItemsService {
     const wishlist = await this.wishlists.findOrFail(wishlistId);
     await this.access.assertCanView(wishlist, ctx);
     const maskForOwner = wishlist.ownerId.toString() === ctx.userId;
-    return toItemView(await this.findItemOrFail(wishlist._id, itemId), maskForOwner);
+    const item = await this.findItemOrFail(wishlist._id, itemId);
+    // Same 404 the list gives by omission — a hidden item must not be
+    // reachable by guessing its id either.
+    if (maskForOwner && item.hiddenFromOwner) {
+      throw new AppException(ErrorCode.WISHLIST_ITEM_NOT_FOUND, 'Item not found', 404);
+    }
+    return toItemView(item, maskForOwner);
   }
 
   // ── Write ─────────────────────────────────────────────────────────────────

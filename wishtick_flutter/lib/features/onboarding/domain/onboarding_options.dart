@@ -43,6 +43,7 @@ class OnboardingOptions {
     required this.shoeSizes,
     required this.fitPreferences,
     required this.occasions,
+    this.relations = const [],
   });
 
   final List<TaxonomyOption> interestCategories;
@@ -52,6 +53,9 @@ class OnboardingOptions {
   final List<TaxonomyOption> shoeSizes;
   final List<TaxonomyOption> fitPreferences;
   final List<TaxonomyOption> occasions;
+
+  /// Who someone is to you, grouped for the picker on `2252:423`.
+  final List<TaxonomyOption> relations;
 
   /// Granular interests belonging to one category, in server order.
   List<TaxonomyOption> interestsFor(String categoryKey) =>
@@ -75,6 +79,26 @@ class OnboardingOptions {
   }
 
   /// Shoe sizes for one sizing system (`uk` | `us` | `eu`).
+  /// Relations grouped for the collapsible picker (`2252:423`), in seed order.
+  ///
+  /// Same shape as [colorGroups] — the server carries `meta.group` and
+  /// `meta.groupLabel` so a new group is a seed edit, not an app release.
+  List<RelationGroup> get relationGroups {
+    final groups = <String, RelationGroup>{};
+    for (final relation in relations) {
+      final group = relation.meta?['group'] ?? 'other';
+      final label = relation.meta?['groupLabel'] ?? 'Other';
+      groups
+          .putIfAbsent(
+            group,
+            () => RelationGroup(group: group, label: label, relations: []),
+          )
+          .relations
+          .add(relation);
+    }
+    return groups.values.toList();
+  }
+
   List<TaxonomyOption> shoeSizesFor(String system) =>
       shoeSizes.where((o) => o.meta?['system'] == system).toList();
 
@@ -95,6 +119,7 @@ class OnboardingOptions {
       shoeSizes: _list(options, 'shoe_size'),
       fitPreferences: _list(options, 'fit_preference'),
       occasions: _list(options, 'occasion'),
+      relations: _list(options, 'relation'),
     );
   }
 }
@@ -125,4 +150,18 @@ class ImportantDate {
     occasionKey: json['occasionKey'] as String,
     date: json['date'] as String,
   );
+}
+
+/// One collapsible section of the relation picker (`2252:423`).
+@immutable
+class RelationGroup {
+  const RelationGroup({
+    required this.group,
+    required this.label,
+    required this.relations,
+  });
+
+  final String group;
+  final String label;
+  final List<TaxonomyOption> relations;
 }

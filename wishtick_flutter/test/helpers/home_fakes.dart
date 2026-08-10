@@ -1,9 +1,9 @@
 import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/features/discover/data/discover_repository.dart';
 import 'package:wishtick_flutter/features/discover/domain/discover_feed.dart';
+import 'package:wishtick_flutter/features/group_gift/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/home/data/home_repository.dart';
 import 'package:wishtick_flutter/features/home/domain/address.dart';
-import 'package:wishtick_flutter/features/home/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/home/domain/upcoming_occasion.dart';
 import 'package:wishtick_flutter/features/home/domain/wishtick_event.dart';
 
@@ -53,6 +53,9 @@ GroupGift buildGroupGift({
   itemId: 'item_1',
   wishlistId: 'wl_1',
   status: status,
+  title: "Siya's birthday gift",
+  hostId: 'dev-host-1',
+  createdAt: DateTime(2026, 8, 1),
   targetAmountMinor: target,
   collectedAmountMinor: collected,
   currency: 'INR',

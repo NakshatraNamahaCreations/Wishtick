@@ -1,0 +1,232 @@
+import 'package:wishtick_flutter/features/events/data/events_repository.dart';
+import 'package:wishtick_flutter/features/events/domain/event.dart';
+import 'package:wishtick_flutter/features/events/domain/invite_template.dart';
+
+WishtickEventDetail buildEvent({
+  String id = 'evt_1',
+  String title = "Siya's 24th",
+  EventType type = EventType.birthday,
+  EventStatus status = EventStatus.draft,
+  InviteTemplateChoice? inviteTemplate,
+  String? inviteMediaUrl,
+}) => WishtickEventDetail(
+  id: id,
+  title: title,
+  type: type,
+  startsAt: DateTime.utc(2026, 7, 19, 14, 30),
+  timezone: 'Asia/Kolkata',
+  visibility: EventVisibility.private,
+  status: status,
+  wishlistIds: const [],
+  createdAt: DateTime.utc(2026, 7, 1),
+  venue: 'Mysore Socials',
+  personName: 'Siya',
+  relation: 'friend',
+  inviteTemplate: inviteTemplate,
+  inviteMediaUrl: inviteMediaUrl,
+  share: const EventShare(slug: 'siya-24th', url: 'https://wt.test/e/siya-24th'),
+);
+
+EventInvite buildInviteRow({
+  required String id,
+  required String name,
+  RsvpResponse rsvp = RsvpResponse.pending,
+  int plusOnes = 0,
+  String? email = 'guest@example.com',
+  String? phone = '+91 9899889999',
+  DateTime? respondedAt,
+}) => EventInvite(
+  id: id,
+  name: name,
+  email: email,
+  phone: phone,
+  rsvp: rsvp,
+  plusOnes: plusOnes,
+  sendCount: 1,
+  createdAt: DateTime.utc(2026, 7, 14, 4, 30),
+  respondedAt: respondedAt,
+);
+
+InviteTemplate buildTemplate({
+  required String id,
+  required String name,
+  List<EventType> eventTypes = const [EventType.birthday],
+}) => InviteTemplate(
+  id: id,
+  name: name,
+  description: name,
+  eventTypes: eventTypes,
+  slots: const [],
+  variants: const [
+    TemplateColorVariant(
+      key: 'plum',
+      label: 'Plum',
+      background: '#3C2415',
+      accent: '#E8C39E',
+      text: '#FFFFFF',
+      muted: '#D9CFC5',
+    ),
+  ],
+);
+
+class FakeEventsRepository implements EventsRepository {
+  FakeEventsRepository({List<EventInvite>? invites, WishtickEventDetail? event})
+    : guests = invites ?? [],
+      event = event ?? buildEvent();
+
+  WishtickEventDetail event;
+
+  /// Not named `invites` — that collides with `EventsRepository.invites()`.
+  List<EventInvite> guests;
+  List<InviteTemplate> catalogue = [
+    buildTemplate(id: 'tpl_1', name: 'Golden Bloom'),
+    buildTemplate(
+      id: 'tpl_2',
+      name: 'Evergreen',
+      eventTypes: const [EventType.anniversary],
+    ),
+  ];
+
+  Object? failure;
+
+  final createCalls = <Map<String, Object?>>[];
+  final updateCalls = <Map<String, Object?>>[];
+  final revoked = <String>[];
+  final publishCalls = <String>[];
+  final exportCalls = <GuestListFormat>[];
+
+  void _maybeThrow() {
+    final f = failure;
+    if (f != null) throw f;
+  }
+
+  @override
+  Future<List<WishtickEventDetail>> listMine() async => [event];
+
+  @override
+  Future<WishtickEventDetail> get(String id) async => event;
+
+  @override
+  Future<WishtickEventDetail> create({
+    required String title,
+    required EventType type,
+    required DateTime startsAt,
+    required String timezone,
+    DateTime? endsAt,
+    String? description,
+    String? venue,
+    String? personName,
+    String? relation,
+    EventVisibility? visibility,
+    String? coverMediaId,
+    List<String>? wishlistIds,
+    InviteTemplateChoice? inviteTemplate,
+  }) async {
+    _maybeThrow();
+    createCalls.add({
+      'title': title,
+      'type': type,
+      'startsAt': startsAt,
+      'timezone': timezone,
+      'description': description,
+      'venue': venue,
+      'personName': personName,
+      'relation': relation,
+    });
+    return event;
+  }
+
+  @override
+  Future<WishtickEventDetail> update(
+    String id, {
+    String? title,
+    EventType? type,
+    DateTime? startsAt,
+    DateTime? endsAt,
+    String? timezone,
+    String? description,
+    String? venue,
+    String? personName,
+    String? relation,
+    EventVisibility? visibility,
+    String? coverMediaId,
+    String? inviteMediaId,
+    bool clearInviteMedia = false,
+    List<String>? wishlistIds,
+    InviteTemplateChoice? inviteTemplate,
+  }) async {
+    _maybeThrow();
+    updateCalls.add({
+      'id': id,
+      'inviteMediaId': inviteMediaId,
+      'clearInviteMedia': clearInviteMedia,
+      'templateId': inviteTemplate?.templateId,
+      'colorVariant': inviteTemplate?.colorVariant,
+    });
+    return event;
+  }
+
+  @override
+  Future<WishtickEventDetail> publish(String id) async {
+    publishCalls.add(id);
+    return event;
+  }
+
+  @override
+  Future<void> remove(String id) async {}
+
+  @override
+  Future<List<InviteTemplate>> templates({EventType? type}) async => catalogue;
+
+  @override
+  Future<InvitePreview> previewInvite(
+    String eventId, {
+    required InviteTemplateChoice choice,
+  }) async => InvitePreview(
+    templateId: choice.templateId,
+    colorVariant: choice.colorVariant,
+    palette: catalogue.first.variants.first,
+    resolved: const InviteCardContent(
+      headline: 'Siya',
+      dateLine: 'SUNDAY 19 JULY AT 8PM',
+      subtitle: '24th Birthday',
+      venue: 'Mysore Socials',
+    ),
+  );
+
+  @override
+  Future<List<EventInvite>> invites(String eventId) async => guests;
+
+  @override
+  Future<BulkInviteResult> invite(
+    String eventId, {
+    required List<({String? email, String? name, String? phone})> recipients,
+  }) async => const BulkInviteResult(created: [], duplicates: 0, skipped: 0);
+
+  @override
+  Future<void> resend(String eventId, String inviteId) async {}
+
+  @override
+  Future<void> revoke(String eventId, String inviteId) async {
+    _maybeThrow();
+    revoked.add(inviteId);
+    guests = guests.where((i) => i.id != inviteId).toList();
+  }
+
+  @override
+  Future<String> inviteLink(String eventId, String inviteId) async =>
+      'https://wt.test/i/tok';
+
+  @override
+  Future<GuestListDownload> exportGuests(
+    String eventId, {
+    GuestListFormat format = GuestListFormat.pdf,
+  }) async {
+    exportCalls.add(format);
+    return GuestListDownload(
+      bytes: const [1, 2, 3],
+      filename: 'guest-list.${format.wireValue}',
+      contentType: 'application/octet-stream',
+    );
+  }
+}

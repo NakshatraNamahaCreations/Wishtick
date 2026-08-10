@@ -614,6 +614,143 @@ Likely intermediate/empty states of the above; export before building those.
   the group is in shortfall or surplus.
 - **Contribution request** — a shortfall broadcast with a per-member amount.
 
+### Build status — 6b is implemented, front to back
+
+Backend and Flutter are both done and green (375 e2e, 193 unit, 273 widget/unit
+Dart). Beyond the list above, building it forced four additions:
+
+- **`items[]` on the group-gift view** — the summary needs a title, thumbnail
+  and price per row, and the view only carried `itemId`. Assembled server-side,
+  primary-first, with `removable: false` on the primary so no client has to
+  re-derive which one the `×` may not touch.
+- **`hostId` on the view** — the participant list badges the host (`316:536`),
+  and `share` only tells the *caller* whether they are the host.
+- **`PATCH /group-gifts/:id/charges/:chargeId`** — the charges screen has an
+  edit pencil. Remove-then-add would leave the charge deleted if the second
+  call failed, silently lowering the Grand Total.
+- **`GROUP_GIFT_BILL_LOCKED`** — split out of `GROUP_GIFT_NOT_OPEN`, which was
+  serving two conditions. The client can now offer the one thing that still
+  works (a contribution request) instead of saying the group is closed.
+
+### Group chat and the thank-you note
+
+**Group chat (`316:640`)** is built. The backend module already existed; the
+Flutter side is new — domain, REST repository, and a Socket.IO client on the
+`/chat` namespace. Shape worth keeping:
+
+- **Messages are posted over REST, never over the socket.** The backend routes
+  both transports through one validation and authorization path and the gateway
+  only *delivers*; posting over the socket would be a second way in with a
+  second set of rules.
+- **System cards render from `systemType` + `systemPayload`, not from `body`.**
+  That is what the backend's own note asks for, so the copy can change without
+  breaking clients. An unrecognised type falls back to the server's text rather
+  than drawing a blank card.
+- **The socket sits behind `ChatSocketPort`.** The real one reads the handshake
+  token from secure storage, which has no platform channel under `flutter test`
+  — the interface is what makes the controller testable.
+- New dependency: `socket_io_client`.
+
+**Thank-you note (`2219:603`, `2288:5`)** is built, and needed backend that did
+not exist: `thankYouNote` / `thankYouAt` on the group gift plus
+`POST /group-gifts/:id/thank-you`. Gated on the **item's owner**, not the
+initiator — the note comes from the person the gift was for, and the host is
+usually not that person — and only once the gift has been bought.
+
+⚠️ **Two gaps here.** Both exported frames are the *read* view: no composer was
+designed, so the sheet that writes the note is an addition. And the card's
+floral artwork is not exported, so the card is drawn from tokens — the same warm
+gradient and script headline, without inventing an asset that will not match
+when the real one lands.
+
+### Three more the device found in chat and dark mode
+
+7. **The chat sat on "Reconnecting…" forever.** `chatSocketProvider` is
+   `autoDispose` and the controller only ever `ref.read` it — which establishes
+   no dependency, so the socket was collected the moment after it connected.
+   The server log was the tell: it showed a socket authenticating and then
+   vanishing. Now `ref.watch`ed in `build`.
+8. **System cards said "Someone Paid" for a named contributor.** The payload
+   carries `contributorId`, not a name — I had guessed `actorName`. Names are
+   now resolved against the group's participant list, and `anonymous: true` is
+   honoured as a deliberate withholding rather than missing data.
+9. **Outlined and text buttons were unreadable in dark mode.** The theme took
+   `primary` as their foreground in both themes; in dark that is #5B1A6E on
+   #17101B — **1.61:1**. App-wide, not just 6b. Both now step to `brandMark`
+   in dark (5.89:1), the same substitution `context.headlineBrandColor` already
+   makes for headlines, and a theme test asserts AA on both.
+
+Smaller: the thank-you card's "With warmest regards," dangled over nothing,
+because the view exposed no recipient name. `recipientName` is now on the view
+(the item's owner), and the whole sign-off is hidden when there is none.
+
+### Four defects only the device found
+
+All four passed `flutter analyze` and the whole test suite before they were
+caught by walking the flow on a real phone. Each now has a regression test.
+
+1. **The create screen crashed on open** — "Tried to modify a provider while
+   the widget tree was building". `_primeGoal` seeded the goal straight out of
+   `build()`. Now primed after the item loads and via a `ref.listen`, both of
+   which run outside the build phase.
+2. **"Add Another Gift" spun forever, then 429'd.** Its `FutureProvider.family`
+   was keyed on a record holding a `Set`. Records compare by field but a `Set`
+   compares by *identity*, so every rebuild minted a new provider, refetched,
+   and rebuilt. **Nothing without value equality may go in a family key.**
+3. **A themed button in a `Row` asserted.** The button theme sets
+   `minimumSize: Size.fromHeight(h)` — that is `Size(double.infinity, h)`, an
+   infinite *minimum* width. It is what makes footer buttons full-bleed, and it
+   is why the settle-up ledger's "Mark as Sent" needed a bounded box. Third
+   escape of this bug class (splash, onboarding, now this).
+4. **The suggested-amount chips stacked one per line.** A `Container` with an
+   `alignment` expands to its maximum *bounded* constraint, and a `Wrap` hands
+   children the full row width. Replaced with a hugging `Row`.
+
+Also fixed while there: Home's chip-in card was still a Sprint-6 placeholder
+(`_notYet('Chipping in')`) and titled itself from `message`; it now opens the
+group gift and uses the real `title`.
+
+Not defects, but worth knowing: the app deliberately does **not** follow the
+system theme (`ThemeMode.light` default, changed only in Profile → Appearance),
+and Profile is still a Sprint-9 placeholder, so there is no in-app way to reach
+Appearance yet.
+
+### Three places the design does not answer
+
+1. **The summary has no CTA.** Neither `4007:801` nor `4006:463` carries a
+   button, but the flow has to reach "Miscellaneous Charges" somehow, and
+   "+ Add Another Gift" is the only other control. Shipped with a **Continue**
+   footer — replace it if the intended affordance turns up.
+2. ~~**"Add Another Gift" is drawn as a catalogue search**~~ — **settled: it
+   creates a wishlist item from the catalogue product.** Built as the design
+   draws it. `POST /group-gifts/:id/gifts/from-product` creates the item on the
+   recipient's wishlist and then claims it through the same lock, transaction
+   and holder gift as any other line.
+
+   Two things this forced:
+
+   - **It is the only path on which a non-owner writes to another person's
+     wishlist.** The authority is having initiated the group gift, checked in
+     `GroupGiftService`; `ProductImportService.importForWishlist` deliberately
+     does no access check of its own, and its doc comment says so.
+   - **`WishlistItem.hiddenFromOwner`.** The recipient never asked for this
+     item, so showing it on their own list would both confuse the list and give
+     the surprise away. Set whenever the group gift is hidden from them;
+     filtered out of the owner's list *and* 404'd on direct fetch, so guessing
+     the id does not reach it either. Everyone else still sees it — they must,
+     or two people buy the same thing.
+
+   If the claim fails after the item is created, the item is deleted: it exists
+   only to be claimed, and a stray entry nobody asked for and nobody can see is
+   worse than an error.
+3. **"Additional Amount Required" (`4092:174`) is shown, never entered.** The
+   bill is frozen once anyone contributes, so a shortfall can only come from
+   the price moving — which only the host can see. Shipped as an editable
+   field, prefilled from the balance when there is a shortfall.
+
+Also still open from the original mapping: **a member who refuses to pay their
+share.** Nothing re-splits; the balance simply stays open. No frame covers it.
+
 ---
 
 ## Sprint 7 — Events & invitations (2 wk)
@@ -641,6 +778,63 @@ Likely intermediate/empty states of the above; export before building those.
 > creating events, designing invitations, sending invites, and the guest list.
 > An Event still has **no venue field** (only a free-text slot inside an invite
 > template), which is why the invite screen shows a time but no location.
+
+### What shipped
+
+**Backend.** `Event` gained `venue`, `personName` and `relation` (a `relation`
+taxonomy key, seeded by migration `019-relations`; the taxonomy cache key went
+to `v3` so a warm cache cannot hide the new kind). `GET
+events/:id/invites/export` returns a `StreamableFile` in PDF, XLSX or CSV —
+CSV and XLSX de-formula any cell starting `= + - @`, because a guest named
+`=cmd|calc!A1` would otherwise execute in Excel. `InviteView` gained
+`createdAt` ("Added on"). A new `event_invite` media purpose accepts GIF, MP4
+and PDF up to 10 MB — the only purpose that does — and `Event.inviteMediaUrl`
+carries the host's own artwork through to the invitee. The invite card's venue
+slot now falls back to the event's own venue, which closes the "time but no
+location" gap called out above.
+
+**Flutter.** Create event (`257:733` → `257:755`), the relation picker
+(`2252:423`), the invitation method sheet (`2248:5`), the template picker
+(`263:900`), the preview (`263:1014`), upload-your-own (`2248:70`), the guest
+list (`4099:1256`), guest details (`4096:162`) and the download sheet
+(`4096:206`). Reached from the centre "+" → Event, which was a Sprint-4
+placeholder until now.
+
+### Four defects only the device found
+
+1. **`GET /invite-templates` answers with `{templates: [...]}`,** not the bare
+   array every other list route returns, and its query parameter is
+   `eventType`, not `type`. The picker was empty and the filter was ignored.
+2. **`POST events/:id/invite/preview` takes `{inviteTemplate: {...}}`,** not a
+   bare choice. Sending the choice unwrapped read as "no choice".
+3. **The preview drew the OG raster.** `imageUrl` is the 1200×630 image
+   WhatsApp crops to when a link unfurls; the frame is a portrait card. Drawn
+   `cover` into 4:5 it sliced the headline in half. The card is now always
+   rendered natively from the palette and the resolved copy.
+4. **The RSVP pills were unreadable.** `success` on `successSubtle` is #3FBFA6
+   on #7FD9C6 — **1.7:1**. `successSubtle`/`warningSubtle` were mid-tone
+   accents, not backgrounds. They are now near-white tints with their own ink
+   tokens (`onSuccessSubtle`, `onWarningSubtle`, `onDangerSubtle`), all three
+   covered by the AA contrast test.
+
+Also: `DateTime.now().timeZoneName` gives `IST`/`GMT+05:30`, which the server's
+`IsTimezone` rejects — event creation would have 400'd on every device. Dart
+cannot report an IANA zone, so `kDefaultTimezone` is `Asia/Kolkata` until one
+lands on the profile.
+
+### Still open
+
+- **Events overview** (`2058:16`, `4095:1486`, `4096:30`) is not built — the
+  frames are not exported. Until it is, an existing event's guest list is only
+  reachable at the end of the create flow.
+- **No frame covers *adding* guests.** `POST events/:id/invites` takes up to
+  200 recipients and is fully tested, but nothing in the design opens it, so
+  the guest list can only fill up through RSVPs to a shared link.
+- **Guest details omits the "Group Gift — 1 Active" row** of `4096:162`.
+  Nothing links an event to a group gift; wiring one would add an
+  events→group-gifts module dependency for a single count.
+- The occasion tiles and the template cards use glyphs and a typographic
+  placeholder rather than the designed illustrations, which are not exported.
 
 ---
 

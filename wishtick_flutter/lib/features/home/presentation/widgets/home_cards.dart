@@ -5,8 +5,8 @@ import '../../../../core/format/currency.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../../core/widgets/wishtick_image.dart';
+import '../../../group_gift/domain/group_gift.dart';
 import '../../../wishlist/domain/wishlist.dart';
-import '../../domain/group_gift.dart';
 import '../../domain/wishtick_event.dart';
 
 /// A short "In 3 days" / "Today" pill, shared by the gift and event cards.
@@ -57,8 +57,8 @@ class WhenPill extends StatelessWidget {
 
 /// The gold chip-in card (Figma `51:11`) — goal, raised, and a progress bar.
 ///
-/// Read-only this sprint: contributing is Sprint 6, so "Chip in" says so
-/// rather than opening a flow that does not exist.
+/// "Chip in" opens the group gift's own screen, where the contribute sheet
+/// lives (Sprint 6b).
 class GroupGiftCard extends StatelessWidget {
   const GroupGiftCard({
     required this.gift,

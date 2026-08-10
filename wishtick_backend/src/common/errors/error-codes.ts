@@ -81,6 +81,13 @@ export enum ErrorCode {
   GROUP_GIFT_NOT_FOUND = 'GROUP_GIFT_NOT_FOUND',
   GROUP_GIFT_NOT_OPEN = 'GROUP_GIFT_NOT_OPEN',
   GROUP_GIFT_CLOSED = 'GROUP_GIFT_CLOSED',
+  /**
+   * The bill — gifts and charges — is frozen because someone has already
+   * contributed. Distinct from GROUP_GIFT_NOT_OPEN so the client can offer the
+   * one thing that still works (a contribution request) rather than telling
+   * the host their group is closed, which it is not.
+   */
+  GROUP_GIFT_BILL_LOCKED = 'GROUP_GIFT_BILL_LOCKED',
   CONTRIBUTION_EXCEEDS_TARGET = 'CONTRIBUTION_EXCEEDS_TARGET',
   CONTRIBUTION_NOT_FOUND = 'CONTRIBUTION_NOT_FOUND',
   CONTRIBUTION_AMOUNT_INVALID = 'CONTRIBUTION_AMOUNT_INVALID',

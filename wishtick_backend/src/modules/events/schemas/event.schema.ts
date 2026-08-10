@@ -52,11 +52,52 @@ export class Event {
   @Prop({ type: String, default: null, trim: true, maxlength: 2000 })
   description!: string | null;
 
+  /**
+   * Where it is happening — the required Location field on `257:755`.
+   *
+   * Free text, not a place id: the design asks for "Mysore Socials", and
+   * demanding a geocoded address for a birthday at someone's flat would be
+   * worse than useless. It reaches the invitee, which is the whole point —
+   * before this, an invitation showed a time and no place.
+   */
+  @Prop({ type: String, default: null, trim: true, maxlength: 200 })
+  venue!: string | null;
+
+  /**
+   * Who the event is for, and how the host knows them — the two required
+   * fields on `257:733`.
+   *
+   * The same pair an ImportantDate already carries. Kept on the event rather
+   * than inferred from the title because "Rahul & Priya's Anniversary" does
+   * not tell a reminder, an invite card, or the guest list who to name.
+   */
+  @Prop({ type: String, default: null, trim: true, maxlength: 120 })
+  personName!: string | null;
+
+  /** A `relation` taxonomy key (`2252:423`), not free text. */
+  @Prop({ type: String, default: null, trim: true, maxlength: 60 })
+  relation!: string | null;
+
   @Prop({ type: String, default: null })
   coverUrl!: string | null;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: 'Media', default: null })
   coverMediaId!: Types.ObjectId | null;
+
+  /**
+   * The host's own invitation artwork (`2248:70`), uploaded instead of designed
+   * from a template.
+   *
+   * Separate from the cover: a cover decorates the event, this *is* the
+   * invitation. When set it wins over `inviteTemplate` on the invitee's screen
+   * — the host picked one path or the other, and showing both would be two
+   * invitations to the same party.
+   */
+  @Prop({ type: String, default: null })
+  inviteMediaUrl!: string | null;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'Media', default: null })
+  inviteMediaId!: Types.ObjectId | null;
 
   @Prop({
     type: String,

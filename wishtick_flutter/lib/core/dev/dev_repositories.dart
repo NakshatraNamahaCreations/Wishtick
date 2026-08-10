@@ -1161,7 +1161,7 @@ class DevMediaRepository implements MediaRepository {
   static const _latency = Duration(milliseconds: 300);
 
   @override
-  Future<MediaView> uploadImage({
+  Future<MediaView> uploadFile({
     required XFile file,
     required MediaPurpose purpose,
   }) async {

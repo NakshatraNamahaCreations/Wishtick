@@ -52,6 +52,18 @@ abstract final class AppPalette {
   static const amber = Color(0xFFF3AB4A);
   static const amberSoft = Color(0xFFF9D08B);
 
+  /// Fills and inks for the RSVP pills on the guest list (`4099:1256`).
+  ///
+  /// Deliberately not [tealSoft]/[amberSoft]: those are mid-tone *accents*, and
+  /// the frame's own ink measured against them comes out under 2:1 — the pill
+  /// label is what a host reads down the list, so it has to be legible. The
+  /// fills are sampled from the frame; the inks are darkened from it until they
+  /// clear AA (5.4:1 and 5.0:1 respectively).
+  static const rsvpYesFill = Color(0xFFECFEF9);
+  static const rsvpYesInk = Color(0xFF1F7A62);
+  static const rsvpMaybeFill = Color(0xFFFBE3CF);
+  static const rsvpMaybeInk = Color(0xFF9A4A08);
+
   // --- Blue -----------------------------------------------------------------
   static const blue = Color(0xFF4E8BE9);
   static const blueSoft = Color(0xFF8FB4F0);
@@ -86,6 +98,11 @@ abstract final class AppPalette {
   static const redAlert = Color(0xFFD51112);
   static const redAlertSubtle = Color(0xFFFFD8D5);
 
+  /// Ink for a "Declined" pill. [redAlert] on [redAlertSubtle] measures 4.09:1
+  /// — under AA — and darkening [redAlert] itself would dim every destructive
+  /// button in the app, which is not what needs fixing.
+  static const redAlertInk = Color(0xFFB00E0F);
+
   // Sampled pixel-by-pixel from the 393-px-wide frame exports on 2026-08-03,
   // after the shipped screens turned out to disagree with the Color System
   // page. Where they conflict the screens win — they are what gets compared.
@@ -109,6 +126,21 @@ abstract final class AppPalette {
   /// Fill of an unselected selectable tile — more lavender than [violetPale],
   /// which the input fields use.
   static const lavenderTile = Color(0xFFF5F3FF);
+
+  /// Fill of a value chip — the suggested-contribution amounts on
+  /// `299:1658`. Deeper than [lavenderTile] because these sit on the beige
+  /// page rather than on a white card, and the lighter tint disappears there.
+  static const lavenderChip = Color(0xFFE2D9EA);
+
+  /// The money-handling accent. Sampled from the "Receive Contributions via"
+  /// panel (`299:1658`) and the settle-up UPI panels (`4092:174`, `4093:444`,
+  /// `4099:976`), which all share this mint-on-deep-teal pairing.
+  ///
+  /// Deliberately not [teal]: that is the success tick, and a UPI panel is not
+  /// a success state — it is where the money goes. #196A56 also clears 7:1 on
+  /// the mint, which #3FBFA6 does not come close to.
+  static const payTeal = Color(0xFF196A56);
+  static const payMint = Color(0xFFF1FEF5);
 
   /// The red that fills the onboarding progress heart as steps complete.
   /// Deliberately not [redAlert]: that is the alarm colour for errors and
@@ -142,6 +174,12 @@ abstract final class AppPalette {
   static const darkPinkSubtle = Color(0xFF3A1F2C);
   static const darkTeal = Color(0xFF4CB878);
   static const darkTealSubtle = Color(0xFF1B3A29);
+
+  /// Dark counterparts of the money accent. [payTeal] is far too dark to read
+  /// on the dark ramp (1.3:1), so it steps up to a bright mint; the panel fill
+  /// steps down to a deep one.
+  static const darkPayTeal = Color(0xFF5FD3AE);
+  static const darkPaySubtle = Color(0xFF13332B);
   static const darkCoral = Color(0xFFFF6B6B);
   static const darkCoralSubtle = Color(0xFF3D1D1D);
   static const darkAmberSubtle = Color(0xFF3D2E18);

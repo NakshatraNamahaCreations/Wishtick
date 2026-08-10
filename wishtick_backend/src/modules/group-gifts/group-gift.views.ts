@@ -1,3 +1,4 @@
+import type { WishlistItemDocument } from 'src/modules/wishlists/schemas/wishlist-item.schema';
 import type { UserDocument } from 'src/modules/users/schemas/user.schema';
 import type { ContributionDocument } from './schemas/contribution.schema';
 import type { GroupGiftDocument } from './schemas/group-gift.schema';
@@ -42,6 +43,30 @@ export interface GroupGiftLineView {
   addedAt: Date;
 }
 
+/**
+ * One row of "Selected Gifts (N)" (`4007:801`) — everything that screen draws,
+ * already ordered primary-first.
+ *
+ * Assembled here rather than left to the client because the primary item lives
+ * on `gift.itemId` while the extras live in `gift.lines`: every client would
+ * otherwise re-derive the same concatenation, and each would have to decide
+ * separately that the primary is the one you cannot remove.
+ */
+export interface GroupGiftItemView {
+  /** The line id, or null for the primary item — which has no line. */
+  lineId: string | null;
+  itemId: string;
+  title: string;
+  imageUrl: string | null;
+  amountMinor: number | null;
+  /**
+   * False for the primary item: dropping it would leave a group gift for
+   * nothing, so the design offers cancel instead (`4007:801` shows the × on
+   * extras only).
+   */
+  removable: boolean;
+}
+
 export interface GroupGiftView {
   id: string;
   itemId: string;
@@ -49,6 +74,12 @@ export interface GroupGiftView {
   status: string;
   /** The host's name for it, e.g. "Siya's birthday gift". */
   title: string;
+  /**
+   * Who started it. Needed so the participant list can badge them "Host"
+   * (`316:536`) — `share` only tells the *caller* whether they are the host,
+   * which cannot label anyone else.
+   */
+  hostId: string;
   /** Where members send their share. Wishtick never holds the money. */
   hostUpiId: string | null;
   contributionMode: string;
@@ -60,6 +91,8 @@ export interface GroupGiftView {
   chargesTotalMinor: number;
   charges: GroupGiftChargeView[];
   lines: GroupGiftLineView[];
+  /** "Selected Gifts (N)" — primary first, then the extras. */
+  items: GroupGiftItemView[];
   collectedAmountMinor: number;
   currency: string;
   percentFunded: number;
@@ -71,6 +104,14 @@ export interface GroupGiftView {
   message: string | null;
   ogImageUrl: string | null;
   chatId: string | null;
+  /**
+   * Who the gift is for. Signs the thank-you card (`2219:603`) and names the
+   * group elsewhere. Null when the item cannot be resolved.
+   */
+  recipientName: string | null;
+  /** The recipient's thank-you note (`2219:603`), once they have written it. */
+  thankYouNote: string | null;
+  thankYouAt: Date | null;
   createdAt: Date;
   participants: ParticipantView[];
   recentContributions: ContributionView[];
@@ -128,21 +169,55 @@ const toParticipants = (
     name: displayName(users.get(id.toString())),
   }));
 
+/**
+ * Builds the "Selected Gifts" list. An item the caller cannot resolve is still
+ * listed — a deleted item must not make the rest of the bill disappear — but
+ * it is named plainly rather than dropped, so the total still adds up on
+ * screen.
+ */
+const toItemViews = (
+  gift: GroupGiftDocument,
+  items: Map<string, WishlistItemDocument>,
+): GroupGiftItemView[] => {
+  const row = (
+    itemId: string,
+    lineId: string | null,
+    amountMinor: number | null,
+  ): GroupGiftItemView => {
+    const item = items.get(itemId);
+    return {
+      lineId,
+      itemId,
+      title: item?.title ?? 'Unavailable item',
+      imageUrl: item?.imageUrls?.[0] ?? null,
+      amountMinor: amountMinor ?? item?.price?.amountMinor ?? null,
+      removable: lineId !== null,
+    };
+  };
+  return [
+    row(gift.itemId.toString(), null, null),
+    ...gift.lines.map((line) => row(line.itemId.toString(), line._id.toString(), line.amountMinor)),
+  ];
+};
+
 export function toGroupGiftView(input: {
   gift: GroupGiftDocument;
   users: Map<string, UserDocument>;
+  items: Map<string, WishlistItemDocument>;
   recentContributions: ContributionDocument[];
   myContributionMinor: number;
   canManage: boolean;
   shareBaseUrl: string;
 }): GroupGiftView {
-  const { gift, users, recentContributions, myContributionMinor, canManage, shareBaseUrl } = input;
+  const { gift, users, items, recentContributions, myContributionMinor, canManage, shareBaseUrl } =
+    input;
   const view: GroupGiftView = {
     id: gift._id.toString(),
     itemId: gift.itemId.toString(),
     wishlistId: gift.wishlistId.toString(),
     status: gift.status,
     title: gift.title,
+    hostId: gift.initiatorId.toString(),
     hostUpiId: gift.hostUpiId,
     contributionMode: gift.contributionMode,
     suggestedAmountsMinor: gift.suggestedAmountsMinor,
@@ -164,6 +239,7 @@ export function toGroupGiftView(input: {
       amountMinor: line.amountMinor,
       addedAt: line.addedAt,
     })),
+    items: toItemViews(gift, items),
     collectedAmountMinor: gift.collectedAmountMinor,
     currency: gift.currency,
     // Progress stays measured against the *target* the group set, not the true
@@ -178,6 +254,12 @@ export function toGroupGiftView(input: {
     message: gift.message,
     ogImageUrl: gift.ogImageUrl,
     chatId: gift.chatId ? gift.chatId.toString() : null,
+    recipientName: (() => {
+      const primary = items.get(gift.itemId.toString());
+      return primary ? displayName(users.get(primary.ownerId.toString())) : null;
+    })(),
+    thankYouNote: gift.thankYouNote,
+    thankYouAt: gift.thankYouAt,
     createdAt: gift.createdAt,
     participants: toParticipants(gift, users),
     recentContributions: recentContributions.map((c) => toContributionView(c, users)),

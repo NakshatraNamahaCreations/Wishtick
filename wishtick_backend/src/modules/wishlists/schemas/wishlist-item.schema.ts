@@ -130,6 +130,21 @@ export class WishlistItem {
   status!: WishlistItemStatus;
 
   /**
+   * Withheld from the owner's own view of their list.
+   *
+   * Set only by the group-gift "Add Another Gift" flow (`4007:720`), where the
+   * *host* adds a catalogue product to the recipient's wishlist. The recipient
+   * never asked for it, so showing it to them would both confuse the list and
+   * spoil a surprise the group chose to hide. Everyone else sees it normally —
+   * they need to, or two people buy the same thing.
+   *
+   * Not a general privacy mechanism: the owner's *own* items are always theirs
+   * to see. This flag exists because these items are not theirs.
+   */
+  @Prop({ type: Boolean, default: false })
+  hiddenFromOwner!: boolean;
+
+  /**
    * Set when the item was imported from the affiliate catalogue.
    *
    * Used for sync, click attribution, and analytics — never read for display.

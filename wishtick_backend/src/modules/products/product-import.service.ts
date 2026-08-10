@@ -11,6 +11,7 @@ import {
   WishlistItem,
   type WishlistItemDocument,
 } from 'src/modules/wishlists/schemas/wishlist-item.schema';
+import type { WishlistDocument } from 'src/modules/wishlists/schemas/wishlist.schema';
 import { WishlistItemStatus } from 'src/modules/wishlists/wishlist.types';
 import { toItemView, type ItemView } from 'src/modules/wishlists/wishlist.views';
 import { WishlistsService } from 'src/modules/wishlists/wishlists.service';
@@ -54,7 +55,23 @@ export class ProductImportService {
   ): Promise<ItemView> {
     const wishlist = await this.wishlists.findOrFail(wishlistId);
     await this.access.assertCanManage(wishlist, ctx);
+    return toItemView(await this.importForWishlist(wishlist, dto));
+  }
 
+  /**
+   * The import itself, for a caller that has *already* established authority.
+   *
+   * The only such caller is the group-gift "Add Another Gift" flow, where the
+   * host adds a product to the recipient's list — something no other path
+   * permits. Its authority is having initiated that group gift, which this
+   * service cannot check, so the access decision stays with the caller and is
+   * deliberately absent here.
+   */
+  async importForWishlist(
+    wishlist: WishlistDocument,
+    dto: ImportProductDto,
+    options: { hiddenFromOwner?: boolean } = {},
+  ): Promise<WishlistItemDocument> {
     const count = await this.items
       .countDocuments({ wishlistId: wishlist._id, archivedAt: null })
       .exec();
@@ -97,6 +114,7 @@ export class ProductImportService {
       priority: dto.priority ?? 3,
       quantity: dto.quantity ?? 1,
       status: WishlistItemStatus.AVAILABLE,
+      hiddenFromOwner: options.hiddenFromOwner ?? false,
       // Kept for sync and click attribution — never for display.
       sourceProductId: snapshot._id,
       position: (last?.position ?? 0) + POSITION_GAP,
@@ -106,7 +124,7 @@ export class ProductImportService {
     this.logger.log(
       `Imported ${dto.provider}/${dto.externalId} into wishlist ${wishlist._id.toString()}`,
     );
-    return toItemView(item);
+    return item;
   }
 
   /** Items across all active wishlists that came from a given product. */

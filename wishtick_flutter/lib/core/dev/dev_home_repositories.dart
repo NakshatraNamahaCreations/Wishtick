@@ -4,9 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/discover/data/discover_repository.dart';
 import '../../features/discover/domain/discover_feed.dart';
+import '../../features/group_gift/domain/group_gift.dart';
 import '../../features/home/data/home_repository.dart';
 import '../../features/home/domain/address.dart';
-import '../../features/home/domain/group_gift.dart';
 import '../../features/home/domain/upcoming_occasion.dart';
 import '../../features/home/domain/wishtick_event.dart';
 import 'dev_keys.dart';
@@ -257,6 +257,9 @@ class DevHomeRepository implements HomeRepository {
         itemId: 'dev-item-3',
         wishlistId: 'dev-wl-1',
         status: GroupGiftStatus.open,
+        title: "Siya's birthday gift",
+        hostId: 'dev-host-1',
+        createdAt: DateTime.now().subtract(const Duration(days: 2)),
         targetAmountMinor: 1600000,
         collectedAmountMinor: 1440000,
         currency: 'INR',

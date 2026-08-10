@@ -409,7 +409,7 @@ class FakeMediaRepository implements MediaRepository {
   final uploadCalls = <MediaPurpose>[];
 
   @override
-  Future<MediaView> uploadImage({
+  Future<MediaView> uploadFile({
     required XFile file,
     required MediaPurpose purpose,
   }) async {

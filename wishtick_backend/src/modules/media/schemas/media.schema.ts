@@ -7,6 +7,12 @@ export enum MediaPurpose {
   PROFILE_PHOTO = 'profile_photo',
   /** Sprint 5. */
   EVENT_COVER = 'event_cover',
+  /**
+   * Sprint 7 — a host's own invitation artwork (`2248:70`), uploaded instead of
+   * designed from a template. Its own purpose rather than EVENT_COVER because
+   * the design accepts GIF, MP4 and PDF, and a cover image must not.
+   */
+  EVENT_INVITE = 'event_invite',
   /** Sprint 3. */
   WISHLIST_ITEM = 'wishlist_item',
   WISHLIST_COVER = 'wishlist_cover',

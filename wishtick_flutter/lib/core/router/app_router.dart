@@ -6,13 +6,31 @@ import '../../features/auth/presentation/mobile_number_screen.dart';
 import '../../features/auth/presentation/otp_screen.dart';
 import '../../features/auth/presentation/session_controller.dart';
 import '../../features/auth/presentation/welcome_screen.dart';
+import '../../features/chat/presentation/group_chat_screen.dart';
+import '../../features/events/presentation/create_event_details_screen.dart';
+import '../../features/events/presentation/create_event_screen.dart';
+import '../../features/events/presentation/event_guest_detail_screen.dart';
+import '../../features/events/presentation/event_guests_screen.dart';
+import '../../features/events/presentation/event_invite_preview_screen.dart';
+import '../../features/events/presentation/event_invite_templates_screen.dart';
 import '../../features/events/presentation/invite_screen.dart';
+import '../../features/events/presentation/upload_invitation_screen.dart';
 import '../../features/gifting/presentation/gift_details_screen.dart';
 import '../../features/gifting/presentation/gift_item_screen.dart';
 import '../../features/gifting/presentation/order_confirmed_screen.dart';
 import '../../features/gifting/presentation/order_controller.dart';
 import '../../features/gifting/presentation/order_delivered_screen.dart';
 import '../../features/gifting/presentation/track_order_screen.dart';
+import '../../features/group_gift/domain/group_gift.dart';
+import '../../features/group_gift/presentation/create_group_gift_screen.dart';
+import '../../features/group_gift/presentation/group_gift_add_item_screen.dart';
+import '../../features/group_gift/presentation/group_gift_charges_screen.dart';
+import '../../features/group_gift/presentation/group_gift_created_screen.dart';
+import '../../features/group_gift/presentation/group_gift_details_screen.dart';
+import '../../features/group_gift/presentation/group_gift_participants_screen.dart';
+import '../../features/group_gift/presentation/group_gift_settle_screen.dart';
+import '../../features/group_gift/presentation/group_gift_summary_screen.dart';
+import '../../features/group_gift/presentation/group_gift_thank_you_screen.dart';
 import '../../features/home/presentation/delivery_location_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/onboarding/presentation/all_set_screen.dart';
@@ -33,6 +51,7 @@ import '../../features/wishlist/presentation/public_wishlist_screen.dart';
 import '../../features/wishlist/presentation/wishlist_detail_screen.dart';
 import '../../features/wishlist/presentation/wishlist_item_detail_screen.dart';
 import '../../features/wishlist/presentation/wishlist_tab_screen.dart';
+import '../theme/theme_extensions.dart';
 import '../widgets/sprint_placeholder.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
@@ -188,6 +207,147 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => GiftDetailsScreen(
               wishlistId: state.pathParameters['wishlistId']!,
               itemId: state.pathParameters['itemId']!,
+            ),
+          ),
+          GoRoute(
+            path: 'group',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => CreateGroupGiftScreen(
+              wishlistId: state.pathParameters['wishlistId']!,
+              itemId: state.pathParameters['itemId']!,
+            ),
+          ),
+        ],
+      ),
+
+      // Group gifting (Sprint 6b). Creation is four screens deep, so each step
+      // is a child route — backing out of charges lands on the summary rather
+      // than abandoning a group that already exists server-side.
+      GoRoute(
+        path: '/group-gifts/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            GroupGiftDetailsScreen(groupGiftId: state.pathParameters['id']!),
+        routes: [
+          GoRoute(
+            path: 'summary',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => GroupGiftSummaryScreen(
+              groupGiftId: state.pathParameters['id']!,
+              // Handed over by the create screen so the summary paints with
+              // real numbers instead of refetching what it was just given.
+              initial: state.extra as GroupGift?,
+            ),
+            routes: [
+              GoRoute(
+                path: 'add',
+                parentNavigatorKey: _rootNavigatorKey,
+                builder: (context, state) => GroupGiftAddItemScreen(
+                  groupGiftId: state.pathParameters['id']!,
+                ),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'charges',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => GroupGiftChargesScreen(
+              groupGiftId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: 'created',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => GroupGiftCreatedScreen(
+              groupGiftId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: 'participants',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => GroupGiftParticipantsScreen(
+              groupGiftId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: 'chat',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => GroupChatScreen(
+              groupGiftId: state.pathParameters['id']!,
+              chatId: state.extra! as String,
+            ),
+          ),
+          GoRoute(
+            path: 'thank-you',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => GroupGiftThankYouScreen(
+              groupGiftId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: 'settle',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                GroupGiftSettleScreen(groupGiftId: state.pathParameters['id']!),
+          ),
+        ],
+      ),
+      // Events, host side (Sprint 7). The two create steps are siblings rather
+      // than nested: one controller holds the wizard, so backing out of step 2
+      // must land on step 1 with what was typed still there.
+      GoRoute(
+        path: AppRoutes.createEvent,
+        parentNavigatorKey: _rootNavigatorKey,
+        // Non-opaque: `257:733` is a sheet over a dimmed page, and the close
+        // button floats in the gap above it. An opaque page would paint that
+        // gap a flat colour instead.
+        pageBuilder: (context, state) => CustomTransitionPage<void>(
+          key: state.pageKey,
+          opaque: false,
+          barrierDismissible: false,
+          barrierColor: context.colors.overlay,
+          transitionsBuilder: (_, animation, _, child) =>
+              FadeTransition(opacity: animation, child: child),
+          child: const CreateEventScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.createEventDetails,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const CreateEventDetailsScreen(),
+      ),
+      GoRoute(
+        path: '/events/:id/invite',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            EventInviteTemplatesScreen(eventId: state.pathParameters['id']!),
+        routes: [
+          GoRoute(
+            path: 'upload',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                UploadInvitationScreen(eventId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: 'preview',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                EventInvitePreviewScreen(eventId: state.pathParameters['id']!),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/events/:id/guests',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            EventGuestsScreen(eventId: state.pathParameters['id']!),
+        routes: [
+          GoRoute(
+            path: ':inviteId',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => EventGuestDetailScreen(
+              eventId: state.pathParameters['id']!,
+              inviteId: state.pathParameters['inviteId']!,
             ),
           ),
         ],

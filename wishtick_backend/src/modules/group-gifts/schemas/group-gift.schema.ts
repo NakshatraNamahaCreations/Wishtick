@@ -181,6 +181,20 @@ export class GroupGift {
   @Prop({ type: String, default: null, trim: true, maxlength: 120 })
   hostUpiId!: string | null;
 
+  /**
+   * The recipient's thank-you note (`2219:603`).
+   *
+   * Written by the person the gift was for — not the host — which is why it is
+   * gated on the item's owner rather than on `initiatorId`. Only legal once the
+   * gift has actually been bought: thanking people for something that has not
+   * happened is worse than not thanking them.
+   */
+  @Prop({ type: String, default: null, trim: true, maxlength: 1000 })
+  thankYouNote!: string | null;
+
+  @Prop({ type: Date, default: null })
+  thankYouAt!: Date | null;
+
   /** Split equally, or let people give what they like. Advisory. */
   @Prop({
     type: String,

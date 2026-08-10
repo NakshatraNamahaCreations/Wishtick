@@ -16,6 +16,7 @@ import { InviteLinkingListener } from './invite-linking.listener';
 import { InviteNotificationsService } from './invite-notifications.service';
 import { InvitePreviewService } from './invite-preview.service';
 import { InvitesService } from './invites.service';
+import { GuestListExportService } from './guest-list-export.service';
 import { PublicEventsController, PublicInvitesController } from './public-invites.controller';
 import { PublicInvitesService } from './public-invites.service';
 import { Event, EventSchema } from './schemas/event.schema';
@@ -40,6 +41,7 @@ import { Event, EventSchema } from './schemas/event.schema';
   providers: [
     EventsService,
     InvitesService,
+    GuestListExportService,
     PublicInvitesService,
     EventRemindersService,
     EventRemindersRegistrar,
