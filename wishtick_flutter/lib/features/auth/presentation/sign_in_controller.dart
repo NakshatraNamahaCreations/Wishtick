@@ -24,6 +24,8 @@ class SignInState {
     this.attemptsRemaining,
     this.completed = false,
     this.isNewUser = false,
+    this.acceptedTerms = false,
+    this.marketingOptIn = false,
   });
 
   const SignInState.initial()
@@ -36,7 +38,9 @@ class SignInState {
       codeExpiresIn = null,
       attemptsRemaining = null,
       completed = false,
-      isNewUser = false;
+      isNewUser = false,
+      acceptedTerms = false,
+      marketingOptIn = false;
 
   final PhoneNumber? phone;
   final SignInStep step;
@@ -61,7 +65,19 @@ class SignInState {
   final bool completed;
   final bool isNewUser;
 
+  /// Ticking the Terms box is what unlocks "GET OTP". Starts **false**: a
+  /// pre-ticked consent box is not consent under the DPDP Act or the GDPR, so
+  /// the user has to act.
+  final bool acceptedTerms;
+
+  /// Optional promotional email opt-in. Collected here, but see the note on
+  /// [SignInController.setMarketingOptIn] — the API has nowhere to put it yet.
+  final bool marketingOptIn;
+
   bool get canResend => resendIn == Duration.zero && !busy;
+
+  /// Everything the phone step needs before it may ask for a code.
+  bool get canRequestCode => (phone?.isComplete ?? false) && acceptedTerms;
 
   SignInState copyWith({
     PhoneNumber? phone,
@@ -73,6 +89,8 @@ class SignInState {
     int? attemptsRemaining,
     bool? completed,
     bool? isNewUser,
+    bool? acceptedTerms,
+    bool? marketingOptIn,
     bool clearError = false,
     String? error,
   }) {
@@ -87,6 +105,8 @@ class SignInState {
       attemptsRemaining: attemptsRemaining ?? this.attemptsRemaining,
       completed: completed ?? this.completed,
       isNewUser: isNewUser ?? this.isNewUser,
+      acceptedTerms: acceptedTerms ?? this.acceptedTerms,
+      marketingOptIn: marketingOptIn ?? this.marketingOptIn,
     );
   }
 }
@@ -112,10 +132,26 @@ class SignInController extends Notifier<SignInState> {
     state = state.copyWith(phone: phone, clearError: true);
   }
 
+  void setAcceptedTerms(bool value) {
+    state = state.copyWith(acceptedTerms: value, clearError: true);
+  }
+
+  /// Records the promotional-email preference.
+  ///
+  /// It goes no further than this object today: the sign-in API takes only a
+  /// phone number, and no user field exists to hold it. Wire it into the
+  /// profile once the backend grows a marketing-consent field — until then a
+  /// user who opts in here is not yet subscribed anywhere.
+  void setMarketingOptIn(bool value) {
+    state = state.copyWith(marketingOptIn: value);
+  }
+
   /// Sends the code and advances to the code step.
   Future<void> requestCode() async {
     final phone = state.phone;
-    if (phone == null || !phone.isComplete || state.busy) return;
+    // Terms included: the button is disabled without them, but a stray Enter
+    // on the keyboard reaches here too.
+    if (phone == null || !state.canRequestCode || state.busy) return;
 
     state = state.copyWith(busy: true, clearError: true);
     try {

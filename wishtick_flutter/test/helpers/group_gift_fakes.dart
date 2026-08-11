@@ -230,8 +230,10 @@ class FakeGroupGiftRepository implements GroupGiftRepository {
   }
 
   @override
-  Future<GroupGift> removeContribution(String id, String contributionId) async =>
-      _guard(gift);
+  Future<GroupGift> removeContribution(
+    String id,
+    String contributionId,
+  ) async => _guard(gift);
 
   @override
   Future<GroupGift> purchase(String id, {String? note}) async => _guard(gift);
@@ -254,9 +256,8 @@ class FakeGroupGiftRepository implements GroupGiftRepository {
     bool? rotate,
     String? passcode,
     DateTime? expiresAt,
-  }) async => _guard(
-    const GroupGiftShare(slug: 's', url: 'u', hasPasscode: false),
-  );
+  }) async =>
+      _guard(const GroupGiftShare(slug: 's', url: 'u', hasPasscode: false));
 
   @override
   Future<GroupGiftBalance> balance(String id) async {
@@ -306,9 +307,7 @@ class FakeGroupGiftRepository implements GroupGiftRepository {
     bool? saveToProfile,
   }) async {
     calls.add('shareUpi:$upiId:$saveToProfile');
-    return _guard(
-      buildSettlement(id: settlementId, upiId: upiId),
-    );
+    return _guard(buildSettlement(id: settlementId, upiId: upiId));
   }
 
   @override

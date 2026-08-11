@@ -151,8 +151,8 @@ class GroupGiftController extends Notifier<GroupGiftState> {
     'GROUP_GIFT_BILL_LOCKED' =>
       'Someone has already chipped in, so the amount is locked. '
           'Ask for more with a contribution request instead.',
-    'ITEM_NOT_AVAILABLE' || 'ITEM_ALREADY_CLAIMED' =>
-      'Someone else has already claimed that item.',
+    'ITEM_NOT_AVAILABLE' ||
+    'ITEM_ALREADY_CLAIMED' => 'Someone else has already claimed that item.',
     _ => e.message,
   };
 }

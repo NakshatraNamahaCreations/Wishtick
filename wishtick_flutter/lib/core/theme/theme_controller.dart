@@ -14,6 +14,17 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   );
 });
 
+/// Whether the app offers a dark theme at all.
+///
+/// **Off for now — Wishtick ships light-only.** Flipping this to `true` is the
+/// whole switch: the app stops pinning [ThemeMode.light], `darkTheme` is handed
+/// to MaterialApp again, and Appearance offers all three options. Nothing is
+/// deleted while it is off — [WishtickColors.dark] stays defined and stays
+/// under the contrast tests, and the memory story deliberately reads it
+/// whatever this says, because that screen is dark by design rather than by
+/// preference.
+const kDarkModeEnabled = false;
+
 /// Persisted light / dark / system preference, surfaced in Profile → Appearance.
 class ThemeModeController extends Notifier<ThemeMode> {
   static const prefsKey = 'wishtick.theme_mode';

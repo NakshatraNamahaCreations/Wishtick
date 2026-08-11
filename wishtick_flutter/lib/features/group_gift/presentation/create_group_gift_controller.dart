@@ -65,7 +65,10 @@ class CreateGroupGiftState {
   /// between ₹1,000 and ₹2,000 rather than trailing them.
   List<int> get allSuggestedAmountsMinor {
     final custom = customAmountMinor;
-    final all = {...suggestedAmountsMinor, if (custom != null && custom > 0) custom};
+    final all = {
+      ...suggestedAmountsMinor,
+      if (custom != null && custom > 0) custom,
+    };
     return all.toList()..sort();
   }
 
@@ -162,8 +165,8 @@ class CreateGroupGiftController extends Notifier<CreateGroupGiftState> {
   }
 
   String _message(ApiException e) => switch (e.code) {
-    'ITEM_NOT_AVAILABLE' || 'ITEM_ALREADY_CLAIMED' =>
-      'Someone else has already claimed this item.',
+    'ITEM_NOT_AVAILABLE' ||
+    'ITEM_ALREADY_CLAIMED' => 'Someone else has already claimed this item.',
     'CANNOT_GIFT_OWN_ITEM' => 'You cannot start a group gift on your own item.',
     _ => e.message,
   };

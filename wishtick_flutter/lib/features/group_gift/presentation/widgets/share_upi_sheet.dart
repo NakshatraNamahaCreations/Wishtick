@@ -78,9 +78,7 @@ class _ShareUpiSheetState extends State<_ShareUpiSheet> {
               inputFormatters: [
                 FilteringTextInputFormatter.deny(RegExp(r'\s')),
               ],
-              decoration: const InputDecoration(
-                hintText: 'Enter your UPI ID',
-              ),
+              decoration: const InputDecoration(hintText: 'Enter your UPI ID'),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: AppSpacing.xxl),
@@ -121,10 +119,9 @@ class _ShareUpiSheetState extends State<_ShareUpiSheet> {
             ElevatedButton(
               onPressed: !valid
                   ? null
-                  : () => Navigator.of(context).pop((
-                      upiId: _upi.text.trim(),
-                      saveToProfile: _save,
-                    )),
+                  : () => Navigator.of(
+                      context,
+                    ).pop((upiId: _upi.text.trim(), saveToProfile: _save)),
               child: const Text('Submit'),
             ),
           ],

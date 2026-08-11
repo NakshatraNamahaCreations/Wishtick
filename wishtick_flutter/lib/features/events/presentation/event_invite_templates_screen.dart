@@ -131,7 +131,7 @@ class _EventInviteTemplatesScreenState
                   children: [
                     Text(
                       'Choose a Template',
-                      style: context.text.headlineSmall?.copyWith(
+                      style: context.text.displaySmall?.copyWith(
                         color: context.headlineBrandColor,
                         fontWeight: FontWeight.w700,
                       ),
@@ -175,8 +175,7 @@ class _EventInviteTemplatesScreenState
                           selected: visible[i].id == _selectedTemplateId,
                           onTap: () => setState(() {
                             _selectedTemplateId = visible[i].id;
-                            _selectedVariantKey =
-                                visible[i].variants.isEmpty
+                            _selectedVariantKey = visible[i].variants.isEmpty
                                 ? null
                                 : visible[i].variants.first.key;
                           }),
@@ -251,9 +250,7 @@ class _FilterTabs extends StatelessWidget {
               onTap: () => onSelect(tab.type),
               child: Container(
                 alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.lg,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(

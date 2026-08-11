@@ -212,7 +212,6 @@ class ChatController extends Notifier<ChatState> {
   };
 }
 
-final chatProvider =
-    NotifierProvider.family<ChatController, ChatState, String>(
-      ChatController.new,
-    );
+final chatProvider = NotifierProvider.family<ChatController, ChatState, String>(
+  ChatController.new,
+);

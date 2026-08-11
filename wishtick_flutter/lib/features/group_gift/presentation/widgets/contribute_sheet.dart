@@ -143,14 +143,13 @@ class _ContributeSheetState extends State<_ContributeSheet> {
               textCapitalization: TextCapitalization.sentences,
               maxLength: 280,
               buildCounter:
-                  (_, {
+                  (
+                    _, {
                     required currentLength,
                     required isFocused,
                     required maxLength,
                   }) => null,
-              decoration: const InputDecoration(
-                hintText: 'Happy Birthday!',
-              ),
+              decoration: const InputDecoration(hintText: 'Happy Birthday!'),
             ),
 
             const SizedBox(height: AppSpacing.section),

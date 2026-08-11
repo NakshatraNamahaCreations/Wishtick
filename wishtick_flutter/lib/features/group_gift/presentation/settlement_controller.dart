@@ -82,7 +82,9 @@ class SettlementController extends Notifier<SettlementState> {
   Future<bool> distributeReturn({
     List<({String contributorId, int amountMinor})>? custom,
     String? note,
-  }) => _act(() => _repo.distributeReturn(groupGiftId, custom: custom, note: note));
+  }) => _act(
+    () => _repo.distributeReturn(groupGiftId, custom: custom, note: note),
+  );
 
   /// Host asks for more because the price moved. Raises the target as well as
   /// the rows, so the progress bar cannot keep claiming the group is funded.

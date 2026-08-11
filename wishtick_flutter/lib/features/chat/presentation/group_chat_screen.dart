@@ -66,11 +66,7 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
   /// zero rather than `maxScrollExtent`.
   void _jumpToLatest() {
     if (!_scroll.hasClients) return;
-    _scroll.animateTo(
-      0,
-      duration: AppDurations.fast,
-      curve: Curves.easeOut,
-    );
+    _scroll.animateTo(0, duration: AppDurations.fast, curve: Curves.easeOut);
   }
 
   @override

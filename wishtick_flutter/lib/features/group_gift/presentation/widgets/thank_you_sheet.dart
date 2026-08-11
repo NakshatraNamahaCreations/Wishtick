@@ -8,10 +8,7 @@ import '../../../../core/theme/theme_extensions.dart';
 /// ⚠️ **Not in the design.** `2219:603` and `2288:5` are both the read view of
 /// the card; no composer was drawn. This is the smallest thing that makes the
 /// card reachable — replace it when the real frame lands.
-Future<String?> showThankYouSheet(
-  BuildContext context, {
-  String? existing,
-}) {
+Future<String?> showThankYouSheet(BuildContext context, {String? existing}) {
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,

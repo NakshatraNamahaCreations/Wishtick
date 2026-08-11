@@ -71,8 +71,7 @@ class CreateEventState {
       );
 
   /// Step 1's asterisks: a person and a relation.
-  bool get step1Complete =>
-      personName.trim().isNotEmpty && relationKey != null;
+  bool get step1Complete => personName.trim().isNotEmpty && relationKey != null;
 
   /// Step 2's: everything on `257:755` carries one.
   bool get step2Complete =>

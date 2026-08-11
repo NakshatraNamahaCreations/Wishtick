@@ -50,6 +50,35 @@ export const MEDIA_RULES: Record<MediaPurpose, PurposeRule> = {
       'application/pdf': 'pdf',
     },
   },
+  [MediaPurpose.MEMORY_COVER]: {
+    mimeTypes: IMAGE_TYPES,
+    maxBytes: 8 * MB,
+    extensions: IMAGE_EXTENSIONS,
+  },
+  // A wish may be a photo, a video or a voice note (`2073:55`, `2074:129`,
+  // `2074:152`). Roomier than a cover and tighter than a reel clip: nothing
+  // here is re-encoded, so what a contributor uploads is what plays.
+  [MediaPurpose.MEMORY_WISH]: {
+    mimeTypes: [
+      ...IMAGE_TYPES,
+      'video/mp4',
+      'video/quicktime',
+      'audio/mpeg',
+      'audio/mp4',
+      'audio/aac',
+      'audio/wav',
+    ],
+    maxBytes: 50 * MB,
+    extensions: {
+      ...IMAGE_EXTENSIONS,
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'audio/mpeg': 'mp3',
+      'audio/mp4': 'm4a',
+      'audio/aac': 'aac',
+      'audio/wav': 'wav',
+    },
+  },
   [MediaPurpose.WISHLIST_ITEM]: {
     mimeTypes: IMAGE_TYPES,
     maxBytes: 8 * MB,

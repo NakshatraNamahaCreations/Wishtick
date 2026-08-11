@@ -143,9 +143,8 @@ class ChatSocket implements ChatSocketPort {
   }
 
   @override
-  void leave(String chatId) => _socket?.emit(ChatEvents.leave, {
-    'chatId': chatId,
-  });
+  void leave(String chatId) =>
+      _socket?.emit(ChatEvents.leave, {'chatId': chatId});
 
   @override
   Future<void> dispose() async {

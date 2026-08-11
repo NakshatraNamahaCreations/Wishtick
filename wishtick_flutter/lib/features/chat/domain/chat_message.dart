@@ -47,11 +47,8 @@ enum SystemMessageType {
 
   final String wireValue;
 
-  static SystemMessageType fromWire(String? value) =>
-      SystemMessageType.values.firstWhere(
-        (v) => v.wireValue == value,
-        orElse: () => unknown,
-      );
+  static SystemMessageType fromWire(String? value) => SystemMessageType.values
+      .firstWhere((v) => v.wireValue == value, orElse: () => unknown);
 }
 
 @immutable
@@ -66,8 +63,7 @@ class MessageReaction {
   final int count;
   final List<String> userIds;
 
-  bool reactedBy(String? userId) =>
-      userId != null && userIds.contains(userId);
+  bool reactedBy(String? userId) => userId != null && userIds.contains(userId);
 
   factory MessageReaction.fromJson(Map<String, dynamic> json) =>
       MessageReaction(

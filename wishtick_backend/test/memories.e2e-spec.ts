@@ -1,0 +1,561 @@
+import request from 'supertest';
+import type { INestApplication } from '@nestjs/common';
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { ErrorCode } from 'src/common/errors/error-codes';
+import { MemoriesService } from 'src/modules/memories/memories.service';
+import { MediaPurpose } from 'src/modules/media/schemas/media.schema';
+import {
+  MemoryCapsule,
+  type MemoryCapsuleDocument,
+} from 'src/modules/memories/schemas/memory-capsule.schema';
+import { createTestApp, V1, type TestApp } from './utils/test-app';
+
+const PASSWORD = 'correct-horse-battery-staple';
+
+/** A 1x1 PNG — the smallest thing the media pipeline will accept as real bytes. */
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+interface Envelope<T> {
+  success: boolean;
+  data: T;
+  error?: { code: string; message: string; details?: unknown };
+}
+
+interface Actor {
+  token: string;
+  userId: string;
+  email: string;
+}
+
+interface MemoryView {
+  id: string;
+  title: string;
+  personName: string;
+  occasion: string;
+  status: string;
+  unlockAt: string;
+  wishCount: number;
+  contributors: string[];
+  isHost: boolean;
+  coverUrl: string | null;
+  wishes: { id: string; kind: string; text: string | null; mediaUrl: string | null }[];
+  share?: { slug: string; url: string };
+}
+
+describe('Memories (e2e)', () => {
+  let ctx: TestApp;
+  let app: INestApplication;
+  let capsuleModel: Model<MemoryCapsuleDocument>;
+  let memories: MemoriesService;
+  let seq = 0;
+
+  const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+  const newUser = async (): Promise<Actor> => {
+    const email = `mem${++seq}.${Date.now()}@example.com`;
+    const res = await request(app.getHttpServer())
+      .post(`${V1}/auth/signup`)
+      .send({ email, password: PASSWORD, name: 'Aarav Sharma' })
+      .expect(201);
+    const body = res.body as Envelope<{ user: { id: string }; tokens: { accessToken: string } }>;
+    return { token: body.data.tokens.accessToken, userId: body.data.user.id, email };
+  };
+
+  const IN_A_WEEK = (): string => new Date(Date.now() + 7 * 86_400_000).toISOString();
+
+  const createMemory = async (
+    host: Actor,
+    over: Record<string, unknown> = {},
+  ): Promise<MemoryView> => {
+    const res = await request(app.getHttpServer())
+      .post(`${V1}/memories`)
+      .set(auth(host.token))
+      .send({
+        title: "Ananya's Birthday",
+        personName: 'Ananya',
+        relation: 'partner_wife',
+        occasion: 'birthday',
+        unlockAt: IN_A_WEEK(),
+        timezone: 'Asia/Kolkata',
+        ...over,
+      })
+      .expect(201);
+    return (res.body as Envelope<MemoryView>).data;
+  };
+
+  /** Presign → PUT the real bytes → confirm, for one purpose. */
+  const uploadMedia = async (actor: Actor, purpose: string): Promise<string> => {
+    const ticket = (
+      await request(app.getHttpServer())
+        .post(`${V1}/media/upload-url`)
+        .set(auth(actor.token))
+        .send({ purpose, contentType: 'image/png' })
+        .expect(201)
+    ).body as Envelope<{ mediaId: string; uploadUrl: string }>;
+
+    const url = new URL(ticket.data.uploadUrl);
+    await request(app.getHttpServer())
+      .put(url.pathname + url.search)
+      .set('Content-Type', 'image/png')
+      .send(PNG_BYTES)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(`${V1}/media/confirm`)
+      .set(auth(actor.token))
+      .send({ mediaId: ticket.data.mediaId })
+      .expect(201);
+
+    return ticket.data.mediaId;
+  };
+
+  beforeAll(async () => {
+    ctx = await createTestApp();
+    app = ctx.app;
+    capsuleModel = app.get<Model<MemoryCapsuleDocument>>(getModelToken(MemoryCapsule.name));
+    memories = app.get(MemoriesService);
+  }, 120_000);
+
+  afterAll(async () => {
+    await ctx.close();
+  });
+
+  // Signup is capped at 5/hour per IP, and every test here mints two or three
+  // users. Without this the sixth account in the run is throttled.
+  beforeEach(async () => {
+    await ctx.reset();
+  });
+
+  describe('creating a capsule (4104:1539, 2198:73)', () => {
+    it('round-trips the fields the create flow collects', async () => {
+      const host = await newUser();
+      const created = await createMemory(host, {
+        description: "Let's make her day extra special.",
+        occasionDate: '2026-07-17T00:00:00.000Z',
+        includeYear: true,
+      });
+
+      expect(created.title).toBe("Ananya's Birthday");
+      expect(created.personName).toBe('Ananya');
+      expect(created.occasion).toBe('birthday');
+      expect(created.status).toBe('collecting');
+      expect(created.isHost).toBe(true);
+      // The contribute link is host-only.
+      expect(created.share?.slug).toEqual(expect.any(String));
+    });
+
+    it('refuses an unlock instant in the past', async () => {
+      const host = await newUser();
+      const res = await request(app.getHttpServer())
+        .post(`${V1}/memories`)
+        .set(auth(host.token))
+        .send({
+          title: 'Too late',
+          personName: 'Ananya',
+          occasion: 'birthday',
+          unlockAt: new Date(Date.now() - 60_000).toISOString(),
+          timezone: 'Asia/Kolkata',
+        })
+        .expect(400);
+
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.VALIDATION_FAILED);
+    });
+
+    it('refuses an unlock instant beyond the ceiling', async () => {
+      const host = await newUser();
+      const farOff = new Date();
+      farOff.setFullYear(farOff.getFullYear() + 6);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories`)
+        .set(auth(host.token))
+        .send({
+          title: 'Far future',
+          personName: 'Ananya',
+          occasion: 'birthday',
+          unlockAt: farOff.toISOString(),
+          timezone: 'Asia/Kolkata',
+        })
+        .expect(400);
+    });
+
+    it('attaches a cover, and refuses one uploaded for something else', async () => {
+      const host = await newUser();
+      const coverId = await uploadMedia(host, MediaPurpose.MEMORY_COVER);
+      const withCover = await createMemory(host, { coverMediaId: coverId });
+      expect(withCover.coverUrl).toEqual(expect.any(String));
+
+      const wrongPurpose = await uploadMedia(host, MediaPurpose.WISHLIST_COVER);
+      const res = await request(app.getHttpServer())
+        .post(`${V1}/memories`)
+        .set(auth(host.token))
+        .send({
+          title: 'Wrong cover',
+          personName: 'Ananya',
+          occasion: 'birthday',
+          unlockAt: IN_A_WEEK(),
+          timezone: 'Asia/Kolkata',
+          coverMediaId: wrongPurpose,
+        })
+        .expect(400);
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEDIA_TYPE_NOT_ALLOWED);
+    });
+
+    it('answers 404 — not 403 — for a stranger editing it', async () => {
+      const host = await newUser();
+      const stranger = await newUser();
+      const memory = await createMemory(host);
+
+      await request(app.getHttpServer())
+        .patch(`${V1}/memories/${memory.id}`)
+        .set(auth(stranger.token))
+        .send({ title: 'Mine now' })
+        .expect(404);
+    });
+  });
+
+  // The whole point of the feature. If any of these leak, the surprise is gone.
+  describe('the time-lock', () => {
+    it('withholds wish content until the capsule opens, but not the count', async () => {
+      const host = await newUser();
+      const friend = await newUser();
+      const memory = await createMemory(host);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(friend.token))
+        .send({ kind: 'text', text: 'Happy Birthday!', contributorName: 'Priya Shah' })
+        .expect(201);
+
+      // The host — who owns it — still cannot read what is inside.
+      const sealed = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/${memory.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<MemoryView>;
+
+      expect(sealed.data.status).toBe('collecting');
+      expect(sealed.data.wishes).toEqual([]);
+      // Metadata IS visible — the frames show "4 Wishes" on a sealed capsule.
+      expect(sealed.data.wishCount).toBe(1);
+      expect(sealed.data.contributors).toEqual(['Priya']);
+    });
+
+    it('refuses the wish list outright while sealed, rather than answering empty', async () => {
+      // An empty 200 would read as "nobody wrote anything", which is a lie.
+      const host = await newUser();
+      const friend = await newUser();
+      const memory = await createMemory(host);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(friend.token))
+        .send({ kind: 'text', text: 'Happy Birthday!' })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(host.token))
+        .expect(409);
+
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEMORY_LOCKED);
+    });
+
+    it('never carries wish content on the public contribute link, even once open', async () => {
+      const host = await newUser();
+      const friend = await newUser();
+      const memory = await createMemory(host);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(friend.token))
+        .send({ kind: 'text', text: 'A secret message' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/unlock`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const publicView = (
+        await request(app.getHttpServer())
+          .get(`${V1}/public/memories/${memory.share!.slug}`)
+          .expect(200)
+      ).body as Envelope<Record<string, unknown>>;
+
+      expect(publicView.data.title).toBe("Ananya's Birthday");
+      expect(publicView.data.wishCount).toBe(1);
+      expect(JSON.stringify(publicView.data)).not.toContain('A secret message');
+      expect(publicView.data.wishes).toBeUndefined();
+    });
+  });
+
+  describe('unlocking', () => {
+    it('opens on the host’s say-so and hands over every wish', async () => {
+      const host = await newUser();
+      const friend = await newUser();
+      const memory = await createMemory(host);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(friend.token))
+        .send({ kind: 'text', text: 'Happy Birthday!' })
+        .expect(201);
+
+      const opened = (
+        await request(app.getHttpServer())
+          .post(`${V1}/memories/${memory.id}/unlock`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<MemoryView>;
+
+      expect(opened.data.status).toBe('unlocked');
+      expect(opened.data.wishes).toHaveLength(1);
+      expect(opened.data.wishes[0].text).toBe('Happy Birthday!');
+
+      const list = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/${memory.id}/wishes`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ text: string | null }[]>;
+      expect(list.data).toHaveLength(1);
+    });
+
+    it('the scheduled job opens it, and is a no-op once the date has moved', async () => {
+      const host = await newUser();
+      const memory = await createMemory(host);
+      const before = await capsuleModel.findById(memory.id).exec();
+      const originalIso = before!.unlockAt.toISOString();
+
+      // The host pushes the date back; the queued job still carries the old one.
+      const later = new Date(Date.now() + 30 * 86_400_000).toISOString();
+      await request(app.getHttpServer())
+        .patch(`${V1}/memories/${memory.id}`)
+        .set(auth(host.token))
+        .send({ unlockAt: later })
+        .expect(200);
+
+      const stale = await memories.fireUnlock({
+        capsuleId: memory.id,
+        unlockAtIso: originalIso,
+      });
+      expect(stale.unlocked).toBe(false);
+      expect((await capsuleModel.findById(memory.id).exec())!.status).toBe('collecting');
+
+      // The rescheduled job carries the new instant and does open it.
+      const fresh = await memories.fireUnlock({ capsuleId: memory.id, unlockAtIso: later });
+      expect(fresh.unlocked).toBe(true);
+      expect((await capsuleModel.findById(memory.id).exec())!.status).toBe('unlocked');
+    });
+
+    it('refuses to open twice, and refuses edits once open', async () => {
+      const host = await newUser();
+      const memory = await createMemory(host);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/unlock`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const again = await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/unlock`)
+        .set(auth(host.token))
+        .expect(409);
+      expect((again.body as Envelope<unknown>).error?.code).toBe(
+        ErrorCode.INVALID_MEMORY_TRANSITION,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`${V1}/memories/${memory.id}`)
+        .set(auth(host.token))
+        .send({ title: 'Renamed' })
+        .expect(409);
+    });
+
+    it('stops accepting wishes once it is open', async () => {
+      const host = await newUser();
+      const friend = await newUser();
+      const memory = await createMemory(host);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/unlock`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(friend.token))
+        .send({ kind: 'text', text: 'Too late' })
+        .expect(409);
+      expect((res.body as Envelope<unknown>).error?.code).toBe(
+        ErrorCode.MEMORY_NOT_ACCEPTING_WISHES,
+      );
+    });
+  });
+
+  describe('wishes', () => {
+    it('requires text for a text wish and a file for a photo wish', async () => {
+      const host = await newUser();
+      const memory = await createMemory(host);
+
+      const noText = await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(host.token))
+        .send({ kind: 'text' })
+        .expect(400);
+      expect((noText.body as Envelope<unknown>).error?.code).toBe(
+        ErrorCode.MEMORY_WISH_TEXT_REQUIRED,
+      );
+
+      const noFile = await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(host.token))
+        .send({ kind: 'photo', text: 'Look at this' })
+        .expect(400);
+      expect((noFile.body as Envelope<unknown>).error?.code).toBe(
+        ErrorCode.MEMORY_WISH_MEDIA_REQUIRED,
+      );
+    });
+
+    it('refuses an image passed off as a video wish', async () => {
+      // One purpose covers photo, audio and video, so the declared kind is the
+      // only thing that says which the contributor meant.
+      const host = await newUser();
+      const memory = await createMemory(host);
+      const imageId = await uploadMedia(host, MediaPurpose.MEMORY_WISH);
+
+      const res = await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(host.token))
+        .send({ kind: 'video', mediaId: imageId })
+        .expect(400);
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEDIA_TYPE_NOT_ALLOWED);
+    });
+
+    it('carries a photo wish end to end', async () => {
+      const host = await newUser();
+      const friend = await newUser();
+      const memory = await createMemory(host);
+      const photoId = await uploadMedia(friend, MediaPurpose.MEMORY_WISH);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(friend.token))
+        .send({ kind: 'photo', mediaId: photoId, text: 'Happy Birthday!' })
+        .expect(201);
+
+      const opened = (
+        await request(app.getHttpServer())
+          .post(`${V1}/memories/${memory.id}/unlock`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<MemoryView>;
+
+      expect(opened.data.wishes[0].kind).toBe('photo');
+      expect(opened.data.wishes[0].mediaUrl).toEqual(expect.any(String));
+    });
+
+    it('lets a contributor withdraw their own wish but not someone else’s', async () => {
+      const host = await newUser();
+      const priya = await newUser();
+      const ganesh = await newUser();
+      const memory = await createMemory(host);
+
+      const mine = (
+        await request(app.getHttpServer())
+          .post(`${V1}/memories/${memory.id}/wishes`)
+          .set(auth(priya.token))
+          .send({ kind: 'text', text: 'From Priya' })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      await request(app.getHttpServer())
+        .delete(`${V1}/memories/${memory.id}/wishes/${mine.data.id}`)
+        .set(auth(ganesh.token))
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .delete(`${V1}/memories/${memory.id}/wishes/${mine.data.id}`)
+        .set(auth(priya.token))
+        .expect(204);
+
+      const after = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/${memory.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<MemoryView>;
+      expect(after.data.wishCount).toBe(0);
+    });
+
+    it('counts a reaction, and refuses one while the capsule is sealed', async () => {
+      const host = await newUser();
+      const memory = await createMemory(host);
+      const wish = (
+        await request(app.getHttpServer())
+          .post(`${V1}/memories/${memory.id}/wishes`)
+          .set(auth(host.token))
+          .send({ kind: 'text', text: 'Happy Birthday!' })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes/${wish.data.id}/react`)
+        .set(auth(host.token))
+        .expect(409);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/unlock`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const reacted = (
+        await request(app.getHttpServer())
+          .post(`${V1}/memories/${memory.id}/wishes/${wish.data.id}/react`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ reactionCount: number }>;
+      expect(reacted.data.reactionCount).toBe(1);
+    });
+  });
+
+  describe('the two lists on the Memories tab (4104:1433)', () => {
+    it('separates what you created from what you contributed to', async () => {
+      const host = await newUser();
+      const friend = await newUser();
+      const memory = await createMemory(host);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(friend.token))
+        .send({ kind: 'text', text: 'Happy Birthday!' })
+        .expect(201);
+
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/mine`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<MemoryView[]>;
+      expect(mine.data.map((m) => m.id)).toContain(memory.id);
+
+      const contributed = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/contributed`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<MemoryView[]>;
+      expect(contributed.data.map((m) => m.id)).toContain(memory.id);
+
+      // A host who also wrote a wish is not listed twice — "contributed" means
+      // someone else's memory.
+      const hostContributed = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/contributed`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<MemoryView[]>;
+      expect(hostContributed.data.map((m) => m.id)).not.toContain(memory.id);
+    });
+  });
+});

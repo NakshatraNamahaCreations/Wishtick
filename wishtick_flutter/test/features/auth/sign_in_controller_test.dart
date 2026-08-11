@@ -45,6 +45,7 @@ void main() {
     test('sends the E.164 number and moves to the code step', () async {
       final t = build();
       controllerOf(t.container).setPhone(PhoneNumber.parse(validPhone));
+      controllerOf(t.container).setAcceptedTerms(true);
 
       await controllerOf(t.container).requestCode();
 
@@ -66,6 +67,7 @@ void main() {
     test('starts the resend countdown so the button locks out', () async {
       final t = build();
       controllerOf(t.container).setPhone(PhoneNumber.parse(validPhone));
+      controllerOf(t.container).setAcceptedTerms(true);
 
       await controllerOf(t.container).requestCode();
 
@@ -84,6 +86,7 @@ void main() {
             details: {'retryAfterSeconds': 42},
           );
         controllerOf(t.container).setPhone(PhoneNumber.parse(validPhone));
+        controllerOf(t.container).setAcceptedTerms(true);
 
         await controllerOf(t.container).requestCode();
 
@@ -101,6 +104,7 @@ void main() {
           message: 'No internet connection.',
         );
       controllerOf(t.container).setPhone(PhoneNumber.parse(validPhone));
+      controllerOf(t.container).setAcceptedTerms(true);
 
       await controllerOf(t.container).requestCode();
 
@@ -124,6 +128,7 @@ void main() {
       final controller = controllerOf(t.container);
       if (name != null) controller.setName(name);
       controller.setPhone(PhoneNumber.parse(validPhone));
+      controller.setAcceptedTerms(true);
       await controller.requestCode();
       return t.container;
     }
@@ -244,6 +249,7 @@ void main() {
     test('returns to the phone step and clears the countdown', () async {
       final t = build();
       controllerOf(t.container).setPhone(PhoneNumber.parse(validPhone));
+      controllerOf(t.container).setAcceptedTerms(true);
       await controllerOf(t.container).requestCode();
 
       controllerOf(t.container).editPhone();

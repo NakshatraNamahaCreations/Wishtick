@@ -142,11 +142,7 @@ class GroupGiftRepository {
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/group-gifts/$id/gifts/from-product',
-      body: {
-        'provider': provider,
-        'externalId': externalId,
-        'notes': ?notes,
-      },
+      body: {'provider': provider, 'externalId': externalId, 'notes': ?notes},
     );
     return GroupGift.fromJson(json);
   }
@@ -310,10 +306,7 @@ class GroupGiftRepository {
   }) async {
     final json = await _api.post<List<dynamic>>(
       '/group-gifts/$id/settlements/top-up',
-      body: {
-        'additionalAmountMinor': additionalAmountMinor,
-        'note': ?note,
-      },
+      body: {'additionalAmountMinor': additionalAmountMinor, 'note': ?note},
     );
     return json
         .map((e) => Settlement.fromJson(e as Map<String, dynamic>))

@@ -31,11 +31,8 @@ enum EventVisibility {
 
   final String wireValue;
 
-  static EventVisibility fromWire(String? value) =>
-      EventVisibility.values.firstWhere(
-        (v) => v.wireValue == value,
-        orElse: () => private,
-      );
+  static EventVisibility fromWire(String? value) => EventVisibility.values
+      .firstWhere((v) => v.wireValue == value, orElse: () => private);
 }
 
 enum EventStatus {

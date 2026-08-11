@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/theme_extensions.dart';
+import '../../../../core/widgets/sparkle_icon.dart';
 import '../../domain/group_gift.dart';
 import 'group_gift_widgets.dart';
 
@@ -79,9 +80,7 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
     return Padding(
       // Lifts the sheet clear of the keyboard — the amount field is the last
       // thing focused and would otherwise sit under it.
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
@@ -108,11 +107,7 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
             // needs an amount, which no preset can guess.
             Row(
               children: [
-                Icon(
-                  Icons.auto_awesome,
-                  size: AppSizes.iconMd,
-                  color: colors.textPrimary,
-                ),
+                SparkleIcon(size: AppSizes.iconMd, color: colors.textPrimary),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
                   'Quick Charges',
@@ -156,14 +151,13 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
               textCapitalization: TextCapitalization.words,
               maxLength: 120,
               buildCounter:
-                  (_, {
+                  (
+                    _, {
                     required currentLength,
                     required isFocused,
                     required maxLength,
                   }) => null,
-              decoration: const InputDecoration(
-                hintText: 'Enter charge name',
-              ),
+              decoration: const InputDecoration(hintText: 'Enter charge name'),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: AppSpacing.lg),

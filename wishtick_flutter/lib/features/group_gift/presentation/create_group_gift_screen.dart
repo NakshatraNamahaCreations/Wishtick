@@ -9,6 +9,7 @@ import '../../../core/format/currency.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/sparkle_icon.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
 import '../../gifting/presentation/gift_item_controller.dart';
@@ -80,11 +81,7 @@ class _CreateGroupGiftScreenState extends ConsumerState<CreateGroupGiftScreen> {
   /// the `ref.listen` in [build], both of which run outside the build phase.
   void _primeGoal() {
     if (_primed) return;
-    final price = ref
-        .read(giftItemProvider(_itemArg))
-        .item
-        ?.price
-        .amountMinor;
+    final price = ref.read(giftItemProvider(_itemArg)).item?.price.amountMinor;
     if (price == null) return;
     _primed = true;
     ref.read(createGroupGiftProvider(widget.itemId).notifier).primeGoal(price);
@@ -135,10 +132,7 @@ class _CreateGroupGiftScreenState extends ConsumerState<CreateGroupGiftScreen> {
                 _ItemHeader(item: item),
                 const SizedBox(height: AppSpacing.xxl),
 
-                _GoalField(
-                  controller: _goal,
-                  onChanged: notifier.setGoal,
-                ),
+                _GoalField(controller: _goal, onChanged: notifier.setGoal),
                 const SizedBox(height: AppSpacing.lg),
                 const _ContributionExplainer(),
 
@@ -176,10 +170,7 @@ class _CreateGroupGiftScreenState extends ConsumerState<CreateGroupGiftScreen> {
                 ),
 
                 const SizedBox(height: AppSpacing.xxl),
-                _UpiPanel(
-                  controller: _upi,
-                  onChanged: notifier.setUpiId,
-                ),
+                _UpiPanel(controller: _upi, onChanged: notifier.setUpiId),
 
                 const SizedBox(height: AppSpacing.xxl),
                 const GroupGiftFieldLabel('Group Title', required: true),
@@ -418,9 +409,7 @@ class _ModeOption extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                selected
-                    ? Icons.check_circle
-                    : Icons.radio_button_unchecked,
+                selected ? Icons.check_circle : Icons.radio_button_unchecked,
                 color: selected ? colors.primary : colors.border,
                 size: AppSizes.iconLg,
               ),
@@ -577,9 +566,7 @@ class _UpiPanel extends StatelessWidget {
                   inputFormatters: [
                     FilteringTextInputFormatter.deny(RegExp(r'\s')),
                   ],
-                  decoration: const InputDecoration(
-                    hintText: 'name@okaxis',
-                  ),
+                  decoration: const InputDecoration(hintText: 'name@okaxis'),
                   onChanged: onChanged,
                 ),
               ],
@@ -619,11 +606,7 @@ class _QuickSuggestions extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.xs),
-            Icon(
-              Icons.auto_awesome,
-              size: AppSizes.iconSm,
-              color: colors.textPrimary,
-            ),
+            SparkleIcon(size: AppSizes.iconSm, color: colors.textPrimary),
           ],
         ),
         const SizedBox(height: AppSpacing.md),

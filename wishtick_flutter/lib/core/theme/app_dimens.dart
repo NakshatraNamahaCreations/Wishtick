@@ -75,8 +75,14 @@ abstract final class AppDurations {
   /// short enough not to feel like a stall.
   static const successDwell = Duration(milliseconds: 500);
 
-  /// How long the splash holds before routing (matches the Figma progress bar).
-  static const splash = Duration(milliseconds: 2000);
+  /// How long the splash holds before routing.
+  ///
+  /// Longer than the 2s the Figma progress bar implies: the screen now plays a
+  /// full brand sequence — the mark flips in, then the wordmark and tagline
+  /// assemble out of particles — and 2s left no time to read the result before
+  /// the redirect. Everything on the splash is timed as a fraction of this, so
+  /// changing it rescales the whole choreography.
+  static const splash = Duration(milliseconds: 4000);
 
   /// How long the "You're all set!" confetti burst runs before settling.
   static const confettiBurst = Duration(seconds: 3);

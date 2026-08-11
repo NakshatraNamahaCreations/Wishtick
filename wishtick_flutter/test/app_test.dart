@@ -170,19 +170,25 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Lands in Sprint 8 — Memories'), findsOneWidget);
+      // The Memories tab is real as of Sprint 8; its hero is what proves the
+      // branch switched.
+      expect(find.text('Every wish locked with Love'), findsOneWidget);
     });
   });
 
   group('theme', () {
-    testWidgets('applies the persisted dark theme on launch', (tester) async {
+    testWidgets('stays light even with a dark preference on disk', (
+      tester,
+    ) async {
+      // The app is light-only for now (kDarkModeEnabled). A preference left by
+      // an older build — or a device set to dark — must not flip it.
       await pumpApp(tester, prefs: {ThemeModeController.prefsKey: 'dark'});
 
       final context = tester.element(find.byType(SplashScreen));
-      expect(Theme.of(context).brightness, Brightness.dark);
+      expect(Theme.of(context).brightness, Brightness.light);
       expect(
         Theme.of(context).extension<WishtickColors>()!.background,
-        WishtickColors.dark.background,
+        WishtickColors.light.background,
       );
     });
 
@@ -191,6 +197,16 @@ void main() {
 
       final context = tester.element(find.byType(SplashScreen));
       expect(Theme.of(context).brightness, Brightness.light);
+    });
+
+    testWidgets('offers no dark theme at all while it is off', (tester) async {
+      // Withholding `darkTheme` is what stops the platform brightness from
+      // choosing for us; pinning themeMode alone would not.
+      await pumpApp(tester);
+
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp).first);
+      expect(app.darkTheme, isNull);
+      expect(app.themeMode, ThemeMode.light);
     });
   });
 }

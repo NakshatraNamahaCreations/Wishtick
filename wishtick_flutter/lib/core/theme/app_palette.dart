@@ -88,6 +88,14 @@ abstract final class AppPalette {
   /// The warm end of the same gradient.
   static const bronze = Color(0xFFB98B53);
 
+  /// The bottom stop of the splash backdrop (`143:356`), sampled from the
+  /// export on 2026-08-11. The top stop is [plumMuted], which the gradient
+  /// headline already uses.
+  ///
+  /// Deliberately not [plumInk]: that is a violet-leaning ink (#23074A), and
+  /// this wash stays on the warm plum hue all the way down to near-black.
+  static const plumNight = Color(0xFF160516);
+
   /// Selected-state washes and lavender card fills.
   static const plumPale = Color(0xFFF3F0F4);
   static const violetPale = Color(0xFFFAF9FE);
@@ -107,9 +115,11 @@ abstract final class AppPalette {
   // after the shipped screens turned out to disagree with the Color System
   // page. Where they conflict the screens win — they are what gets compared.
 
-  /// The page beige every onboarding frame is drawn on. Three units off
-  /// [ivoryDeep], which is what the Color System page lists.
-  static const pageBeige = Color(0xFFF5ECE4);
+  /// The page colour, on every screen.
+  ///
+  /// **Confirmed by design**, not sampled — it supersedes both the `#F5ECE4`
+  /// read off the frame exports and the `#F5EFE4` the Color System page lists.
+  static const pageBeige = Color(0xFFFAF7F2);
 
   /// The gold the screens actually use for progress fills, step captions, the
   /// Terms link and the Continue badge — a clear step deeper than [gold].

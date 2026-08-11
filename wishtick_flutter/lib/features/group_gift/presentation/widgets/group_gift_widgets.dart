@@ -185,7 +185,12 @@ IconData chargeIconFor(String label) {
 /// One charge, as both the summary (read-only) and the charges screen (with
 /// edit and delete) draw it.
 class ChargeRow extends StatelessWidget {
-  const ChargeRow({required this.charge, this.onEdit, this.onDelete, super.key});
+  const ChargeRow({
+    required this.charge,
+    this.onEdit,
+    this.onDelete,
+    super.key,
+  });
 
   final GroupGiftCharge charge;
   final VoidCallback? onEdit;
@@ -385,7 +390,10 @@ class GroupGiftFooter extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (child != null) ...[child!, const SizedBox(height: AppSpacing.lg)],
+            if (child != null) ...[
+              child!,
+              const SizedBox(height: AppSpacing.lg),
+            ],
             ElevatedButton(
               onPressed: busy ? null : onPressed,
               child: busy

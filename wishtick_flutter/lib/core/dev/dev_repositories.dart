@@ -24,6 +24,12 @@ import 'dev_taxonomy.dart';
 /// Real tokens are still written through [TokenStorage] by the session
 /// controller, so sign-in survives a restart exactly as it will in production —
 /// the only thing faked is the server's answer.
+///
+/// **Signing in always lands in signup/onboarding.** Unlike the real backend,
+/// which knows a returning user, the fake treats every sign-in as a first one
+/// so the whole signup path stays one tap away. A restart still resumes to
+/// Home once onboarding has been finished — it is *logging in* that resets,
+/// not relaunching.
 class DevAuthRepository implements AuthRepository {
   DevAuthRepository(this._prefs);
 
@@ -59,15 +65,24 @@ class DevAuthRepository implements AuthRepository {
     await _prefs.setString(DevKeys.phone, phone);
     if (name != null) await _prefs.setString(DevKeys.name, name);
 
+    // Every fake sign-in presents as a brand-new account, so signing in is
+    // always a route into signup and onboarding. Otherwise the flow could only
+    // be reached on a fresh install or after an explicit logout, which is the
+    // opposite of what a fake backend is for.
+    //
+    // The stored flag is cleared as well as reporting `isNewUser`. The two
+    // have to agree: the router takes `isNewUser` at its word, but the session
+    // re-reads DevOnboardingRepository.status() on restore, and a stale "yes,
+    // complete" there would bounce the user straight back out to Home.
+    await _prefs.remove(DevKeys.onboardingComplete);
+
     return AuthResult(
       user: _user(),
       tokens: const AuthTokens(
         accessToken: 'dev-access',
         refreshToken: 'dev-refresh',
       ),
-      // A signed-in dev user goes through onboarding until they finish it once;
-      // after that a restart lands on Home, like a returning user.
-      isNewUser: !(_prefs.getBool(DevKeys.onboardingComplete) ?? false),
+      isNewUser: true,
     );
   }
 
@@ -1164,6 +1179,7 @@ class DevMediaRepository implements MediaRepository {
   Future<MediaView> uploadFile({
     required XFile file,
     required MediaPurpose purpose,
+    String? fileName,
   }) async {
     await Future<void>.delayed(_latency);
     return MediaView(

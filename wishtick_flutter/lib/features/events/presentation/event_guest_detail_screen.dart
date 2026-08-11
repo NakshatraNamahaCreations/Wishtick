@@ -110,9 +110,7 @@ class _EventGuestDetailScreenState
         error: (e, _) =>
             const Center(child: WishtickErrorText('Could not load the guest.')),
         data: (all) {
-          final invite = all
-              .where((i) => i.id == widget.inviteId)
-              .firstOrNull;
+          final invite = all.where((i) => i.id == widget.inviteId).firstOrNull;
           if (invite == null) {
             return const Center(
               child: WishtickErrorText('This guest is no longer on the list.'),

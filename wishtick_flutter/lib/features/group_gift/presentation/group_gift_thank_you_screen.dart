@@ -184,9 +184,7 @@ class ThankYouCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.xxl),
           Text(
             'Dear family & friends,',
-            style: context.text.bodyMedium?.copyWith(
-              color: colors.textPrimary,
-            ),
+            style: context.text.bodyMedium?.copyWith(color: colors.textPrimary),
           ),
           const SizedBox(height: AppSpacing.lg),
           Text(

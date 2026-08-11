@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/sparkle_icon.dart';
 import 'create_event_controller.dart';
 import 'widgets/relation_picker_sheet.dart';
 
@@ -338,15 +339,18 @@ class _OccasionGrid extends StatelessWidget {
   final String selectedKey;
   final ValueChanged<String> onSelect;
 
-  static const _icons = <String, IconData>{
-    'birthday': Icons.cake_outlined,
-    'anniversary': Icons.favorite_border,
-    'wedding': Icons.church_outlined,
-    'house_warming': Icons.home_outlined,
-    'mom_to_be': Icons.child_friendly_outlined,
-    'custom': Icons.auto_awesome,
-    'rakhi': Icons.volunteer_activism_outlined,
-    'best_wishes': Icons.card_giftcard,
+  /// Widgets rather than [IconData] so the brand sparkle can sit alongside the
+  /// Material glyphs. None of them carry a size or colour — the card supplies
+  /// both through an [IconTheme], which [Icon] and [SparkleIcon] both read.
+  static const _icons = <String, Widget>{
+    'birthday': Icon(Icons.cake_outlined),
+    'anniversary': Icon(Icons.favorite_border),
+    'wedding': Icon(Icons.church_outlined),
+    'house_warming': Icon(Icons.home_outlined),
+    'mom_to_be': Icon(Icons.child_friendly_outlined),
+    'custom': SparkleIcon(),
+    'rakhi': Icon(Icons.volunteer_activism_outlined),
+    'best_wishes': Icon(Icons.card_giftcard),
   };
 
   @override
@@ -363,7 +367,8 @@ class _OccasionGrid extends StatelessWidget {
         for (final occasion in kEventOccasions)
           _OccasionCard(
             label: occasion.label,
-            icon: _icons[occasion.key] ?? Icons.celebration_outlined,
+            icon:
+                _icons[occasion.key] ?? const Icon(Icons.celebration_outlined),
             selected: occasion.key == selectedKey,
             onTap: () => onSelect(occasion.key),
           ),
@@ -381,7 +386,7 @@ class _OccasionCard extends StatelessWidget {
   });
 
   final String label;
-  final IconData icon;
+  final Widget icon;
   final bool selected;
   final VoidCallback onTap;
 
@@ -407,10 +412,12 @@ class _OccasionCard extends StatelessWidget {
                     width: selected ? 1.5 : 1,
                   ),
                 ),
-                child: Icon(
-                  icon,
-                  size: AppSizes.iconLg + AppSpacing.md,
-                  color: selected ? colors.primary : colors.primaryMuted,
+                child: IconTheme(
+                  data: IconThemeData(
+                    size: AppSizes.iconLg + AppSpacing.md,
+                    color: selected ? colors.primary : colors.primaryMuted,
+                  ),
+                  child: icon,
                 ),
               ),
             ),

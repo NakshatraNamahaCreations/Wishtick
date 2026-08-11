@@ -27,31 +27,52 @@ void main() {
 
   group('CreateGroupGiftController', () {
     test('needs a title, a UPI ID and a goal before it can submit', () {
-      final notifier = container.read(createGroupGiftProvider('item_1').notifier);
-      expect(container.read(createGroupGiftProvider('item_1')).canSubmit, isFalse);
+      final notifier = container.read(
+        createGroupGiftProvider('item_1').notifier,
+      );
+      expect(
+        container.read(createGroupGiftProvider('item_1')).canSubmit,
+        isFalse,
+      );
 
       notifier.primeGoal(kItemMinor);
-      expect(container.read(createGroupGiftProvider('item_1')).canSubmit, isFalse);
+      expect(
+        container.read(createGroupGiftProvider('item_1')).canSubmit,
+        isFalse,
+      );
 
       notifier.setTitle("Siya's birthday gift");
       // Still not submittable: nobody can be asked to pay into a blank UPI ID.
-      expect(container.read(createGroupGiftProvider('item_1')).canSubmit, isFalse);
+      expect(
+        container.read(createGroupGiftProvider('item_1')).canSubmit,
+        isFalse,
+      );
 
       notifier.setUpiId('rohanr1@okaxis');
-      expect(container.read(createGroupGiftProvider('item_1')).canSubmit, isTrue);
+      expect(
+        container.read(createGroupGiftProvider('item_1')).canSubmit,
+        isTrue,
+      );
     });
 
     test('whitespace is not a title', () {
-      final notifier = container.read(createGroupGiftProvider('item_1').notifier);
+      final notifier = container.read(
+        createGroupGiftProvider('item_1').notifier,
+      );
       notifier.primeGoal(kItemMinor);
       notifier.setUpiId('a@b');
       notifier.setTitle('   ');
 
-      expect(container.read(createGroupGiftProvider('item_1')).canSubmit, isFalse);
+      expect(
+        container.read(createGroupGiftProvider('item_1')).canSubmit,
+        isFalse,
+      );
     });
 
     test('primeGoal does not overwrite a goal the host has edited', () {
-      final notifier = container.read(createGroupGiftProvider('item_1').notifier);
+      final notifier = container.read(
+        createGroupGiftProvider('item_1').notifier,
+      );
       notifier.primeGoal(kItemMinor);
       notifier.setGoal(1000000);
       notifier.primeGoal(kItemMinor);
@@ -63,52 +84,70 @@ void main() {
     });
 
     test('the custom chip is sorted in among the three, not appended', () {
-      final notifier = container.read(createGroupGiftProvider('item_1').notifier);
+      final notifier = container.read(
+        createGroupGiftProvider('item_1').notifier,
+      );
       notifier.setCustomAmount(150000);
 
       expect(
-        container.read(createGroupGiftProvider('item_1')).allSuggestedAmountsMinor,
+        container
+            .read(createGroupGiftProvider('item_1'))
+            .allSuggestedAmountsMinor,
         [50000, 100000, 150000, 200000],
       );
     });
 
     test('a custom amount equal to a preset does not double up', () {
-      final notifier = container.read(createGroupGiftProvider('item_1').notifier);
+      final notifier = container.read(
+        createGroupGiftProvider('item_1').notifier,
+      );
       notifier.setCustomAmount(100000);
 
       expect(
-        container.read(createGroupGiftProvider('item_1')).allSuggestedAmountsMinor,
+        container
+            .read(createGroupGiftProvider('item_1'))
+            .allSuggestedAmountsMinor,
         [50000, 100000, 200000],
       );
     });
 
-    test('submit sends the trimmed form and reuses one idempotency key', () async {
-      final notifier = container.read(createGroupGiftProvider('item_1').notifier);
-      notifier.primeGoal(kItemMinor);
-      notifier.setTitle("  Siya's birthday gift  ");
-      notifier.setUpiId(' rohanr1@okaxis ');
-      notifier.setMode(ContributionMode.custom);
+    test(
+      'submit sends the trimmed form and reuses one idempotency key',
+      () async {
+        final notifier = container.read(
+          createGroupGiftProvider('item_1').notifier,
+        );
+        notifier.primeGoal(kItemMinor);
+        notifier.setTitle("  Siya's birthday gift  ");
+        notifier.setUpiId(' rohanr1@okaxis ');
+        notifier.setMode(ContributionMode.custom);
 
-      await notifier.submit();
-      await notifier.submit();
+        await notifier.submit();
+        await notifier.submit();
 
-      expect(repo.createArgs, hasLength(2));
-      expect(repo.createArgs.first['title'], "Siya's birthday gift");
-      expect(repo.createArgs.first['hostUpiId'], 'rohanr1@okaxis');
-      expect(repo.createArgs.first['contributionMode'], ContributionMode.custom);
-      // A retry of the same intent must not claim the item twice.
-      expect(
-        repo.createArgs.first['idempotencyKey'],
-        repo.createArgs.last['idempotencyKey'],
-      );
-    });
+        expect(repo.createArgs, hasLength(2));
+        expect(repo.createArgs.first['title'], "Siya's birthday gift");
+        expect(repo.createArgs.first['hostUpiId'], 'rohanr1@okaxis');
+        expect(
+          repo.createArgs.first['contributionMode'],
+          ContributionMode.custom,
+        );
+        // A retry of the same intent must not claim the item twice.
+        expect(
+          repo.createArgs.first['idempotencyKey'],
+          repo.createArgs.last['idempotencyKey'],
+        );
+      },
+    );
 
     test('a claimed item is reported in the user’s terms', () async {
       repo.failWith = const ApiException(
         code: 'ITEM_ALREADY_CLAIMED',
         message: 'raw server text',
       );
-      final notifier = container.read(createGroupGiftProvider('item_1').notifier);
+      final notifier = container.read(
+        createGroupGiftProvider('item_1').notifier,
+      );
       notifier.primeGoal(kItemMinor);
       notifier.setTitle('t');
       notifier.setUpiId('a@b');
@@ -184,7 +223,10 @@ void main() {
       final state = c.read(settlementProvider('gg_1'));
 
       expect(state.hasLedger, isTrue);
-      expect(state.balance?.direction, SettlementDirection.returnToContributors);
+      expect(
+        state.balance?.direction,
+        SettlementDirection.returnToContributors,
+      );
       expect(r.calls, containsAll(['balance', 'listSettlements']));
     });
 
@@ -225,21 +267,27 @@ void main() {
       expect(c.read(settlementProvider('gg_1')).open, hasLength(1));
     });
 
-    test('a top-up sends the explicit amount, not the derived shortfall', () async {
-      await container
-          .read(settlementProvider('gg_1').notifier)
-          .requestTopUp(additionalAmountMinor: 200000);
+    test(
+      'a top-up sends the explicit amount, not the derived shortfall',
+      () async {
+        await container
+            .read(settlementProvider('gg_1').notifier)
+            .requestTopUp(additionalAmountMinor: 200000);
 
-      expect(container.read(settlementProvider('gg_1')).busy, isFalse);
-      expect(repo.calls, contains('requestTopUp:200000'));
-    });
+        expect(container.read(settlementProvider('gg_1')).busy, isFalse);
+        expect(repo.calls, contains('requestTopUp:200000'));
+      },
+    );
 
-    test('sharing a UPI ID passes the save-to-profile choice through', () async {
-      await container
-          .read(settlementProvider('gg_1').notifier)
-          .shareUpi('st_1', upiId: 'me@okhdfc', saveToProfile: true);
+    test(
+      'sharing a UPI ID passes the save-to-profile choice through',
+      () async {
+        await container
+            .read(settlementProvider('gg_1').notifier)
+            .shareUpi('st_1', upiId: 'me@okhdfc', saveToProfile: true);
 
-      expect(repo.calls, contains('shareUpi:me@okhdfc:true'));
-    });
+        expect(repo.calls, contains('shareUpi:me@okhdfc:true'));
+      },
+    );
   });
 }

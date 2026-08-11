@@ -34,8 +34,7 @@ class GroupGiftSettleScreen extends ConsumerStatefulWidget {
       _GroupGiftSettleScreenState();
 }
 
-class _GroupGiftSettleScreenState
-    extends ConsumerState<GroupGiftSettleScreen> {
+class _GroupGiftSettleScreenState extends ConsumerState<GroupGiftSettleScreen> {
   final _note = TextEditingController();
   final _amount = TextEditingController();
 
@@ -267,10 +266,7 @@ class _GroupGiftSettleScreenState
               AppSpacing.xxl,
             ),
             children: [
-              _RequestCard(
-                amountMinor: amount,
-                eachMinor: each,
-              ),
+              _RequestCard(amountMinor: amount, eachMinor: each),
               const SizedBox(height: AppSpacing.xl),
               // An input, not a read-out: the bill is frozen once anyone
               // contributes, so a shortfall only ever comes from the price
@@ -293,7 +289,8 @@ class _GroupGiftSettleScreenState
                 maxLength: 280,
                 textCapitalization: TextCapitalization.sentences,
                 buildCounter:
-                    (_, {
+                    (
+                      _, {
                       required currentLength,
                       required isFocused,
                       required maxLength,

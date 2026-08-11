@@ -30,6 +30,7 @@ import { EventsModule } from './modules/events/events.module';
 import { GiftingModule } from './modules/gifting/gifting.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { MemoriesModule } from './modules/memories/memories.module';
 import { ReelsModule } from './modules/reels/reels.module';
 import { GroupGiftModule } from './modules/group-gifts/group-gift.module';
 import { HealthModule } from './modules/health/health.module';
@@ -127,6 +128,7 @@ import { WishlistsModule } from './modules/wishlists/wishlists.module';
     ChatModule,
     NotificationsModule,
     ReelsModule,
+    MemoriesModule,
     DashboardModule,
     DiscoverModule,
     // Analytics is imported before Admin because AdminModule depends on it.

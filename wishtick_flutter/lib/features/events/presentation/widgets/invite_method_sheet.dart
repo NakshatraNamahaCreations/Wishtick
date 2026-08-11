@@ -56,14 +56,14 @@ class _InviteMethodSheet extends StatelessWidget {
               icon: Icons.dashboard_customize_outlined,
               title: 'Use Wishtick Templates',
               blurb: 'Choose from beautifully designed invitation templates.',
-              onTap: () =>
-                  Navigator.of(context).pop(InviteMethod.template),
+              onTap: () => Navigator.of(context).pop(InviteMethod.template),
             ),
             const SizedBox(height: AppSpacing.lg),
             _MethodCard(
               icon: Icons.cloud_upload_outlined,
               title: 'Upload Your Own Invitation',
-              blurb: 'Already have a design upload it and share it with your '
+              blurb:
+                  'Already have a design upload it and share it with your '
                   'guests.',
               onTap: () => Navigator.of(context).pop(InviteMethod.upload),
             ),

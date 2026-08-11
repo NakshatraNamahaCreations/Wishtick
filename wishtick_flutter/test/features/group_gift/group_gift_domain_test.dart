@@ -155,10 +155,7 @@ void main() {
     test('an unknown direction does not silently become a return', () {
       expect(SettlementDirection.fromWire('nonsense'), isNull);
       expect(SettlementDirection.fromWire(null), isNull);
-      expect(
-        SettlementDirection.fromWire('top_up'),
-        SettlementDirection.topUp,
-      );
+      expect(SettlementDirection.fromWire('top_up'), SettlementDirection.topUp);
     });
   });
 

@@ -12,6 +12,7 @@ import {
   GROUP_GIFT_FUNDED,
   GROUP_GIFT_JOINED,
   GROUP_GIFT_PURCHASED,
+  MEMORY_UNLOCKED,
   REEL_RELEASED,
   USER_REGISTERED,
   type GiftLifecycleEvent,
@@ -20,6 +21,7 @@ import {
   type GroupGiftFundedEvent,
   type GroupGiftJoinedEvent,
   type GroupGiftPurchasedEvent,
+  type MemoryUnlockedEvent,
   type ReelReleasedEvent,
   type UserRegisteredEvent,
 } from 'src/common/events/domain-events';
@@ -244,6 +246,29 @@ export class NotificationListener {
         refId: e.reelId,
         payload: { wishCount: e.wishCount, url: `${this.web}/reels/${e.reelId}` },
       });
+    });
+  }
+
+  /**
+   * A capsule opened. Everyone who put something in it is told, plus the host —
+   * the recipient it was made for may not have an account at all.
+   */
+  @OnEvent(MEMORY_UNLOCKED)
+  async onMemoryUnlocked(e: MemoryUnlockedEvent): Promise<void> {
+    await this.guard('memory-unlocked', async () => {
+      const audience = [...new Set([e.hostId, ...e.contributorIds])];
+      for (const userId of audience) {
+        await this.notifications.enqueue({
+          userId,
+          type: NotificationType.MEMORY_UNLOCKED,
+          refId: e.capsuleId,
+          payload: {
+            title: e.title,
+            wishCount: e.wishCount,
+            url: `${this.web}/memories/${e.capsuleId}`,
+          },
+        });
+      }
     });
   }
 

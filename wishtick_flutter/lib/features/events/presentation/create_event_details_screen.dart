@@ -39,7 +39,9 @@ class _CreateEventDetailsScreenState
 
     // Seeded from step 1 the first time only — a title the host has edited is
     // never overwritten by a generated one.
-    final seeded = state.title.isEmpty ? notifier.suggestedTitle() : state.title;
+    final seeded = state.title.isEmpty
+        ? notifier.suggestedTitle()
+        : state.title;
     _title = TextEditingController(text: seeded);
     _venue = TextEditingController(text: state.venue);
     _description = TextEditingController(text: state.description);
@@ -110,7 +112,10 @@ class _CreateEventDetailsScreenState
         children: [
           Text(
             'Tell us about\nyour event',
-            style: context.text.headlineMedium?.copyWith(
+            // displaySmall, not headlineMedium: a page headline is Playfair in
+            // every frame, and `headline*` is Montserrat. Every onboarding and
+            // auth screen already does it this way.
+            style: context.text.displaySmall?.copyWith(
               color: context.headlineBrandColor,
               fontWeight: FontWeight.w700,
               height: 1.15,

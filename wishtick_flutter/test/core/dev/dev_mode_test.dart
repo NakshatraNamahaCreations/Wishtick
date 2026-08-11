@@ -96,20 +96,37 @@ void main() {
       expect(result.isNewUser, isTrue);
     });
 
-    test(
-      'sends a returning user straight in once onboarding is done',
-      () async {
-        SharedPreferences.setMockInitialValues({});
-        final prefs = await SharedPreferences.getInstance();
-        await DevOnboardingRepository(prefs).complete();
+    test('sends a *returning* user through onboarding as well', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      await DevOnboardingRepository(prefs).complete();
 
-        final result = await DevAuthRepository(
-          prefs,
-        ).verifySignInCode(phone: '+911234567890', code: '123456');
+      final result = await DevAuthRepository(
+        prefs,
+      ).verifySignInCode(phone: '+911234567890', code: '123456');
 
-        expect(result.isNewUser, isFalse);
-      },
-    );
+      // Deliberately unlike the real backend, which would know this user.
+      // Signing in is how you reach signup in the fake, so it must not be a
+      // one-time-per-install door.
+      expect(result.isNewUser, isTrue);
+    });
+
+    test('clears the stored onboarding flag so a restore agrees', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      await DevOnboardingRepository(prefs).complete();
+
+      await DevAuthRepository(
+        prefs,
+      ).verifySignInCode(phone: '+911234567890', code: '123456');
+
+      // Session.restore() re-reads this through DevOnboardingRepository. Left
+      // set, it would contradict isNewUser and bounce the user out to Home on
+      // the next launch — the two sources have to say the same thing.
+      final status = await DevOnboardingRepository(prefs).status();
+      expect(status.completed, isFalse);
+      expect(status.remainingRequiredSteps, contains('profile'));
+    });
 
     test('refuses the password flow rather than faking it', () async {
       final auth = await build();

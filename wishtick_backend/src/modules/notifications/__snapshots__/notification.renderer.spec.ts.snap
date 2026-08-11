@@ -139,6 +139,19 @@ exports[`NotificationRenderer renders in-app/text/sms content for every notifica
 }
 `;
 
+exports[`NotificationRenderer renders in-app/text/sms content for every notification type: memory_unlocked 1`] = `
+{
+  "sms": "Password changed is open — https://app.wishtick.test/x",
+  "subject": "A memory just opened 💜",
+  "text": "A few wishes were waiting inside.
+
+Tap to open it and read them.
+
+Open the memory: https://app.wishtick.test/x",
+  "title": "Password changed is open",
+}
+`;
+
 exports[`NotificationRenderer renders in-app/text/sms content for every notification type: reel_released 1`] = `
 {
   "sms": "Your reel is ready! — https://app.wishtick.test/x",

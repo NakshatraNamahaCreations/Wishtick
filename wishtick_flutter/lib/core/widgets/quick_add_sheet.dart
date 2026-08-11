@@ -10,8 +10,8 @@ import '../theme/theme_extensions.dart';
 enum _QuickAddChoice { event, wishlist, memory }
 
 /// Figma `2092:388` — the centre nav button's "What would you like to add?"
-/// sheet. Event (Sprint 7) and Wishlist are live; Memory lands in Sprint 8 and
-/// is inert until then.
+/// sheet. All three rows are live: Event (Sprint 7), Wishlist (Sprint 3) and
+/// Memory (Sprint 8).
 class QuickAddSheet extends StatelessWidget {
   const QuickAddSheet({super.key});
 
@@ -31,9 +31,7 @@ class QuickAddSheet extends StatelessWidget {
       case _QuickAddChoice.event:
         unawaited(context.push(AppRoutes.createEvent));
       case _QuickAddChoice.memory:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lands in Sprint 8 — Memories.')),
-        );
+        unawaited(context.push(AppRoutes.createMemory));
     }
   }
 

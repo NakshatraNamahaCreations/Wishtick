@@ -38,9 +38,9 @@ class _GroupGiftCreatedScreenState
   Future<void> _invite(String url) async {
     await Clipboard.setData(ClipboardData(text: url));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invite link copied')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Invite link copied')));
   }
 
   @override
@@ -60,9 +60,7 @@ class _GroupGiftCreatedScreenState
             )
           : SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.xxl,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
                 child: Column(
                   children: [
                     const Spacer(flex: 2),

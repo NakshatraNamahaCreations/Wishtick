@@ -38,6 +38,7 @@ import { OrdersModule } from 'src/modules/orders/orders.module';
 import { GroupGiftModule } from 'src/modules/group-gifts/group-gift.module';
 import { NotificationsModule } from 'src/modules/notifications/notifications.module';
 import { NotificationProcessor } from 'src/modules/notifications/notification.processor';
+import { MemoriesModule } from 'src/modules/memories/memories.module';
 import { ReelsModule } from 'src/modules/reels/reels.module';
 import { ReelProcessor } from 'src/modules/reels/reel.processor';
 import { NotificationService } from 'src/modules/notifications/notification.service';
@@ -165,6 +166,7 @@ export async function createTestApp(
       ChatModule,
       NotificationsModule,
       ReelsModule,
+      MemoriesModule,
       DashboardModule,
       DiscoverModule,
       AnalyticsModule,

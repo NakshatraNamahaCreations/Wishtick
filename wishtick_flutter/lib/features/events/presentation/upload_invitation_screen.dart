@@ -88,6 +88,9 @@ class _UploadInvitationScreenState
           .uploadFile(
             file: XFile.fromData(bytes, name: file.name),
             purpose: MediaPurpose.eventInvite,
+            // XFile.fromData drops `name` on io — without this a PDF or an
+            // MP4 invitation uploads as a JPEG.
+            fileName: file.name,
           );
       await ref
           .read(eventsRepositoryProvider)

@@ -24,9 +24,21 @@ void main() {
   setUp(() {
     repo = FakeChatRepository(
       messages: [
-        buildMessage(id: 'm3', body: 'newest', createdAt: DateTime(2026, 8, 1, 12)),
-        buildMessage(id: 'm2', body: 'middle', createdAt: DateTime(2026, 8, 1, 11)),
-        buildMessage(id: 'm1', body: 'oldest', createdAt: DateTime(2026, 8, 1, 10)),
+        buildMessage(
+          id: 'm3',
+          body: 'newest',
+          createdAt: DateTime(2026, 8, 1, 12),
+        ),
+        buildMessage(
+          id: 'm2',
+          body: 'middle',
+          createdAt: DateTime(2026, 8, 1, 11),
+        ),
+        buildMessage(
+          id: 'm1',
+          body: 'oldest',
+          createdAt: DateTime(2026, 8, 1, 10),
+        ),
       ],
     );
     socket = FakeChatSocket();
@@ -42,10 +54,7 @@ void main() {
   test('history is flipped to oldest-first, the order it is read in', () async {
     await notifier().load();
 
-    expect(
-      read().messages.map((m) => m.id),
-      ['m1', 'm2', 'm3'],
-    );
+    expect(read().messages.map((m) => m.id), ['m1', 'm2', 'm3']);
   });
 
   test('opening the chat marks it read', () async {
@@ -81,19 +90,19 @@ void main() {
     expect(read().messages.last.id, 'm4');
   });
 
-  test('an echo of a message already held replaces it, not duplicates it', () async {
-    await notifier().load();
-    final before = read().messages.length;
+  test(
+    'an echo of a message already held replaces it, not duplicates it',
+    () async {
+      await notifier().load();
+      final before = read().messages.length;
 
-    socket.emit(ChatMessageEvent(buildMessage(id: 'm2', body: 'edited')));
-    await Future<void>.delayed(Duration.zero);
+      socket.emit(ChatMessageEvent(buildMessage(id: 'm2', body: 'edited')));
+      await Future<void>.delayed(Duration.zero);
 
-    expect(read().messages, hasLength(before));
-    expect(
-      read().messages.firstWhere((m) => m.id == 'm2').body,
-      'edited',
-    );
-  });
+      expect(read().messages, hasLength(before));
+      expect(read().messages.firstWhere((m) => m.id == 'm2').body, 'edited');
+    },
+  );
 
   test('traffic for another chat is ignored', () async {
     await notifier().load();
@@ -107,13 +116,16 @@ void main() {
     expect(read().messages, hasLength(before));
   });
 
-  test('a dropped socket is reported rather than silently going stale', () async {
-    await notifier().load();
-    socket.emit(const ChatConnectionEvent(false));
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'a dropped socket is reported rather than silently going stale',
+    () async {
+      await notifier().load();
+      socket.emit(const ChatConnectionEvent(false));
+      await Future<void>.delayed(Duration.zero);
 
-    expect(read().connected, isFalse);
-  });
+      expect(read().connected, isFalse);
+    },
+  );
 
   test('loadMore prepends the older page', () async {
     repo.nextCursor = 'm1';

@@ -143,6 +143,29 @@ abstract final class AppRoutes {
   static String eventGuest(String id, String inviteId) =>
       '/events/$id/guests/$inviteId';
 
+  // Memories (Sprint 8). Creation is a two-step wizard held in one controller,
+  // so the steps are siblings — backing out of step 2 returns to step 1 with
+  // what was typed still there.
+
+  /// "Create Memory" (`4104:1539`) — step 1.
+  static const createMemory = '/memories/create';
+
+  /// "When should this Memory Unlock?" (`2198:73`) — step 2.
+  static const createMemoryUnlock = '/memories/create/unlock';
+
+  /// One capsule — sealed, or its story once open.
+  static String memory(String id) => '/memories/$id';
+
+  /// The add-a-wish flow (`2073:55`, `2078:233`, `2074:129`, audio).
+  static String memoryAddWish(String id) => '/memories/$id/wishes/add';
+
+  /// The full experience (`2078:357`) — a story, one wish per segment.
+  static String memoryExperience(String id) => '/memories/$id/experience';
+
+  /// A memory's contribute link. Public — someone with no account may still
+  /// add a wish, which is how a capsule fills up.
+  static String memoryInvite(String slug) => '/m/$slug';
+
   /// An event invite. Public and unauthenticated — the token is the
   /// authorization, and requiring a signup to answer an invitation is the
   /// fastest way to collect no RSVPs at all.

@@ -1,14 +1,18 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/legal/legal_links.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/sparkle_icon.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../domain/phone_number.dart';
 import 'sign_in_controller.dart';
@@ -63,7 +67,8 @@ class _MobileNumberScreenState extends ConsumerState<MobileNumberScreen> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final state = ref.watch(signInControllerProvider);
-    final ready = state.phone?.isComplete ?? false;
+    // Terms are part of "ready": the number alone no longer unlocks the button.
+    final ready = state.canRequestCode;
 
     return Scaffold(
       backgroundColor: colors.surface,
@@ -110,6 +115,17 @@ class _MobileNumberScreenState extends ConsumerState<MobileNumberScreen> {
                         ],
                       ),
               ),
+              const SizedBox(height: AppSpacing.xl),
+              _ConsentChecks(
+                acceptedTerms: state.acceptedTerms,
+                marketingOptIn: state.marketingOptIn,
+                onTerms: ref
+                    .read(signInControllerProvider.notifier)
+                    .setAcceptedTerms,
+                onMarketing: ref
+                    .read(signInControllerProvider.notifier)
+                    .setMarketingOptIn,
+              ),
               const SizedBox(height: AppSpacing.xxl),
             ],
           ),
@@ -117,6 +133,154 @@ class _MobileNumberScreenState extends ConsumerState<MobileNumberScreen> {
       ),
     );
   }
+}
+
+/// The two consent rows under the button.
+///
+/// The first is required — the button stays disabled until it is ticked. The
+/// second is optional and clearly labelled as such, because bundling marketing
+/// consent into a mandatory agreement is exactly what the DPDP Act forbids.
+class _ConsentChecks extends StatelessWidget {
+  const _ConsentChecks({
+    required this.acceptedTerms,
+    required this.marketingOptIn,
+    required this.onTerms,
+    required this.onMarketing,
+  });
+
+  final bool acceptedTerms;
+  final bool marketingOptIn;
+  final ValueChanged<bool> onTerms;
+  final ValueChanged<bool> onMarketing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final body = context.text.bodyMedium?.copyWith(color: colors.textPrimary);
+    final link = body?.copyWith(
+      fontWeight: FontWeight.w700,
+      decoration: TextDecoration.underline,
+      decorationColor: colors.textPrimary,
+    );
+
+    return Column(
+      children: [
+        _CheckRow(
+          value: acceptedTerms,
+          onChanged: onTerms,
+          // Read out as one sentence rather than as three disjoint spans.
+          semanticLabel:
+              'I agree to the Terms and Conditions and I have read the '
+              'Privacy policy',
+          label: Text.rich(
+            TextSpan(
+              style: body,
+              children: [
+                const TextSpan(text: 'I agree to the '),
+                _LegalSpan(
+                  text: 'Terms & Conditions*',
+                  url: LegalLinks.terms,
+                  style: link,
+                ),
+                const TextSpan(text: ' & I have read the '),
+                _LegalSpan(
+                  text: 'Privacy policy*',
+                  url: LegalLinks.privacy,
+                  style: link,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _CheckRow(
+          value: marketingOptIn,
+          onChanged: onMarketing,
+          label: Text(
+            "I'd like to receive promotional emails and offers (Optional)",
+            style: body,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A checkbox with a label that toggles it too.
+class _CheckRow extends StatelessWidget {
+  const _CheckRow({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+    this.semanticLabel,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final Widget label;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return MergeSemantics(
+      child: Semantics(
+        label: semanticLabel,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              value: value,
+              onChanged: (next) => onChanged(next ?? false),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.xs),
+              ),
+              side: BorderSide(color: colors.primary, width: 1.5),
+              fillColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? colors.primary
+                    : colors.surface,
+              ),
+              checkColor: colors.onPrimary,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            // Tapping the words toggles the box, as it does on every other
+            // consent form — except on the links, whose own recognisers win.
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onChanged(!value),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                  child: label,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// An underlined legal link that opens [url] in the browser.
+///
+/// A span rather than a widget so it wraps inside the sentence; the app has no
+/// in-app Terms or Privacy screen yet (Sprint 9), so these leave the app.
+class _LegalSpan extends TextSpan {
+  _LegalSpan({required String text, required String url, super.style})
+    : super(
+        text: text,
+        recognizer: TapGestureRecognizer()
+          ..onTap = () {
+            unawaited(
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+            );
+          },
+      );
 }
 
 /// The circular sparkle mark above the headline.
@@ -133,7 +297,7 @@ class _SparkleBadge extends StatelessWidget {
         shape: BoxShape.circle,
         color: colors.surfaceAlt,
       ),
-      child: Icon(Icons.auto_awesome, size: 22, color: colors.primary),
+      child: SparkleIcon(size: 22, color: colors.primary),
     );
   }
 }

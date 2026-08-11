@@ -145,6 +145,15 @@ const CONTENT: Record<NotificationType, (p: Record<string, unknown>) => Content>
     ],
     cta: { label: 'Watch your reel', url: s(p, 'url') },
   }),
+  [NotificationType.MEMORY_UNLOCKED]: (p) => ({
+    subject: `A memory just opened 💜`,
+    title: `${s(p, 'title', 'Your memory')} is open`,
+    lines: [
+      `${s(p, 'wishCount', 'A few')} wishes were waiting inside.`,
+      'Tap to open it and read them.',
+    ],
+    cta: { label: 'Open the memory', url: s(p, 'url') },
+  }),
   [NotificationType.CONTENT_REMOVED]: (p) => ({
     subject: 'A note about your content',
     title: 'Your content was removed',

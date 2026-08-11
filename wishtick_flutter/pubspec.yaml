@@ -44,6 +44,12 @@ dependencies:
   share_plus: ^12.0.2
   url_launcher: ^6.3.2
 
+  # Memory wishes (Sprint 8). A voice note needs position/duration streams and
+  # a seek, which is what the story's transport row is made of; a video wish
+  # needs a first frame to sit under the play button before it plays.
+  just_audio: ^0.10.5
+  video_player: ^2.10.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -58,6 +64,7 @@ flutter:
     - assets/avatar/
     - assets/onboarding/
     - assets/logo/
+    - assets/icons/
 
   # Bundled rather than fetched at runtime: no flash of fallback type on first
   # launch, works offline, and keeps golden tests deterministic. Both are

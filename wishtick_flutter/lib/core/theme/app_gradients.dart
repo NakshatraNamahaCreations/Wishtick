@@ -9,7 +9,11 @@ import 'app_palette.dart';
 /// or a theme switch. Each token declares its light and dark form together.
 @immutable
 class WishtickGradients extends ThemeExtension<WishtickGradients> {
-  const WishtickGradients({required this.headline, required this.celebration});
+  const WishtickGradients({
+    required this.headline,
+    required this.celebration,
+    required this.splash,
+  });
 
   /// Serif display headings that sweep plum → bronze left to right, as on the
   /// sign-in screen (Figma `17:329`).
@@ -18,6 +22,24 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
   /// The plum → violet wash behind celebratory sheet headers.
   final LinearGradient celebration;
 
+  /// The splash backdrop (Figma `143:356`) — a vertical plum wash falling from
+  /// [AppPalette.plumMuted] to near-black.
+  ///
+  /// **The one token that is identical in light and dark, on purpose.** The
+  /// splash is a brand moment rather than a page: it is the first frame the
+  /// user sees, the mark and wordmark are drawn *for* this backdrop, and the
+  /// screen carries no content that a light surface would serve better. Both
+  /// [light] and [dark] therefore point at the same [_splash] — this is not an
+  /// oversight to be "fixed" by giving dark its own stops.
+  final LinearGradient splash;
+
+  /// Shared by both themes — see [splash].
+  static const _splash = LinearGradient(
+    colors: [AppPalette.plumMuted, AppPalette.plumNight],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
   static const light = WishtickGradients(
     headline: LinearGradient(colors: [AppPalette.plumMuted, AppPalette.bronze]),
     celebration: LinearGradient(
@@ -25,6 +47,7 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     ),
+    splash: _splash,
   );
 
   /// Both stops step up in luminance so the sweep stays legible on the dark
@@ -38,16 +61,19 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     ),
+    splash: _splash,
   );
 
   @override
   WishtickGradients copyWith({
     LinearGradient? headline,
     LinearGradient? celebration,
+    LinearGradient? splash,
   }) {
     return WishtickGradients(
       headline: headline ?? this.headline,
       celebration: celebration ?? this.celebration,
+      splash: splash ?? this.splash,
     );
   }
 
@@ -57,6 +83,7 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
     return WishtickGradients(
       headline: LinearGradient.lerp(headline, other.headline, t)!,
       celebration: LinearGradient.lerp(celebration, other.celebration, t)!,
+      splash: LinearGradient.lerp(splash, other.splash, t)!,
     );
   }
 }

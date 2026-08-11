@@ -138,6 +138,25 @@ export interface ReelReleasedEvent {
 }
 
 /**
+ * A time-locked memory capsule opened (`2078:357`). Emitted after the capsule
+ * flips to `unlocked`, whether by the scheduled job or by the host opening it
+ * early.
+ *
+ * The audience is the host and the contributors, NOT the recipient: a capsule
+ * is made *for* a named person who frequently has no account — that is the
+ * whole point of it — so there is nobody else to notify.
+ */
+export const MEMORY_UNLOCKED = 'memory.unlocked';
+
+export interface MemoryUnlockedEvent {
+  capsuleId: string;
+  hostId: string;
+  contributorIds: string[];
+  title: string;
+  wishCount: number;
+}
+
+/**
  * A user was suspended or force-logged-out by an admin. Their access is already
  * revoked at the guard layer (status + tokensInvalidBefore); the chat gateway
  * additionally drops their live sockets so a websocket cannot outlive the ban.

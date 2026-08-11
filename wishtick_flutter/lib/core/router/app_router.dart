@@ -33,6 +33,12 @@ import '../../features/group_gift/presentation/group_gift_summary_screen.dart';
 import '../../features/group_gift/presentation/group_gift_thank_you_screen.dart';
 import '../../features/home/presentation/delivery_location_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/memories/presentation/add_wish_screen.dart';
+import '../../features/memories/presentation/create_memory_screen.dart';
+import '../../features/memories/presentation/create_memory_unlock_screen.dart';
+import '../../features/memories/presentation/memories_tab_screen.dart';
+import '../../features/memories/presentation/memory_detail_screen.dart';
+import '../../features/memories/presentation/memory_experience_screen.dart';
 import '../../features/onboarding/presentation/all_set_screen.dart';
 import '../../features/onboarding/presentation/avatar_picker_screen.dart';
 import '../../features/onboarding/presentation/category_detail_screen.dart';
@@ -352,6 +358,38 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+      // Memories (Sprint 8). The two create steps are siblings, as the events
+      // wizard's are, so backing out of step 2 keeps what was typed.
+      GoRoute(
+        path: AppRoutes.createMemory,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const CreateMemoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.createMemoryUnlock,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const CreateMemoryUnlockScreen(),
+      ),
+      GoRoute(
+        path: '/memories/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            MemoryDetailScreen(memoryId: state.pathParameters['id']!),
+        routes: [
+          GoRoute(
+            path: 'wishes/add',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                AddWishScreen(memoryId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: 'experience',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                MemoryExperienceScreen(memoryId: state.pathParameters['id']!),
+          ),
+        ],
+      ),
       GoRoute(
         path: '/gifts/:giftId/confirmed',
         parentNavigatorKey: _rootNavigatorKey,
@@ -458,11 +496,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.memories,
-                builder: (context, state) => const SprintPlaceholder(
-                  title: 'Memories',
-                  sprint: 'Sprint 8 — Memories',
-                  figmaNodeId: '2032:460',
-                ),
+                builder: (context, state) => const MemoriesTabScreen(),
               ),
             ],
           ),

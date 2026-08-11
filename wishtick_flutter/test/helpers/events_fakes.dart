@@ -24,7 +24,10 @@ WishtickEventDetail buildEvent({
   relation: 'friend',
   inviteTemplate: inviteTemplate,
   inviteMediaUrl: inviteMediaUrl,
-  share: const EventShare(slug: 'siya-24th', url: 'https://wt.test/e/siya-24th'),
+  share: const EventShare(
+    slug: 'siya-24th',
+    url: 'https://wt.test/e/siya-24th',
+  ),
 );
 
 EventInvite buildInviteRow({

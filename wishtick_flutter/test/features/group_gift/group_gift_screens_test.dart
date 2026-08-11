@@ -175,10 +175,7 @@ void main() {
       expect(products.searchCalls, 1);
       expect(find.text('Wireless Headphones'), findsOneWidget);
       // The screen names the group it is adding to (`4007:720`).
-      expect(
-        find.textContaining("Siya's birthday gift"),
-        findsOneWidget,
-      );
+      expect(find.textContaining("Siya's birthday gift"), findsOneWidget);
 
       // A rebuild that does not change the query must not search again.
       await tester.pump();
@@ -459,7 +456,10 @@ void main() {
         const GroupGiftSettleScreen(groupGiftId: 'gg_1'),
         repo: FakeGroupGiftRepository(
           stubBalance: balanceOf(200000),
-          settlements: [buildSettlement(), buildSettlement(id: 'st_2')],
+          settlements: [
+            buildSettlement(),
+            buildSettlement(id: 'st_2'),
+          ],
         ),
       );
 
@@ -514,7 +514,10 @@ void main() {
       'settle': const GroupGiftSettleScreen(groupGiftId: 'gg_1'),
     };
 
-    for (final theme in {'light': AppTheme.light, 'dark': AppTheme.dark}.entries) {
+    for (final theme in {
+      'light': AppTheme.light,
+      'dark': AppTheme.dark,
+    }.entries) {
       for (final screen in screens.entries) {
         testWidgets('${screen.key} — ${theme.key}', (tester) async {
           await pump(

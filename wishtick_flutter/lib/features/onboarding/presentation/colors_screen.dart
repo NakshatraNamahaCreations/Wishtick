@@ -6,6 +6,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/hex_color.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/sparkle_icon.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../domain/onboarding_options.dart';
 import 'onboarding_flow_controller.dart';
@@ -94,8 +95,7 @@ class _ColorsScreenState extends ConsumerState<ColorsScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.auto_awesome,
+                    SparkleIcon(
                       size: AppSizes.iconMd,
                       color: colors.celebration,
                     ),

@@ -184,7 +184,10 @@ void main() {
       expect(find.text('Siya likes blue'), findsOneWidget);
     });
 
-    for (final theme in {'light': AppTheme.light, 'dark': AppTheme.dark}.entries) {
+    for (final theme in {
+      'light': AppTheme.light,
+      'dark': AppTheme.dark,
+    }.entries) {
       testWidgets('renders in ${theme.key}', (tester) async {
         await pumpChat(
           tester,
@@ -265,11 +268,7 @@ void main() {
         gift: buildGroupGift(
           status: GroupGiftStatus.purchased,
           // A share block is what marks the caller as the host.
-          share: const GroupGiftShare(
-            slug: 's',
-            url: 'u',
-            hasPasscode: false,
-          ),
+          share: const GroupGiftShare(slug: 's', url: 'u', hasPasscode: false),
         ),
       );
 

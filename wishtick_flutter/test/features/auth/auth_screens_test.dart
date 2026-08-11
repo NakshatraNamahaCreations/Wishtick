@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wishtick_flutter/app.dart';
 import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/core/network/token_storage.dart';
+import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/core/theme/theme_controller.dart';
 import 'package:wishtick_flutter/core/widgets/wishtick_bottom_nav.dart';
 import 'package:wishtick_flutter/features/auth/data/auth_repository.dart';
@@ -71,6 +72,15 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Ticks the required Terms box — the first of the two consent checkboxes.
+  ///
+  /// GET OTP stays disabled without it, so every test that submits the form
+  /// has to do what a user does.
+  Future<void> acceptTerms(WidgetTester tester) async {
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+  }
+
   group('welcome carousel', () {
     testWidgets('opens on the first slide from the design', (tester) async {
       await pumpApp(tester);
@@ -122,15 +132,76 @@ void main() {
       await enterNumber(tester, '98765');
       expect(tester.widget<ElevatedButton>(button).onPressed, isNull);
 
+      // A complete number is no longer enough on its own.
       await enterNumber(tester, '9876543210');
+      expect(tester.widget<ElevatedButton>(button).onPressed, isNull);
+
+      await acceptTerms(tester);
       expect(tester.widget<ElevatedButton>(button).onPressed, isNotNull);
       expect(auth.requestedSignInFor, isEmpty);
+    });
+
+    testWidgets('shows both consent rows, neither pre-ticked', (tester) async {
+      await pumpApp(tester);
+      await reachMobileScreen(tester);
+
+      expect(find.byType(Checkbox), findsNWidgets(2));
+      expect(
+        find.textContaining('I agree to the', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          "I'd like to receive promotional emails and offers (Optional)",
+        ),
+        findsOneWidget,
+      );
+
+      // A pre-ticked consent box is not consent — both start empty.
+      for (final box in tester.widgetList<Checkbox>(find.byType(Checkbox))) {
+        expect(box.value, isFalse);
+      }
+    });
+
+    testWidgets('tapping the label toggles its box', (tester) async {
+      await pumpApp(tester);
+      await reachMobileScreen(tester);
+
+      await tester.tap(
+        find.text(
+          "I'd like to receive promotional emails and offers (Optional)",
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widgetList<Checkbox>(find.byType(Checkbox)).last.value,
+        isTrue,
+      );
+    });
+
+    testWidgets('the optional opt-in does not gate the button', (tester) async {
+      await pumpApp(tester);
+      await reachMobileScreen(tester);
+      await enterNumber(tester, '9876543210');
+
+      final button = find.widgetWithText(ElevatedButton, 'GET OTP');
+
+      // Ticking only the promotional box leaves the form incomplete: it is the
+      // Terms box that unlocks it, and the two must not be conflated.
+      await tester.tap(find.byType(Checkbox).last);
+      await tester.pumpAndSettle();
+      expect(tester.widget<ElevatedButton>(button).onPressed, isNull);
+
+      await acceptTerms(tester);
+      expect(tester.widget<ElevatedButton>(button).onPressed, isNotNull);
     });
 
     testWidgets('requests a code and opens the OTP screen', (tester) async {
       final auth = await pumpApp(tester);
       await reachMobileScreen(tester);
       await enterNumber(tester, '9876543210');
+      await acceptTerms(tester);
 
       await tester.tap(find.widgetWithText(ElevatedButton, 'GET OTP'));
       await tester.pumpAndSettle();
@@ -148,6 +219,7 @@ void main() {
       );
       await reachMobileScreen(tester);
       await enterNumber(tester, '9876543210');
+      await acceptTerms(tester);
 
       await tester.tap(find.widgetWithText(ElevatedButton, 'GET OTP'));
       await tester.pumpAndSettle();
@@ -165,6 +237,7 @@ void main() {
       final auth = await pumpApp(tester);
       await reachMobileScreen(tester);
       await enterNumber(tester, '9876543210');
+      await acceptTerms(tester);
       await tester.tap(find.widgetWithText(ElevatedButton, 'GET OTP'));
       await tester.pumpAndSettle();
       return auth;
@@ -255,11 +328,36 @@ void main() {
     });
   });
 
-  group('dark mode', () {
-    testWidgets('renders the auth flow without overflow', (tester) async {
-      await pumpApp(tester, themeMode: 'dark');
-      await reachMobileScreen(tester);
+  group('dark palette', () {
+    // Built straight on AppTheme.dark rather than through a stored preference:
+    // the app is light-only for now (kDarkModeEnabled), so a 'dark' pref no
+    // longer changes anything. The palette is still live and still has to lay
+    // out.
+    testWidgets('renders the mobile screen without overflow', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view
+        ..physicalSize = const Size(393, 852)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            tokenStorageProvider.overrideWithValue(FakeTokenStorage()),
+            authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const MobileNumberScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
       await enterNumber(tester, '9876543210');
+      await acceptTerms(tester);
 
       final context = tester.element(find.byType(MobileNumberScreen));
       expect(Theme.of(context).brightness, Brightness.dark);

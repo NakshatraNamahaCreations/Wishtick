@@ -9,6 +9,10 @@ import '../../../core/theme/theme_extensions.dart';
 ///
 /// The Figma file is light-only, so this screen has no frame of its own; it
 /// follows the list-row pattern of the Profile screen (`64:158`).
+///
+/// While [kDarkModeEnabled] is false only "Light" is listed — the app is
+/// light-only, and offering a choice it will not honour is worse than offering
+/// none.
 class AppearanceScreen extends ConsumerWidget {
   const AppearanceScreen({super.key});
 
@@ -30,11 +34,11 @@ class AppearanceScreen extends ConsumerWidget {
             ),
             child: Column(
               children: [
-                for (final option in ThemeMode.values)
+                for (final option in _offered)
                   _ThemeOptionTile(
                     mode: option,
                     selected: mode == option,
-                    isLast: option == ThemeMode.values.last,
+                    isLast: option == _offered.last,
                     onTap: () => ref
                         .read(themeModeProvider.notifier)
                         .setThemeMode(option),
@@ -47,6 +51,11 @@ class AppearanceScreen extends ConsumerWidget {
     );
   }
 }
+
+/// The modes on offer. Just the one while the app is light-only.
+const _offered = kDarkModeEnabled
+    ? ThemeMode.values
+    : <ThemeMode>[ThemeMode.light];
 
 class _ThemeOptionTile extends StatelessWidget {
   const _ThemeOptionTile({

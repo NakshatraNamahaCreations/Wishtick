@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wishtick_flutter/app.dart';
 import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/core/network/token_storage.dart';
+import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/core/theme/theme_controller.dart';
 import 'package:wishtick_flutter/core/widgets/wishtick_swipe_button.dart';
 import 'package:wishtick_flutter/features/auth/data/auth_repository.dart';
@@ -299,9 +300,35 @@ void main() {
     });
   });
 
-  group('dark mode', () {
+  group('dark palette', () {
+    // Built straight on AppTheme.dark rather than through a stored preference:
+    // the app is light-only for now (kDarkModeEnabled), so a 'dark' pref no
+    // longer changes anything. The palette itself is still live — the memory
+    // story reads it — and this is what keeps the screen laying out on it.
     testWidgets('renders without overflow', (tester) async {
-      await pumpOnboarding(tester, themeMode: 'dark');
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view
+        ..physicalSize = const Size(393, 852)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            onboardingRepositoryProvider.overrideWithValue(
+              FakeOnboardingRepository(),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const CreateProfileScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
       final context = tester.element(find.byType(CreateProfileScreen));
       expect(Theme.of(context).brightness, Brightness.dark);

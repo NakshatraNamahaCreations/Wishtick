@@ -29,10 +29,30 @@ void main() {
 
     repo = FakeEventsRepository(
       invites: [
-        buildInviteRow(id: 'i1', name: 'Rohan', rsvp: RsvpResponse.yes, plusOnes: 2),
-        buildInviteRow(id: 'i2', name: 'Sona', rsvp: RsvpResponse.yes, plusOnes: 3),
-        buildInviteRow(id: 'i3', name: 'Vihan', rsvp: RsvpResponse.maybe, plusOnes: 2),
-        buildInviteRow(id: 'i4', name: 'Mridhanvi', rsvp: RsvpResponse.no, plusOnes: 1),
+        buildInviteRow(
+          id: 'i1',
+          name: 'Rohan',
+          rsvp: RsvpResponse.yes,
+          plusOnes: 2,
+        ),
+        buildInviteRow(
+          id: 'i2',
+          name: 'Sona',
+          rsvp: RsvpResponse.yes,
+          plusOnes: 3,
+        ),
+        buildInviteRow(
+          id: 'i3',
+          name: 'Vihan',
+          rsvp: RsvpResponse.maybe,
+          plusOnes: 2,
+        ),
+        buildInviteRow(
+          id: 'i4',
+          name: 'Mridhanvi',
+          rsvp: RsvpResponse.no,
+          plusOnes: 1,
+        ),
         buildInviteRow(id: 'i5', name: 'Unanswered'),
       ],
     );
@@ -210,10 +230,7 @@ void main() {
 
   group('Template picker (263:900)', () {
     testWidgets('Next is dead until a design is chosen', (tester) async {
-      await pump(
-        tester,
-        const EventInviteTemplatesScreen(eventId: 'evt_1'),
-      );
+      await pump(tester, const EventInviteTemplatesScreen(eventId: 'evt_1'));
       // The method sheet opens over it first.
       await tester.tap(find.text('Use Wishtick Templates'));
       await tester.pumpAndSettle();
@@ -235,18 +252,13 @@ void main() {
     testWidgets('the Anniversary tab hides birthday-only designs', (
       tester,
     ) async {
-      await pump(
-        tester,
-        const EventInviteTemplatesScreen(eventId: 'evt_1'),
-      );
+      await pump(tester, const EventInviteTemplatesScreen(eventId: 'evt_1'));
       await tester.tap(find.text('Use Wishtick Templates'));
       await tester.pumpAndSettle();
 
       expect(find.text('Golden Bloom'), findsWidgets);
 
-      await tester.tap(
-        find.byKey(const ValueKey('template-tab-Anniversary')),
-      );
+      await tester.tap(find.byKey(const ValueKey('template-tab-Anniversary')));
       await tester.pumpAndSettle();
 
       expect(find.text('Golden Bloom'), findsNothing);
@@ -295,9 +307,7 @@ void main() {
     testWidgets('an uploaded PDF is described, not faked into a card', (
       tester,
     ) async {
-      repo.event = buildEvent(
-        inviteMediaUrl: 'https://cdn.test/invite.pdf',
-      );
+      repo.event = buildEvent(inviteMediaUrl: 'https://cdn.test/invite.pdf');
       await pump(tester, const EventInvitePreviewScreen(eventId: 'evt_1'));
 
       expect(

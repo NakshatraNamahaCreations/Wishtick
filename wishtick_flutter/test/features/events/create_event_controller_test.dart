@@ -80,14 +80,17 @@ void main() {
     expect(state().occasion.type, EventType.special);
   });
 
-  test('submit sends an IANA timezone, not the platform abbreviation', () async {
-    fillStep1();
-    fillStep2();
+  test(
+    'submit sends an IANA timezone, not the platform abbreviation',
+    () async {
+      fillStep1();
+      fillStep2();
 
-    await notifier().submit();
+      await notifier().submit();
 
-    expect(repo.createCalls.single['timezone'], 'Asia/Kolkata');
-  });
+      expect(repo.createCalls.single['timezone'], 'Asia/Kolkata');
+    },
+  );
 
   test('submit carries person, relation and venue', () async {
     fillStep1();

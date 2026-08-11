@@ -412,6 +412,7 @@ class FakeMediaRepository implements MediaRepository {
   Future<MediaView> uploadFile({
     required XFile file,
     required MediaPurpose purpose,
+    String? fileName,
   }) async {
     uploadCalls.add(purpose);
     return MediaView(

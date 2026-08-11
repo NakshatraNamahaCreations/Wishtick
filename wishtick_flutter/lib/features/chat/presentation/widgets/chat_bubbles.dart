@@ -356,11 +356,7 @@ class _Bubble extends StatelessWidget {
 }
 
 class _ReactionPill extends StatelessWidget {
-  const _ReactionPill({
-    required this.reaction,
-    required this.mine,
-    this.onTap,
-  });
+  const _ReactionPill({required this.reaction, required this.mine, this.onTap});
 
   final MessageReaction reaction;
   final bool mine;

@@ -159,7 +159,7 @@ class _EventInvitePreviewScreenState
         children: [
           Text(
             'Preview\nYour Invite',
-            style: context.text.headlineMedium?.copyWith(
+            style: context.text.displaySmall?.copyWith(
               color: context.headlineBrandColor,
               fontWeight: FontWeight.w700,
               height: 1.2,

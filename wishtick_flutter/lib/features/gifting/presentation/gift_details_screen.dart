@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/sparkle_icon.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../home/domain/address.dart';
 import '../../home/presentation/delivery_location_screen.dart';
@@ -391,11 +392,7 @@ class _QuickSuggestions extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.xs),
-            Icon(
-              Icons.auto_awesome,
-              size: AppSizes.iconSm,
-              color: colors.accent,
-            ),
+            SparkleIcon(size: AppSizes.iconSm, color: colors.accent),
           ],
         ),
         const SizedBox(height: AppSpacing.md),

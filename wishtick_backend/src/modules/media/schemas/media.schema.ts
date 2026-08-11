@@ -18,6 +18,15 @@ export enum MediaPurpose {
   WISHLIST_COVER = 'wishlist_cover',
   /** Sprint 10. */
   REEL_WISH = 'reel_wish',
+  /** Sprint 8 — a memory capsule's cover (`4104:1539`). */
+  MEMORY_COVER = 'memory_cover',
+  /**
+   * Sprint 8 — a contributed wish's photo, video or voice note. Its own
+   * purpose rather than REEL_WISH: these are never compiled, so they are not
+   * bound by the reel's clip rules, and a memory allows a still where a reel
+   * does not.
+   */
+  MEMORY_WISH = 'memory_wish',
 }
 
 export enum MediaStatus {

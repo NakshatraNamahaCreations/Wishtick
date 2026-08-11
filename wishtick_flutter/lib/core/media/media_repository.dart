@@ -17,6 +17,13 @@ enum MediaPurpose {
   /// A host's own invitation artwork (`2248:70`). The only purpose that admits
   /// GIF, MP4 and PDF as well as still images.
   eventInvite('event_invite'),
+
+  /// A memory capsule's cover (`4104:1539`).
+  memoryCover('memory_cover'),
+
+  /// A contributed wish's photo, video or voice note. The only purpose that
+  /// takes audio as well as stills and video.
+  memoryWish('memory_wish'),
   reelWish('reel_wish');
 
   const MediaPurpose(this.wireValue);
@@ -72,9 +79,10 @@ class MediaRepository {
   Future<MediaView> uploadFile({
     required XFile file,
     required MediaPurpose purpose,
+    String? fileName,
   }) async {
     final bytes = await file.readAsBytes();
-    final contentType = file.mimeType ?? _guessContentType(file.name);
+    final contentType = contentTypeFor(file, fileName: fileName);
 
     final ticket = await _api.post<Map<String, dynamic>>(
       '/media/upload-url',
@@ -110,17 +118,45 @@ class MediaRepository {
     return MediaView.fromJson(confirmed);
   }
 
-  /// Only consulted when the picker gave no mime type — which `file_picker`
-  /// routinely does on Android for anything it did not open through the
-  /// gallery.
-  static String _guessContentType(String fileName) {
+  /// What to tell the server this file is.
+  ///
+  /// The picker's own mime type when it gave one; otherwise a guess from the
+  /// name — `file_picker` supplies no type on Android for anything it did not
+  /// open through the gallery, which is most of the time.
+  ///
+  /// [fileName] exists because **`XFile.fromData` ignores its `name`** on
+  /// io: the constructor documents it as "only to match the web version", and
+  /// `.name` falls back to the basename of an empty path. Any caller building
+  /// an XFile from bytes must pass the real filename here, or every upload it
+  /// makes is guessed from nothing.
+  ///
+  /// Every extension the app can upload must be in the table below. A miss
+  /// falls through to `image/jpeg` and the server believes it: a voice note
+  /// stored as a JPEG uploads happily, gets a `.jpg` storage key, and then will
+  /// not play.
+  static String contentTypeFor(XFile file, {String? fileName}) =>
+      file.mimeType ?? _guessFromName(fileName ?? file.name);
+
+  static String _guessFromName(String fileName) {
+    const byExtension = {
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.heic': 'image/heic',
+      '.gif': 'image/gif',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.mp3': 'audio/mpeg',
+      '.m4a': 'audio/mp4',
+      '.aac': 'audio/aac',
+      '.wav': 'audio/wav',
+      '.pdf': 'application/pdf',
+    };
     final lower = fileName.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.heic')) return 'image/heic';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    if (lower.endsWith('.mp4')) return 'video/mp4';
-    if (lower.endsWith('.pdf')) return 'application/pdf';
+    for (final entry in byExtension.entries) {
+      if (lower.endsWith(entry.key)) return entry.value;
+    }
     return 'image/jpeg';
   }
 }

@@ -860,6 +860,95 @@ lands on the profile.
 
 **Backend (new): Memories module** — capsule (person/relation/occasion/date/cover), contributor invites, media messages (photo/video/audio/text via `media` module), time-lock rule, unlock job (BullMQ scheduled) + notifications. Decide: extend `reels` or new `memories` module.
 
+> **Three node IDs above are wrong.** The Memories tab is exported as
+> **`4104:1433`**, not `2032:460`; Create Memory as **`4104:1539`**, not
+> `2058:16`; and `2198:73` is *"When should this Memory Unlock?"* — the second
+> step of the create flow, not an "unlock moment".
+
+### The module decision: a new `memories` module
+
+`ReelCollection` is also a time-locked collection of contributed messages, and
+extending it was the cheaper-looking option. It was rejected: a reel is for a
+**registered recipient**, is birthday-only, and compiles its wishes into one
+MP4; a memory is for a *named person who usually has no account* — that is the
+point of it — carries an occasion and a cover, opens at an instant the host
+picks to the minute, and is browsed wish by wish. Sharing the schema would have
+made `recipientUserId`, `birthdayMonth/Day`, `releaseAt` and the whole
+compilation pipeline mean one thing for reels and another for memories, and put
+a shipped, tested feature at risk for it. The two modules share the `media`
+module and the scheduler pattern; nothing else.
+
+### What shipped
+
+**Backend.** `MemoryCapsule` + `MemoryWish`, migration `020-memory-indexes`,
+`memory-unlock` on the shared scheduler (with a staleness guard, so a host who
+moves the date does not get opened at the old instant), a `MEMORY_UNLOCKED`
+domain event and its notification. Two new media purposes: `memory_cover`, and
+`memory_wish` — the only purpose that admits audio as well as stills and video.
+
+**The time-lock lives in exactly one place**, `memory.views.ts`. Content is
+attached only for an `unlocked` capsule; metadata — the count, contributors'
+first names — is deliberately visible while sealed, because the frames show
+"4 Wishes" on a locked capsule. `GET /memories/:id/wishes` **409s** while
+sealed rather than answering an empty list, so no client can present "locked"
+as "nobody wrote anything". Eight of the eighteen e2e tests exist to prove it,
+including that the *host* cannot read their own sealed capsule.
+
+**Flutter.** Memories tab (`4104:1433`), create memory (`4104:1539`), unlock
+date/time (`2198:73`), the add-a-wish flow (`2073:55`, `2078:233`, `2074:129`,
+audio), the previews (`2074:76`, `2240:71`, `2078:202`, `2078:255`) and the
+story-style experience (`2078:357` + variants). Reached from the centre "+" →
+Memory, which was a placeholder until now.
+
+**Voice notes and videos play**, via `just_audio` and `video_player`: the
+transport row of `2078:529` is real (replay-5 / play-pause / forward-5, live
+position against duration, the waveform filling to the playhead), and a video
+holds on its first frame under a play button in the preview (`2078:255`) and
+autoplays in the story (`2078:390`). A clip reaching its end advances the story
+— a still segment still runs on a six-second timer, but a timer would cut a
+voice note off mid-sentence.
+
+### Defects the device found
+
+1. **Page headlines were the wrong typeface — across Sprint 7 too.** Every
+   frame draws a big page headline in Playfair; `headline*` is Montserrat and
+   `display*` is Playfair. Sprint 7's "Tell us about your event", "Choose a
+   Template" and "Preview Your Invite" all used `headline*`, which is why they
+   rendered sans against serif frames. Every onboarding and auth screen already
+   used `displaySmall`; the convention existed and three screens had broken it.
+2. **A text wish was printed twice** in the story — once as the card body and
+   again as the caption below it. The caption belongs to media wishes only.
+3. **A text wish's preview card was left-aligned** where the frame centres it:
+   a centred `Text` inside a `crossAxisAlignment: start` Column only spans its
+   own content, so there is nothing to centre it in. Fourth escape of the
+   loose-constraints bug class.
+4. **Every `XFile.fromData` upload sent the wrong content type — Sprint 7's
+   too.** `XFile.fromData` documents its `name` as *ignored* on io, so
+   `file.name` came back empty and the guess fell through to `image/jpeg`: a
+   `.m4a` uploaded as a JPEG, got a `.jpg` storage key, and would not play.
+   `MediaRepository.uploadFile` now takes the filename explicitly, and the
+   guess table covers every extension the app can send.
+5. **Native players could not reach the dev backend.** Android blocks cleartext
+   HTTP from API 28, but Dart's own stack (`dart:io`, so Dio and
+   `Image.network`) does not go through that policy — which is why the API and
+   images worked over `http://localhost:3000` while ExoPlayer failed on the
+   same host. A **debug-only** network-security config now permits cleartext to
+   `localhost`, `127.0.0.1` and `10.0.2.2`; release keeps TLS everywhere.
+
+### Still open
+
+- **Two frames are not exported** — "Add audio message" (`2074:152`) and the
+  combined preview (`2219:554`). Both paths are built and working, but
+  **inferred** from their neighbours (`2078:202` and the photo/text previews)
+  rather than matched. The four compose screens are one screen with a kind
+  picker at the top, which is what `2074:152` would have shown.
+- **The capsule detail screen has no frame at all.** The exports jump from
+  creating a capsule to adding a wish to the opened story, but something has to
+  hold the countdown, the contribute link and "Add a Wish". Built from patterns
+  the matched screens use, and marked inferred in its doc comment.
+- The occasion tiles use glyphs rather than the designed illustrations, which
+  are not exported. Same substitution as the event-creation grid.
+
 ---
 
 ## Sprint 9 — Notifications & Profile (2 wk)

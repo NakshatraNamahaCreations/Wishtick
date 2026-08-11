@@ -35,9 +35,9 @@ class _GroupGiftParticipantsScreenState
   Future<void> _invite(String url) async {
     await Clipboard.setData(ClipboardData(text: url));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invite link copied')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Invite link copied')));
   }
 
   /// Sums each named member's confirmed contributions.
@@ -164,11 +164,7 @@ class _GoalCard extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+  const _Stat({required this.label, required this.value, required this.color});
 
   final String label;
   final String value;

@@ -46,6 +46,13 @@ void main() {
   });
 
   group('WishtickColors', () {
+    test('the page colour is the one design confirmed', () {
+      // #FAF7F2, confirmed by design — it supersedes the #F5ECE4 sampled off
+      // the frame exports. Pinned here because it is the colour behind every
+      // screen in the app, and a drift would be visible everywhere at once.
+      expect(WishtickColors.light.background, const Color(0xFFFAF7F2));
+    });
+
     test('light and dark actually differ on surfaces and text', () {
       const light = WishtickColors.light;
       const dark = WishtickColors.dark;

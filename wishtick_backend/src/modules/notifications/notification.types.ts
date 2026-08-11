@@ -29,6 +29,7 @@ export enum NotificationCategory {
   EVENTS = 'events',
   SOCIAL = 'social',
   REELS = 'reels',
+  MEMORIES = 'memories',
 }
 
 /** Every kind of notification the system can raise. */
@@ -48,6 +49,7 @@ export enum NotificationType {
   THANK_YOU = 'thank_you',
   ACCOUNT_SECURITY = 'account_security',
   REEL_RELEASED = 'reel_released',
+  MEMORY_UNLOCKED = 'memory_unlocked',
   CONTENT_REMOVED = 'content_removed',
 }
 
@@ -171,6 +173,12 @@ export const NOTIFICATION_SPECS: Record<NotificationType, NotificationSpec> = {
     priority: NotificationPriority.NORMAL,
     category: NotificationCategory.REELS,
     template: 'reel-released',
+  },
+  [NotificationType.MEMORY_UNLOCKED]: {
+    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL],
+    priority: NotificationPriority.NORMAL,
+    category: NotificationCategory.MEMORIES,
+    template: 'memory-unlocked',
   },
   [NotificationType.CONTENT_REMOVED]: {
     // A moderation notice is account business and cannot be unsubscribed.

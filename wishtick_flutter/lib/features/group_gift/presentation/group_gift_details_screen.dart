@@ -80,9 +80,8 @@ class _GroupGiftDetailsScreenState
         actions: [
           if (gift != null) ...[
             IconButton(
-              onPressed: () => context.push<void>(
-                AppRoutes.groupGiftParticipants(gift.id),
-              ),
+              onPressed: () =>
+                  context.push<void>(AppRoutes.groupGiftParticipants(gift.id)),
               icon: const Icon(Icons.group_outlined),
               tooltip: 'Participants',
             ),

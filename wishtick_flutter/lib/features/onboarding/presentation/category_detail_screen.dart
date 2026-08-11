@@ -8,6 +8,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/sparkle_icon.dart';
 import '../domain/onboarding_options.dart';
 import 'onboarding_flow_controller.dart';
 import 'widgets/photo_tile_grid.dart';
@@ -263,11 +264,7 @@ class _CustomInterestBody extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      Icons.auto_awesome,
-                      size: AppSizes.iconMd,
-                      color: colors.primary,
-                    ),
+                    SparkleIcon(size: AppSizes.iconMd, color: colors.primary),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       'Add a Custom Interest',

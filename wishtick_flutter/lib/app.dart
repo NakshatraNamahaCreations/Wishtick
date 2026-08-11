@@ -16,8 +16,13 @@ class WishtickApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       routerConfig: ref.watch(routerProvider),
       theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ref.watch(themeModeProvider),
+      // While dark mode is off, `darkTheme` is withheld and the mode is pinned:
+      // together they stop a device set to dark from flipping the app anyway,
+      // which `themeMode` alone would not.
+      darkTheme: kDarkModeEnabled ? AppTheme.dark : null,
+      themeMode: kDarkModeEnabled
+          ? ref.watch(themeModeProvider)
+          : ThemeMode.light,
       // An unmissable corner ribbon while the app is running on fakes, so a
       // screenshot or bug report can never be mistaken for the real backend.
       builder: DevMode.fakeBackend
