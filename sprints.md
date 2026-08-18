@@ -984,6 +984,177 @@ voice note off mid-sentence.
 **API:** `notifications` list/read/preferences, `thank-you` flows, `/me` + preferences + export/delete/restore, gifting given/received/on-hold.
 **Backend (new):** FCM device-token registry + push pipeline; real mail adapter.
 
+### What shipped
+
+**Push is scaffolded but credential-gated.** `PUSH_DRIVER` selects the sender:
+`console` is the default and a working no-op — it warns once in production and
+carries on, because a missing push driver must not break in-app, email and SMS
+for everyone. `fcm` selects an HTTP-v1 adapter that signs a service-account JWT
+directly rather than pulling in `firebase-admin` for one authenticated POST.
+**That adapter's network path has never run** — this project has no Firebase
+credentials — and its doc comment says so. What *is* covered is everything
+around it: the token registry, the channel plumbing, and the pruning of tokens
+the provider rejects.
+
+The registry's unique index is on `token` **alone**, not `(user, token)`. A
+registration token belongs to an *install*: hand a phone to a second person and
+FCM returns the same token, so a second row would put the first person's
+notifications on the second person's lock screen. Registering re-points it
+instead, which `device-tokens.e2e-spec.ts` asserts directly.
+
+**The three gift lists were returning bare ids.** `324:1108` / `324:1253` /
+`324:1210` each need an item photo, title and price, the other person's name, a
+group flag and a delivery state. `GiftListService` joins items, orders, group
+gifts and sent thank-you notes in **four queries, not four per row**, and
+answers a `GiftListItemView`. Names are first names only, and no id for either
+party ever reaches the client. The anti-spoiler rule is unchanged and now has
+its own test against the enriched shape: a hidden gift still in progress is
+**absent from the list entirely**, not merely anonymised — a row with the name
+stripped would still announce that something is coming.
+
+**Thank-you notes gained a kind and an attachment.** The four compose frames are
+one screen with the kind picked in the sheet at `2012:109`. A photo/voice/video
+note *adds* a recording; it never replaces the subject and body, because what
+reaches the gifter is an email and no mail client plays a voice note. Media
+ownership is re-checked server-side on attach: a media id is guessable, and
+without that check anyone could hang someone else's recording under their own
+name.
+
+**Addresses were extended, not rebuilt.** Sprint 6 already shipped
+`me/addresses` — modelled as a generic postal record. `324:1340` asks for a
+flat/building line, a locality, a landmark, an alternate mobile and an email,
+each as its own field, and constrains the label to Home/Work/Other. Migration
+`022-addresses` renames the old columns and backfills the new ones rather than
+carrying both spellings. The card's one-line address is joined **server-side**
+(`formatted`) so the address book, the delivery picker and any future export
+cannot drift apart.
+
+**My Events & Invites (`324:973`) unblocks Sprint 7.** The guest list, invite
+templates and RSVP screens were all built last sprint with nothing linking to
+them; this is their entry point. The Invites tab reads `GET /events/invited`,
+which existed on the server and had no client.
+
+### Decisions
+
+- **"Refunds & Payouts" is omitted from the Profile hub**, as the frame's own
+  note above resolves. Wishtick takes no payment — every purchase happens at the
+  merchant — so there is nothing to refund and no payout to show. A row opening
+  an empty screen would promise a feature the product does not have.
+- **"Chat with us" in the Help Centre opens mail, not a chat.** There is no
+  support-chat service behind Wishtick; the only chat in the product is a group
+  gift's own thread. The row says what it does.
+- **In-app notifications cannot be switched off** in the settings screen. In-app
+  *is* the notification centre, and disabling it would leave a screen that could
+  never fill. Email, push and SMS are per-category toggles over the server's
+  opt-out set — an opt-out set, so a category added later is on by default
+  rather than silently muted for existing users.
+
+### A defect found while verifying — in Sprint 8's unlock path
+
+Starting the backend logged `No scheduler handler for job "memory-unlock"`
+twice. The cause is a real race, not noise: `SchedulerDispatcher` is a BullMQ
+`@Processor`, whose worker begins consuming as soon as it is constructed, while
+each feature module registers its handler in `onModuleInit` — which for a module
+imported after `QueueModule` runs *later*. A memory whose unlock instant passed
+while the process was down could therefore be picked up before its handler
+existed, answered `{skipped: true}`, and **completed** — dropping the job, so
+that capsule would never open.
+
+Two changes close it. The dispatcher now takes `autorun: false` and starts its
+worker in `onApplicationBootstrap`, which Nest runs only after every
+`onModuleInit` has finished; and an unrouted job now **throws** instead of
+returning, so it lands in BullMQ's failed set where it can be seen and replayed
+rather than being silently consumed. A restart logs zero unrouted jobs and six
+registered handlers.
+
+### Defects the device found
+
+Walked on the handset against the live backend, in two passes — first as the
+recipient, then as the gifter, because the two see different lists. Between
+them: sign-in, Home, Profile hub, Edit Profile, Gifts Received, Gifts Given,
+Gifts On Hold, gift arrival, the thank-you sheet → compose → preview → sent,
+the notification centre and a row's navigation, notification settings (with a
+live toggle), Address Book, My Events & Invites, Help Centre, About Us and the
+Privacy Policy.
+
+1. **OTP sign-in could not succeed at all.** `AuthRepository.otpLength` read
+   `4` while the backend's `OTP_LENGTH` defaults to 6 — the doc comment three
+   lines above the constant even said "OTP codes are 6 digits". The screen drew
+   four boxes, auto-submitted the first four digits of a six-digit code, and
+   rejected it. Every assertion in the OTP tests was written *in terms of*
+   `otpLength`, so they all passed against a screen nobody could sign in
+   through; only a literal `expect(otpLength, 6)` catches that, and there is
+   now one. The sign-in controller's tests had the same shape — `'1234'`
+   literals that quietly stopped being valid codes — and now derive their
+   codes from the constant.
+2. **`AddressLabel.home` leaked into Home's header**, which read
+   "AddressLabel.home · Mysuru 570031". Sprint 9 turned `Address.label` from a
+   string into an enum; `'${saved.label}'` still compiled and silently printed
+   the enum's Dart name. The enum's display getter is now `display`, not
+   `label`, so `address.label` can no longer be mistaken for the text.
+3. **The Profile title sat left of centre.** The frame balances the Help pill
+   against a back chevron; a tab root has nothing to pop to, so centring the
+   title in the *remaining* space pushed it off. It is a `Stack` now — title
+   across the full width, pill floating over its right end.
+4. **A gift that had not arrived offered "Send Thank You".** The server drafts
+   a note when a gift is *fulfilled*, so a reserved gift's button led to a
+   screen whose own CTA was disabled. The action is gated on `hasArrived`.
+5. **The compose box showed its hint while the counter read "148/100".** Two
+   bugs at once: the text controller was seeded on the first build, when the
+   note was still loading, and never re-seeded; and the 100-character cap
+   (taken literally from the frame's `40/100`) is *below* the 148-character
+   letter the server drafts, so the field would have truncated a valid draft on
+   the first keystroke. The box now fills when the note lands, and the cap is
+   the server's own 2000.
+6. **A sent thank-you still read "Send Thank You" on the card behind it.**
+   `thankYouSent` lives on the gift-list row, and sending only invalidated the
+   note providers.
+7. **"Done" on the sent screen exited the app.** It used `go` to the received
+   list — a route pushed *over* the shell — which replaced the whole stack, so
+   the next back press had nothing to pop. It returns to the Profile tab.
+8. **The notification centre was unreachable.** Home's bell still called a
+   `_notYet` placeholder from an earlier sprint: the sprint that built the
+   screen never opened its only door. The bell now navigates and carries an
+   unread badge (which is what `unreadCountProvider` was written for and
+   nothing used). Home's event card also stopped dead-ending — a hosted event
+   now opens My Events.
+9. **Every notification-settings toggle blanked the whole screen.** Flipping a
+   switch invalidates the preferences provider, and `AsyncValue.when` sends it
+   back to `loading` — so the list became a spinner mid-flip and swallowed the
+   next tap. It now keeps the last-known settings on screen while refetching,
+   and only the first load shows a spinner.
+
+The gifter pass found two more:
+
+10. **One On Hold card read "Delivered on 17 Aug 2026" *and* "On hold", with a
+    "Gift Now" button.** `listOnHold` filtered on
+    `[RESERVED, PURCHASED, FULFILLED]` — carried over unexamined from the
+    service this replaced. Fulfilled means the gift reached the recipient; it
+    belongs in Gifts Given. The list is reserved and purchased now, and
+    "Gift Now" is offered only for a *reserved* gift, since a purchased one is
+    already bought and that button would invite buying it twice.
+11. **The Group tab told a gifter who had given two gifts that they had "not
+    given a gift yet".** The empty text ignored the active filter; it names the
+    tab now.
+
+### Still open
+
+- **The Group tab has never been exercised with a real group gift.** Both walk
+  accounts had only single gifts, so `isGroup` and the group filter are covered
+  by widget tests but not by the device.
+- **Four frames were never exported** and are inferred from their neighbours, as
+  agreed: About Us (`2252:703`), the logout popup (`2252:611`), the audio
+  thank-you (`2209:122`) and My Invites (`324:1071`). Invites is built as the
+  second tab of `324:973`, which is what that frame's own tab bar shows.
+- **The illustrations are substitutes.** `2012:72`'s magenta gift box and
+  `2209:203`'s confetti heart are not in `UI_Screen/`; both use the brand mark
+  inside the existing confetti burst, the same substitution the order-confirmed
+  screen already makes.
+- **`2209:104`'s "Choose Template" row is not built.** The frame offers two
+  decorative thank-you card designs; neither artwork is exported, and inventing
+  them would be designing rather than matching.
+- The saved-UPI-ID field noted above is still not built.
+
 > **Refunds & Payouts / UPI collection — resolved, drop from this sprint.**
 > Reading the v2 frames (see Sprint 6b's mapping) settles it: UPI collection is
 > contributors handing the **host** a UPI ID so the host can pay them back

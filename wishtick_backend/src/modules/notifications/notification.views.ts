@@ -27,6 +27,8 @@ export interface ThankYouView {
   giftId: string;
   gifterId: string;
   status: string;
+  kind: string;
+  mediaUrl: string | null;
   subject: string;
   body: string;
   context: {
@@ -71,6 +73,8 @@ export const toThankYouView = (n: ThankYouNoteDocument): ThankYouView => ({
   giftId: n.giftId.toString(),
   gifterId: n.gifterId.toString(),
   status: n.status,
+  kind: n.kind,
+  mediaUrl: n.mediaUrl,
   subject: n.subject,
   body: n.body,
   context: {

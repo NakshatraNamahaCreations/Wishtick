@@ -7,6 +7,7 @@ import '../../features/events/data/invite_repository.dart';
 import '../../features/events/domain/public_invite.dart';
 import '../../features/gifting/data/gifting_repository.dart';
 import '../../features/gifting/domain/gift.dart';
+import '../../features/gifting/domain/gift_list_item.dart';
 import '../../features/gifting/domain/order.dart';
 import 'dev_keys.dart';
 
@@ -211,14 +212,23 @@ class DevGiftingRepository implements GiftingRepository {
 
   // ── Dashboard sections ──────────────────────────────────────────────────
 
+  /// The real server joins the wishlist item in. The dev store keeps the
+  /// gift's own row only, so the title falls back to the saved snapshot the
+  /// reserve call wrote — enough for a card to render.
+  GiftListItem _row(Map<String, dynamic> raw) => GiftListItem.fromGift(
+    Gift.fromJson(raw),
+    title: raw['itemTitle'] as String? ?? 'Your gift',
+    imageUrl: raw['itemImageUrl'] as String?,
+  );
+
   @override
-  Future<List<Gift>> listGiven() async {
+  Future<List<GiftListItem>> listGiven() async {
     await Future<void>.delayed(_latency);
-    return _read(DevKeys.gifts).map(Gift.fromJson).toList().reversed.toList();
+    return _read(DevKeys.gifts).map(_row).toList().reversed.toList();
   }
 
   @override
-  Future<List<Gift>> listOnHold() async {
+  Future<List<GiftListItem>> listOnHold() async {
     final all = await listGiven();
     return all
         .where(
@@ -235,7 +245,7 @@ class DevGiftingRepository implements GiftingRepository {
   /// gifter. Inventing incoming gifts would put a surprise in front of the very
   /// person the real backend hides it from.
   @override
-  Future<List<ReceivedGift>> listReceived() async {
+  Future<List<GiftListItem>> listReceived() async {
     await Future<void>.delayed(_latency);
     return const [];
   }

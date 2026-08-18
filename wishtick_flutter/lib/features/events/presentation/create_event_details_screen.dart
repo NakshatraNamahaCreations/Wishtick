@@ -112,9 +112,9 @@ class _CreateEventDetailsScreenState
         children: [
           Text(
             'Tell us about\nyour event',
-            // displaySmall, not headlineMedium: a page headline is Playfair in
-            // every frame, and `headline*` is Montserrat. Every onboarding and
-            // auth screen already does it this way.
+            // displaySmall, not headlineMedium: a page headline is Cormorant
+            // Garamond in every frame, and `headline*` is Montserrat. Every
+            // onboarding and auth screen already does it this way.
             style: context.text.displaySmall?.copyWith(
               color: context.headlineBrandColor,
               fontWeight: FontWeight.w700,

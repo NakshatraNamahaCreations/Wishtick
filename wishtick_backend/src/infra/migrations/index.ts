@@ -19,6 +19,8 @@ import { migration017 } from './scripts/017-conversion-indexes';
 import { migration018 } from './scripts/018-settlement-indexes';
 import { migration019 } from './scripts/019-relations';
 import { migration020 } from './scripts/020-memory-indexes';
+import { migration021 } from './scripts/021-device-tokens';
+import { migration022 } from './scripts/022-addresses';
 
 /** Every migration must be registered here to run. Order comes from the id. */
 export const MIGRATIONS: Migration[] = [
@@ -42,6 +44,8 @@ export const MIGRATIONS: Migration[] = [
   migration018,
   migration019,
   migration020,
+  migration021,
+  migration022,
 ];
 
 export { MigrationRunner } from './migration.runner';

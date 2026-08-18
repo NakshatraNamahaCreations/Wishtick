@@ -11,15 +11,19 @@ interface Envelope<T> {
 interface AddressView {
   id: string;
   label: string;
-  recipientName: string;
-  phone: string;
+  fullName: string;
+  mobile: string;
+  altMobile: string | null;
+  email: string | null;
   line1: string;
-  line2: string | null;
+  locality: string;
+  landmark: string | null;
+  pincode: string;
   city: string;
   state: string;
-  pincode: string;
-  country: string;
+  countryCode: string;
   isDefault: boolean;
+  formatted: string;
 }
 
 interface UpcomingOccasionView {
@@ -78,10 +82,11 @@ describe('Sprint 4: Home & Discover (e2e)', () => {
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
   const validAddress = (over: Partial<Record<string, unknown>> = {}) => ({
-    label: 'Home',
-    recipientName: 'Ananya Sharma',
-    phone: '+919876543210',
-    line1: 'D-Block, JP Nagar',
+    label: 'home',
+    fullName: 'Ananya Sharma',
+    mobile: '+919876543210',
+    line1: 'D-Block',
+    locality: 'JP Nagar',
     city: 'Mysuru',
     state: 'Karnataka',
     pincode: '570031',
@@ -142,14 +147,15 @@ describe('Sprint 4: Home & Discover (e2e)', () => {
       const created = (res.body as Envelope<AddressView>).data;
 
       expect(created.isDefault).toBe(true);
-      expect(created.country).toBe('India');
-      expect(created.line2).toBeNull();
+      expect(created.countryCode).toBe('IN');
+      expect(created.landmark).toBeNull();
+      expect(created.formatted).toBe('D-Block, JP Nagar, Mysuru, Karnataka 570031');
     });
 
     it('promoting an address demotes the previous default', async () => {
       const token = await newUser();
-      await addAddress(token, { label: 'Home' }).expect(201);
-      const second = (await addAddress(token, { label: 'Work' }).expect(201))
+      await addAddress(token, { label: 'home' }).expect(201);
+      const second = (await addAddress(token, { label: 'work' }).expect(201))
         .body as Envelope<AddressView>;
 
       expect(second.data.isDefault).toBe(false);
@@ -163,7 +169,7 @@ describe('Sprint 4: Home & Discover (e2e)', () => {
       const all = await listAddresses(token);
       expect(all.filter((a) => a.isDefault)).toHaveLength(1);
       // Default sorts first, so the promoted one leads.
-      expect(all[0].label).toBe('Work');
+      expect(all[0].label).toBe('work');
     });
 
     it('refuses to clear the only default, so checkout always has one', async () => {
@@ -179,9 +185,9 @@ describe('Sprint 4: Home & Discover (e2e)', () => {
 
     it('removing the default promotes the next-oldest', async () => {
       const token = await newUser();
-      const first = (await addAddress(token, { label: 'Home' }).expect(201))
+      const first = (await addAddress(token, { label: 'home' }).expect(201))
         .body as Envelope<AddressView>;
-      await addAddress(token, { label: 'Work' }).expect(201);
+      await addAddress(token, { label: 'work' }).expect(201);
 
       await request(app.getHttpServer())
         .delete(`${V1}/me/addresses/${first.data.id}`)
@@ -190,7 +196,7 @@ describe('Sprint 4: Home & Discover (e2e)', () => {
 
       const all = await listAddresses(token);
       expect(all).toHaveLength(1);
-      expect(all[0].label).toBe('Work');
+      expect(all[0].label).toBe('work');
       expect(all[0].isDefault).toBe(true);
     });
 
@@ -210,7 +216,7 @@ describe('Sprint 4: Home & Discover (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`${V1}/me/addresses/${created.data.id}`)
         .set(auth(mine))
-        .send({ label: 'Stolen' })
+        .send({ city: 'Delhi' })
         .expect(404);
     });
   });

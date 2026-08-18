@@ -25,8 +25,8 @@ import { WishlistItemStatus } from 'src/modules/wishlists/wishlist.types';
 import { WishlistsService } from 'src/modules/wishlists/wishlists.service';
 import type { GiftActionDto, GiftOfflineDto, ReserveItemDto } from './dto/gift.dto';
 import { GiftStatusService } from './gift-status.service';
-import { GiftMode, GiftStatus, GiftType, GiftVisibility } from './gift.types';
-import { toGifterView, toRecipientView, type GiftView, type RecipientGiftView } from './gift.views';
+import { GiftMode, GiftStatus, GiftVisibility } from './gift.types';
+import { toGifterView, type GiftView } from './gift.views';
 import {
   RESERVATION_EXPIRY_JOB,
   reservationExpiryJobId,
@@ -257,62 +257,6 @@ export class GiftingService {
   }
 
   // ── Lists ──────────────────────────────────────────────────────────────────
-
-  /**
-   * Gifts the caller is giving.
-   *
-   * `type: SINGLE` excludes a group gift's holder gift: the initiator holds one,
-   * but a group gift belongs in its own section, not "gifts I'm giving alone".
-   */
-  async listGiven(userId: string): Promise<GiftView[]> {
-    const gifts = await this.giftModel
-      .find({ gifterId: new Types.ObjectId(userId), type: GiftType.SINGLE })
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .exec();
-    return gifts.map(toGifterView);
-  }
-
-  /**
-   * Gifts the caller has received — the "Gifts Received" section.
-   *
-   * A hidden gift still in `reserved`/`purchased` is deliberately excluded: that
-   * is a surprise in progress, and listing it here would spoil it just as surely
-   * as an unmasked wishlist status. A gift appears once it is either openly
-   * `visible` or has reached `fulfilled`/`completed` (the surprise has happened).
-   */
-  async listReceived(userId: string): Promise<RecipientGiftView[]> {
-    const gifts = await this.giftModel
-      .find({
-        recipientId: new Types.ObjectId(userId),
-        type: GiftType.SINGLE,
-        $or: [
-          { visibility: GiftVisibility.VISIBLE },
-          { status: { $in: [GiftStatus.FULFILLED, GiftStatus.COMPLETED] } },
-        ],
-      })
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .exec();
-    return gifts.map(toRecipientView);
-  }
-
-  /**
-   * Gifts committed but not yet done — the "Gifts on Hold by Me" section.
-   * Reserved and purchased, not the terminal states.
-   */
-  async listOnHold(userId: string): Promise<GiftView[]> {
-    const gifts = await this.giftModel
-      .find({
-        gifterId: new Types.ObjectId(userId),
-        type: GiftType.SINGLE,
-        status: { $in: [GiftStatus.RESERVED, GiftStatus.PURCHASED, GiftStatus.FULFILLED] },
-      })
-      .sort({ expiresAt: 1, createdAt: -1 })
-      .limit(200)
-      .exec();
-    return gifts.map(toGifterView);
-  }
 
   // ── Loading & authorization ────────────────────────────────────────────────
 

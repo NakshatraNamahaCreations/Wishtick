@@ -85,6 +85,25 @@ export const envValidationSchema = Joi.object({
   SMS_HTTP_AUTH_TOKEN: Joi.string().allow('').default(''),
   SMS_SENDER_ID: Joi.string().default('WISHTK'),
 
+  // Push. Firebase creds required only when PUSH_DRIVER=fcm, mirroring SES.
+  // Until then the console driver no-ops and the other channels are unaffected.
+  PUSH_DRIVER: Joi.string().valid('console', 'fcm').default('console'),
+  FIREBASE_PROJECT_ID: Joi.string().when('PUSH_DRIVER', {
+    is: 'fcm',
+    then: Joi.required(),
+    otherwise: Joi.string().allow('').default(''),
+  }),
+  FIREBASE_CLIENT_EMAIL: Joi.string().when('PUSH_DRIVER', {
+    is: 'fcm',
+    then: Joi.required(),
+    otherwise: Joi.string().allow('').default(''),
+  }),
+  FIREBASE_PRIVATE_KEY: Joi.string().when('PUSH_DRIVER', {
+    is: 'fcm',
+    then: Joi.required(),
+    otherwise: Joi.string().allow('').default(''),
+  }),
+
   // Notifications
   NOTIF_QUIET_HOURS_START: Joi.number().integer().min(0).max(23).default(22),
   NOTIF_QUIET_HOURS_END: Joi.number().integer().min(0).max(23).default(8),

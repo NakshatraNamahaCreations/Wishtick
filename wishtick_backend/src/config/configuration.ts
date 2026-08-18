@@ -70,6 +70,7 @@ export interface AppConfig {
   delivery: {
     mailerDriver: 'console' | 'ses';
     smsDriver: 'console' | 'http';
+    pushDriver: 'console' | 'fcm';
     mailFrom: string;
     ses: {
       region: string;
@@ -82,6 +83,14 @@ export interface AppConfig {
       endpoint: string;
       authToken: string;
       senderId: string;
+    };
+    /** Firebase service account, for FCM HTTP v1. Empty until push is set up. */
+    fcm: {
+      projectId: string;
+      clientEmail: string;
+      /** PEM with `
+` escapes, as an env var must store it. */
+      privateKey: string;
     };
   };
   notifications: {
@@ -293,6 +302,7 @@ export const configuration = (): AppConfig => {
     delivery: {
       mailerDriver: (process.env.MAILER_DRIVER ?? 'console') as 'console' | 'ses',
       smsDriver: (process.env.SMS_DRIVER ?? 'console') as 'console' | 'http',
+      pushDriver: (process.env.PUSH_DRIVER ?? 'console') as 'console' | 'fcm',
       mailFrom: process.env.MAIL_FROM ?? 'Wishtick <no-reply@wishtick.app>',
       ses: {
         region: process.env.SES_REGION ?? process.env.S3_REGION ?? '',
@@ -304,6 +314,11 @@ export const configuration = (): AppConfig => {
         endpoint: process.env.SMS_HTTP_ENDPOINT ?? '',
         authToken: process.env.SMS_HTTP_AUTH_TOKEN ?? '',
         senderId: process.env.SMS_SENDER_ID ?? 'WISHTK',
+      },
+      fcm: {
+        projectId: process.env.FIREBASE_PROJECT_ID ?? '',
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',
+        privateKey: process.env.FIREBASE_PRIVATE_KEY ?? '',
       },
     },
     notifications: {

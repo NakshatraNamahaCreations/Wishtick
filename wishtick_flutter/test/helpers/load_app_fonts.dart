@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wishtick_flutter/core/theme/app_typography.dart';
 
-/// Loads the bundled Montserrat and Playfair Display faces into the test
+/// Loads the bundled Montserrat and Cormorant Garamond faces into the test
 /// binding.
 ///
 /// **Call this from `setUpAll` in any test that asserts geometry.** Flutter's
@@ -28,5 +28,5 @@ Future<void> loadAppFonts() async {
   }
 
   await load(AppTypography.bodyFamily, 'assets/fonts/Montserrat.ttf');
-  await load(AppTypography.displayFamily, 'assets/fonts/PlayfairDisplay.ttf');
+  await load(AppTypography.displayFamily, 'assets/fonts/CormorantGaramond.ttf');
 }

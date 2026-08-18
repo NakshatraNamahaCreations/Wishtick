@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -118,6 +120,8 @@ class _ImportantDatesScreenState extends ConsumerState<ImportantDatesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const _OccasionCarousel(),
+            const SizedBox(height: AppSpacing.xl),
             _AddDateCard(
               name: _name,
               relation: _relation,
@@ -186,6 +190,228 @@ class _ImportantDatesScreenState extends ConsumerState<ImportantDatesScreen> {
         busy: flow.busy,
         error: flow.error,
       ),
+    );
+  }
+}
+
+/// Pill-shaped, white-filled field decoration for this card only — Figma
+/// `199:10` draws every field here as a full stadium, on white, rather than
+/// the app-wide theme's rounded-rect lavender fill (`app_theme.dart`'s
+/// `inputDecorationTheme`, deliberately lavender so a field doesn't read as a
+/// raised card on the beige page — a call this screen's white *is* a card
+/// makes moot). Overriding per-field like this keeps that global decision
+/// intact everywhere else instead of reopening it for the whole app.
+///
+/// Only fill, border and radius are set here; hint style, prefix-icon colour,
+/// content padding and the rest keep coming from the ambient theme, which
+/// already sampled to the same values this frame uses.
+///
+/// [showFocusRing] defaults on, matching the rest of the app: a `TextField`
+/// growing a plum ring while the caret sits in it is expected typing
+/// feedback. It is turned off for the Occasion dropdown below — selecting a
+/// value from its menu hands focus back to the closed button, same as typing
+/// leaves a TextField focused, but a dropdown has no caret to explain a ring
+/// that then lingers indefinitely. Without this every other field reads
+/// "resting" while whichever was picked last stays outlined, which is the
+/// mismatch the border is meant to fix.
+InputDecoration pillFieldDecoration(
+  BuildContext context, {
+  String? hintText,
+  Widget? prefixIcon,
+  bool showFocusRing = true,
+}) {
+  final colors = context.colors;
+  OutlineInputBorder border(Color color, {double width = 1}) =>
+      OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        borderSide: BorderSide(color: color, width: width),
+      );
+
+  final enabled = border(colors.border);
+
+  return InputDecoration(
+    hintText: hintText,
+    prefixIcon: prefixIcon,
+    filled: true,
+    fillColor: colors.surface,
+    border: enabled,
+    enabledBorder: enabled,
+    focusedBorder: showFocusRing ? border(colors.primary, width: 1.5) : enabled,
+  );
+}
+
+/// One photo of the occasion carousel — Figma `204:321`/`204:371`.
+class _OccasionSlide {
+  const _OccasionSlide(this.asset, this.caption);
+
+  final String asset;
+  final String caption;
+}
+
+/// The photo carousel above the add-a-date card: three occasion photos,
+/// auto-advancing, with a caption and dot row matching the design.
+class _OccasionCarousel extends StatefulWidget {
+  const _OccasionCarousel();
+
+  static const _slides = [
+    _OccasionSlide('assets/images/Birthday.png', 'Birthday'),
+    _OccasionSlide('assets/images/Anniversary.png', 'Anniversary'),
+    _OccasionSlide('assets/images/Special_Moments.png', 'Special Moments'),
+  ];
+
+  /// The Figma frame's card measures 344×256 — this is that ratio, so the
+  /// card keeps its proportions at any width instead of a fixed size that
+  /// would either overflow a narrow phone or float undersized on a wide one.
+  static const _aspectRatio = 344 / 256;
+
+  @override
+  State<_OccasionCarousel> createState() => _OccasionCarouselState();
+}
+
+class _OccasionCarouselState extends State<_OccasionCarousel> {
+  final _controller = PageController();
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Re-checked on every dependency change (not just once in initState) so
+    // toggling the OS accessibility setting mid-session starts or stops the
+    // rotation immediately rather than waiting for the screen to reopen.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _timer?.cancel();
+      _timer = null;
+    } else {
+      _timer ??= Timer.periodic(const Duration(seconds: 5), _advance);
+    }
+  }
+
+  void _advance(Timer _) {
+    if (!mounted) return;
+    final next = (_index + 1) % _OccasionCarousel._slides.length;
+    _controller.animateToPage(
+      next,
+      duration: AppDurations.normal,
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final slides = _OccasionCarousel._slides;
+
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: _OccasionCarousel._aspectRatio,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                PageView.builder(
+                  controller: _controller,
+                  itemCount: slides.length,
+                  onPageChanged: (i) => setState(() => _index = i),
+                  itemBuilder: (context, i) =>
+                      Image.asset(slides[i].asset, fit: BoxFit.cover),
+                ),
+                _CaptionScrim(caption: slides[_index].caption),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _CarouselDots(count: slides.length, index: _index),
+      ],
+    );
+  }
+}
+
+/// The dark gradient and caption pinned to the bottom of the active photo.
+class _CaptionScrim extends StatelessWidget {
+  const _CaptionScrim({required this.caption});
+
+  final String caption;
+
+  /// Fraction of the card height the scrim rises to. Tall enough for the
+  /// caption to sit on a legible background; short enough that most of the
+  /// photo above it stays undimmed, as the reference shows.
+  static const _heightFraction = 0.4;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    // The overlay/scrim token ramped from transparent to itself, rather than
+    // a literal black — see WishtickColors.overlay.
+    final scrim = colors.overlay;
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: FractionallySizedBox(
+        heightFactor: _heightFraction,
+        widthFactor: 1,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [scrim.withValues(alpha: 0), scrim],
+            ),
+          ),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Text(
+                caption,
+                style: context.text.headlineMedium?.copyWith(
+                  color: colors.textOnDark,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Three equal dots; the active one fills with the brand plum. Mirrors the
+/// welcome carousel's `_Dots`, kept local rather than shared since neither
+/// screen depends on the other and each is a handful of lines.
+class _CarouselDots extends StatelessWidget {
+  const _CarouselDots({required this.count, required this.index});
+
+  final int count;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < count; i++)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: i == index ? colors.primary : colors.border,
+            ),
+          ),
+      ],
     );
   }
 }
@@ -269,9 +495,10 @@ class _AddDateCard extends StatelessWidget {
               controller: name,
               textCapitalization: TextCapitalization.words,
               onChanged: (_) => onChanged(),
-              decoration: const InputDecoration(
+              decoration: pillFieldDecoration(
+                context,
                 hintText: 'e.g. Ananya, Rahul',
-                prefixIcon: Icon(Icons.person_outline),
+                prefixIcon: const Icon(Icons.person_outline),
               ),
             ),
           ),
@@ -282,9 +509,10 @@ class _AddDateCard extends StatelessWidget {
               controller: relation,
               textCapitalization: TextCapitalization.words,
               onChanged: (_) => onChanged(),
-              decoration: const InputDecoration(
+              decoration: pillFieldDecoration(
+                context,
                 hintText: 'e.g. Mom, Best Friend',
-                prefixIcon: Icon(Icons.person_outline),
+                prefixIcon: const Icon(Icons.person_outline),
               ),
             ),
           ),
@@ -302,6 +530,7 @@ class _AddDateCard extends StatelessWidget {
               ],
               onChanged: onOccasion,
               hint: const Text('Birthday'),
+              decoration: pillFieldDecoration(context, showFocusRing: false),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -314,7 +543,7 @@ class _AddDateCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 decoration: BoxDecoration(
                   color: colors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
                   border: Border.all(color: colors.border),
                 ),
                 child: Row(

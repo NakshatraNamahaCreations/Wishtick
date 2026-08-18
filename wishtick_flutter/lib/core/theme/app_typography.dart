@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 /// Typography for Wishtick.
 ///
 /// Two families, matching the Figma "Logo font / headings / body" spec:
-///  * **Playfair Display** — the wordmark and hero headings ("Make Every Wish
-///    Count!", "Every wish locked with Love").
+///  * **Cormorant Garamond** — the wordmark and hero headings ("Make Every
+///    Wish Count!", "Every wish locked with Love").
 ///  * **Montserrat** — all UI text.
 ///
 /// Both are bundled as variable fonts under `assets/fonts` rather than fetched
@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 /// Colours are applied by [buildTextTheme] from the active semantic tokens, so
 /// text automatically follows light/dark. Never set a colour on a style here.
 abstract final class AppTypography {
-  static const displayFamily = 'PlayfairDisplay';
+  static const displayFamily = 'CormorantGaramond';
   static const bodyFamily = 'Montserrat';
 
   static TextStyle _style({
@@ -75,7 +75,9 @@ abstract final class AppTypography {
   /// Screen titles ("Create Your Profile", "Select Your Avatar", "Verify…").
   ///
   /// 30, not 26: the exports measure 28px from cap top to descender bottom,
-  /// and Playfair's cap+descender is 0.932em → 30.0.
+  /// and Cormorant Garamond's cap+descender at this weight is ~0.92em — 30
+  /// lands the same ~28px it did under Playfair Display, whose ratio was
+  /// nearly identical.
   static TextStyle get displaySmall =>
       _display(30, FontWeight.w600, height: 1.3);
 

@@ -6,9 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
-import '../../../core/widgets/wishtick_error_text.dart';
-import '../data/home_repository.dart';
-import '../domain/address.dart';
+import '../../addresses/data/addresses_repository.dart';
+import '../../addresses/domain/address.dart';
+import '../../addresses/presentation/add_address_screen.dart';
+import '../../addresses/presentation/address_providers.dart';
 import 'home_controller.dart';
 
 /// Figma `2293:25` — "Select Delivery Location".
@@ -56,9 +57,8 @@ class _DeliveryLocationScreenState
     if (address.isDefault) return;
     setState(() => _busy = true);
     try {
-      await ref
-          .read(homeRepositoryProvider)
-          .updateAddress(address.id, isDefault: true);
+      await ref.read(addressesRepositoryProvider).setDefault(address.id);
+      ref.invalidate(addressBookProvider);
       await ref.read(homeProvider.notifier).refresh();
     } on Exception catch (e) {
       if (!mounted) return;
@@ -71,7 +71,8 @@ class _DeliveryLocationScreenState
   Future<void> _remove(Address address) async {
     setState(() => _busy = true);
     try {
-      await ref.read(homeRepositoryProvider).removeAddress(address.id);
+      await ref.read(addressesRepositoryProvider).remove(address.id);
+      ref.invalidate(addressBookProvider);
       await ref.read(homeProvider.notifier).refresh();
     } on Exception catch (e) {
       if (!mounted) return;
@@ -257,7 +258,7 @@ class _AddressRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    address.label,
+                    address.label.display,
                     style: context.text.titleSmall?.copyWith(
                       color: colors.textPrimary,
                       fontWeight: FontWeight.w700,
@@ -279,212 +280,6 @@ class _AddressRow extends StatelessWidget {
               tooltip: 'Remove',
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The "Add New Address" form behind the picker.
-class AddAddressScreen extends ConsumerStatefulWidget {
-  const AddAddressScreen({super.key});
-
-  @override
-  ConsumerState<AddAddressScreen> createState() => _AddAddressScreenState();
-}
-
-class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _label = TextEditingController(text: 'Home');
-  final _recipient = TextEditingController();
-  final _phone = TextEditingController();
-  final _line1 = TextEditingController();
-  final _line2 = TextEditingController();
-  final _city = TextEditingController();
-  final _state = TextEditingController();
-  final _pincode = TextEditingController();
-
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    for (final c in [
-      _label,
-      _recipient,
-      _phone,
-      _line1,
-      _line2,
-      _city,
-      _state,
-      _pincode,
-    ]) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await ref
-          .read(homeRepositoryProvider)
-          .createAddress(
-            label: _label.text.trim(),
-            recipientName: _recipient.text.trim(),
-            phone: _phone.text.trim(),
-            line1: _line1.text.trim(),
-            line2: _line2.text.trim().isEmpty ? null : _line2.text.trim(),
-            city: _city.text.trim(),
-            state: _state.text.trim(),
-            pincode: _pincode.text.trim(),
-          );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } on Exception catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = '$e';
-      });
-    }
-  }
-
-  String? _required(String? value, String label) =>
-      (value == null || value.trim().isEmpty) ? 'Please enter $label' : null;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Add New Address')),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  children: [
-                    if (_error != null) ...[
-                      WishtickErrorText(_error!),
-                      const SizedBox(height: AppSpacing.lg),
-                    ],
-                    _Field(
-                      controller: _label,
-                      label: 'Label',
-                      hint: 'Home, Work…',
-                      validator: (v) => _required(v, 'a label'),
-                    ),
-                    _Field(
-                      controller: _recipient,
-                      label: 'Recipient name',
-                      hint: 'Who receives the parcel',
-                      validator: (v) => _required(v, "the recipient's name"),
-                    ),
-                    _Field(
-                      controller: _phone,
-                      label: 'Phone',
-                      hint: '+91…',
-                      keyboardType: TextInputType.phone,
-                      validator: (v) => _required(v, 'a phone number'),
-                    ),
-                    _Field(
-                      controller: _line1,
-                      label: 'Flat / house and building',
-                      validator: (v) => _required(v, 'an address'),
-                    ),
-                    _Field(
-                      controller: _line2,
-                      label: 'Street, area, landmark (optional)',
-                    ),
-                    _Field(
-                      controller: _city,
-                      label: 'City',
-                      validator: (v) => _required(v, 'a city'),
-                    ),
-                    _Field(
-                      controller: _state,
-                      label: 'State',
-                      validator: (v) => _required(v, 'a state'),
-                    ),
-                    _Field(
-                      controller: _pincode,
-                      label: 'PIN code',
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      validator: (v) =>
-                          RegExp(r'^[1-9][0-9]{5}$').hasMatch(v?.trim() ?? '')
-                          ? null
-                          : 'Enter a six-digit Indian PIN code',
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _busy ? null : () => unawaited(_save()),
-                    child: _busy
-                        ? SizedBox(
-                            width: AppSizes.iconMd,
-                            height: AppSizes.iconMd,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: colors.onPrimary,
-                            ),
-                          )
-                        : const Text('Save Address'),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.controller,
-    required this.label,
-    this.hint,
-    this.validator,
-    this.keyboardType,
-    this.maxLength,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final String? hint;
-  final String? Function(String?)? validator;
-  final TextInputType? keyboardType;
-  final int? maxLength;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-      child: TextFormField(
-        controller: controller,
-        validator: validator,
-        keyboardType: keyboardType,
-        maxLength: maxLength,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          counterText: '',
         ),
       ),
     );

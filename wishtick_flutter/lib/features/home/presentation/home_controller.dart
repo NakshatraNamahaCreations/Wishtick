@@ -2,11 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../addresses/data/addresses_repository.dart';
+import '../../addresses/domain/address.dart';
 import '../../group_gift/domain/group_gift.dart';
 import '../../wishlist/data/wishlist_repository.dart';
 import '../../wishlist/domain/wishlist.dart';
 import '../data/home_repository.dart';
-import '../domain/address.dart';
 import '../domain/wishtick_event.dart';
 
 /// Home's "In Next 30 days" window.
@@ -96,7 +97,7 @@ class HomeController extends Notifier<HomeState> {
     state = state.copyWith(busy: true, clearError: true);
 
     final results = await Future.wait([
-      _guard(() => _home.listAddresses()),
+      _guard(() => ref.read(addressesRepositoryProvider).list()),
       _guard(() => _home.upcomingEvents(withinDays: kHomeEventWindowDays)),
       _guard(() => _home.myGroupGifts(limit: 5)),
       _guard(() => _wishlists.listMine()),

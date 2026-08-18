@@ -21,9 +21,14 @@ enum MediaPurpose {
   /// A memory capsule's cover (`4104:1539`).
   memoryCover('memory_cover'),
 
-  /// A contributed wish's photo, video or voice note. The only purpose that
-  /// takes audio as well as stills and video.
+  /// A contributed wish's photo, video or voice note. Takes audio as well as
+  /// stills and video.
   memoryWish('memory_wish'),
+
+  /// A thank-you note's photo, voice note or video (`2015:271`, `2015:382`).
+  /// Same envelope as [memoryWish] — one person recording one short reply —
+  /// but its own purpose so retention and revocation stay separable.
+  thankYou('thank_you'),
   reelWish('reel_wish');
 
   const MediaPurpose(this.wireValue);

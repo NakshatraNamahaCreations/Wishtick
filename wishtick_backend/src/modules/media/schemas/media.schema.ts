@@ -27,6 +27,13 @@ export enum MediaPurpose {
    * does not.
    */
   MEMORY_WISH = 'memory_wish',
+  /**
+   * Sprint 9 — a thank-you note's photo, voice note or video (`2015:271`,
+   * `2015:382`, `2209:104`). Separate from MEMORY_WISH so that revoking one
+   * flow's uploads never touches the other, and so the retention sweep can
+   * treat a note (kept as long as the note is) differently from a capsule.
+   */
+  THANK_YOU = 'thank_you',
 }
 
 export enum MediaStatus {

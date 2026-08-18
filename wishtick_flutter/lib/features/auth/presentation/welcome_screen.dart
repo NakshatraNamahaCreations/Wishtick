@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_routes.dart';
@@ -91,65 +92,142 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Scaffold(
-      backgroundColor: colors.surface,
-      body: Column(
-        children: [
-          // The artwork sits behind the status bar, as designed.
-          Expanded(
-            flex: 526,
-            child: SizedBox(
-              width: double.infinity,
-              child: Image.asset(
-                WelcomeScreen.heroAsset,
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 326,
-            child: SafeArea(
-              top: false,
-              child: Column(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // Light icons, to read against the dark scrim below rather than
+      // against the photo itself — the app-wide default (dark icons, tuned
+      // for the beige page every other screen sits on) would nearly
+      // disappear here.
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: colors.background,
+        body: Column(
+          children: [
+            // Not wrapped in SafeArea: the image's box height is tuned to
+            // Figma's own crop (526/852 of the *full* screen), and shrinking
+            // it — even by a status-bar's worth — needs less of the photo
+            // cropped away, exposing a flat band near the subject's lap that
+            // the original crop was hiding. A scrim over the top of the
+            // image, not a shorter image, is what keeps the status bar
+            // legible without touching that crop.
+            Expanded(
+              flex: 526,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Expanded(
-                    child: PageView.builder(
-                      controller: _controller,
-                      itemCount: WelcomeScreen.slides.length,
-                      onPageChanged: (i) => setState(() => _index = i),
-                      itemBuilder: (context, i) =>
-                          _SlideCopy(slide: WelcomeScreen.slides[i]),
+                  Image.asset(
+                    WelcomeScreen.heroAsset,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                  ),
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      height: MediaQuery.paddingOf(context).top,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            colors.overlay,
+                            colors.overlay.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  _Dots(count: WelcomeScreen.slides.length, index: _index),
-                  const SizedBox(height: AppSpacing.xl),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.xxl,
-                      0,
-                      AppSpacing.xxl,
-                      AppSpacing.xxl,
-                    ),
-                    child: ElevatedButton(
-                      onPressed: _onContinue,
-                      child: Text(_isLast ? 'Get Started' : 'Continue'),
+                  // Fades the photo into the page colour instead of ending on
+                  // a hard edge — the design fades it into white over the
+                  // last ~12% of the image; this is the same fade, into
+                  // `colors.background` since that's this screen's actual
+                  // page colour, not Figma's.
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: FractionallySizedBox(
+                      heightFactor: 0.12,
+                      widthFactor: 1,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              colors.background.withValues(alpha: 0),
+                              colors.background,
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+            Expanded(
+              flex: 326,
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: PageView.builder(
+                        controller: _controller,
+                        itemCount: WelcomeScreen.slides.length,
+                        onPageChanged: (i) => setState(() => _index = i),
+                        // The dots live inside each page rather than as a
+                        // sibling below the PageView. All four pages read
+                        // the same `_index`, so whichever page is showing
+                        // draws the identical row — the dots read as one
+                        // fixed indicator, not four swiping in and out.
+                        //
+                        // The reason: the headline+body are vertically
+                        // centred *within the page*, and a PageView page
+                        // fills all the space this Expanded is given. A
+                        // dots row placed after the PageView instead sits
+                        // wherever that leftover space happens to end —
+                        // mostly empty flex space, not a fixed gap — which
+                        // is what made it read as too far from the text
+                        // above it. Grouping the dots with the text they
+                        // belong to means both centre together.
+                        itemBuilder: (context, i) => _SlideCopy(
+                          slide: WelcomeScreen.slides[i],
+                          dots: _Dots(
+                            count: WelcomeScreen.slides.length,
+                            index: _index,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.xxl,
+                        0,
+                        AppSpacing.xxl,
+                        AppSpacing.xxl,
+                      ),
+                      child: ElevatedButton(
+                        onPressed: _onContinue,
+                        child: Text(_isLast ? 'Get Started' : 'Continue'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _SlideCopy extends StatelessWidget {
-  const _SlideCopy({required this.slide});
+  const _SlideCopy({required this.slide, required this.dots});
 
   final WelcomeSlide slide;
+
+  /// Rendered right under the body copy — see the note where this is built.
+  final Widget dots;
 
   @override
   Widget build(BuildContext context) {
@@ -157,25 +235,48 @@ class _SlideCopy extends StatelessWidget {
 
     // Scrollable so a short device or a large text-scale setting shrinks the
     // copy area gracefully instead of overflowing it.
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            slide.headline,
-            textAlign: TextAlign.center,
-            style: AppTypography.displayMedium.copyWith(color: colors.primary),
+    //
+    // A bare Column inside a SingleChildScrollView cannot be bottom-aligned:
+    // the scroll view hands its child *unbounded* height, so the Column
+    // always shrink-wraps to its content and starts at the top — an `end`
+    // mainAxisAlignment is a no-op with nothing to distribute space into.
+    // LayoutBuilder recovers the real box height so ConstrainedBox can give
+    // the Column something to align within, while `minHeight` (not a fixed
+    // height) still lets it grow past that box and scroll if a long
+    // translation or a large text-scale setting ever needs more room.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Column(
+            // Bottom-anchored, not centred: the dots need to sit right above
+            // the Continue button below this PageView, with whatever slack
+            // the device's height leaves going above the headline instead —
+            // matching the design, where headline/body/dots sit as one tight
+            // group with only a small gap to the button.
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                slide.headline,
+                textAlign: TextAlign.center,
+                style: AppTypography.displayMedium.copyWith(
+                  color: colors.primary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                slide.body,
+                textAlign: TextAlign.center,
+                style: context.text.bodyLarge?.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              dots,
+            ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            slide.body,
-            textAlign: TextAlign.center,
-            style: context.text.bodyLarge?.copyWith(
-              color: colors.textSecondary,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/token_storage.dart';
 import '../../onboarding/data/onboarding_repository.dart';
+import '../../profile/data/profile_repository.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_user.dart';
 
@@ -148,6 +149,23 @@ class SessionController extends Notifier<SessionState> {
       await _auth.logout();
     } on ApiException {
       // Ignored deliberately.
+    }
+    await _tokens.clear();
+    state = const SessionState.signedOut();
+  }
+
+  /// Deletes the account, then signs out locally (`64:158`).
+  ///
+  /// The order matters: the delete needs a live token, so it goes first, and
+  /// the local sign-out follows unconditionally — once the server has removed
+  /// the account, holding on to its tokens would leave the app pointed at a
+  /// user that no longer exists.
+  Future<void> deleteAccount() async {
+    try {
+      await ref.read(profileRepositoryProvider).deleteAccount();
+    } on ApiException {
+      // Ignored deliberately, as in [signOut]: nothing useful can be done from
+      // here, and stranding a signed-in session is worse.
     }
     await _tokens.clear();
     state = const SessionState.signedOut();

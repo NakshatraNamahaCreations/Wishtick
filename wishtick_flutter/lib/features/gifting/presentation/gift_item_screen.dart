@@ -11,6 +11,7 @@ import '../../../core/widgets/wishtick_error_text.dart';
 import '../../wishlist/presentation/occasion_labels_provider.dart';
 import '../../wishlist/presentation/widgets/product_detail_body.dart';
 import '../domain/gift.dart';
+import '../domain/gift_list_item.dart';
 import 'gift_item_controller.dart';
 import 'widgets/reserve_gift_sheet.dart';
 
@@ -326,7 +327,7 @@ class _Actions extends StatelessWidget {
 class _MyGiftBanner extends StatefulWidget {
   const _MyGiftBanner({required this.gift});
 
-  final Gift gift;
+  final GiftListItem gift;
 
   @override
   State<_MyGiftBanner> createState() => _MyGiftBannerState();

@@ -10,6 +10,7 @@ import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../discover/presentation/explore_products_screen.dart';
 import '../../group_gift/domain/group_gift.dart';
+import '../../notifications/presentation/notification_providers.dart';
 import '../domain/wishtick_event.dart';
 import 'home_controller.dart';
 import 'widgets/carousel_dots.dart';
@@ -69,7 +70,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
             ),
-            onNotificationsTap: () => _notYet('Notifications'),
+            // The bell is the notification centre's only entry point in the
+            // design; it stayed a placeholder through the sprint that built
+            // the screen, so the centre was unreachable until the device
+            // walk found the dead tap.
+            onNotificationsTap: () =>
+                unawaited(context.push(AppRoutes.notifications)),
+            unreadCount: ref.watch(unreadCountProvider),
           ),
           if (state.error != null)
             Padding(
@@ -118,11 +125,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   // is Sprint 7.
                   onEventTap: (event) {
                     final token = event.inviteToken;
-                    if (token == null) {
-                      _notYet('Event details');
-                      return;
-                    }
-                    unawaited(context.push(AppRoutes.invite(token)));
+                    // A guest opens their own invitation; a host has no
+                    // invite token, so their event opens from My Events,
+                    // which Sprint 9 built.
+                    unawaited(
+                      context.push(
+                        token == null
+                            ? AppRoutes.myEvents
+                            : AppRoutes.invite(token),
+                      ),
+                    );
                   },
                 ),
                 _WishlistRail(state: state),

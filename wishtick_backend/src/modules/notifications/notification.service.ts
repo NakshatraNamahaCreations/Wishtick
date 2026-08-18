@@ -11,8 +11,10 @@ import type { AppConfig } from 'src/config/configuration';
 import { QUEUE } from 'src/infra/queue/queue.constants';
 import { CacheService } from 'src/infra/redis/cache.service';
 import { MAILER, type IMailer } from 'src/infra/notifier/mailer.port';
+import { PUSH_SENDER, type IPushSender } from 'src/infra/notifier/push.port';
 import { SMS_SENDER, type ISmsSender } from 'src/infra/notifier/sms.port';
 import { UsersService } from 'src/modules/users/users.service';
+import { DeviceTokenService } from './device-token.service';
 import {
   NOTIFICATION_DISPATCH_JOB,
   dispatchJobId,
@@ -61,6 +63,8 @@ export class NotificationService {
     @InjectQueue(QUEUE.NOTIFICATIONS) private readonly queue: Queue,
     @Inject(MAILER) private readonly mailer: IMailer,
     @Inject(SMS_SENDER) private readonly sms: ISmsSender,
+    @Inject(PUSH_SENDER) private readonly push: IPushSender,
+    private readonly devices: DeviceTokenService,
     private readonly renderer: NotificationRenderer,
     private readonly users: UsersService,
     private readonly cache: CacheService,
@@ -104,6 +108,17 @@ export class NotificationService {
         await this.record(data, channel, DeliveryStatus.SUPPRESSED, { error: 'preference-off' });
         continue;
       }
+      // Push resolves to a *set* of device tokens rather than one address, so
+      // it takes its own path out of the address plumbing below.
+      if (channel === NotificationChannel.PUSH) {
+        if (!isCritical(data.type) && this.inQuietHours(pref)) {
+          await this.deferChannel(data, channel, pref);
+          await this.record(data, channel, DeliveryStatus.DEFERRED, {});
+          continue;
+        }
+        await this.sendPush(data);
+        continue;
+      }
       const address = await this.resolveAddress(data.userId, channel);
       if (!address) {
         await this.record(data, channel, DeliveryStatus.SUPPRESSED, { error: 'no-address' });
@@ -128,6 +143,42 @@ export class NotificationService {
         continue;
       }
       await this.sendChannel(data, spec, pref, channel, address);
+    }
+  }
+
+  /**
+   * Pushes to every live device this person has.
+   *
+   * A person with no registered device is not a failure — most are signed in on
+   * the web, or have not granted the permission — so it records SUPPRESSED and
+   * moves on. Tokens the provider rejects are revoked here, which is the only
+   * thing that keeps the registry from filling with dead addresses.
+   */
+  private async sendPush(data: DispatchJobData): Promise<void> {
+    const tokens = await this.devices.liveTokensFor(data.userId);
+    if (tokens.length === 0) {
+      await this.record(data, NotificationChannel.PUSH, DeliveryStatus.SUPPRESSED, {
+        error: 'no-device',
+      });
+      return;
+    }
+
+    const { title, text } = this.renderer.content(data.type, data.payload);
+    try {
+      const result = await this.push.send({
+        tokens,
+        title,
+        body: text.split('\n')[0],
+        // FCM data values must be strings; the app routes on these two.
+        data: { type: data.type, refId: data.refId },
+      });
+      await this.devices.revoke(result.unregistered);
+      await this.record(data, NotificationChannel.PUSH, DeliveryStatus.SENT, {});
+    } catch (err) {
+      await this.record(data, NotificationChannel.PUSH, DeliveryStatus.FAILED, {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err; // let BullMQ retry with backoff
     }
   }
 

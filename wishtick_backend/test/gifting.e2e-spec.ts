@@ -31,6 +31,20 @@ interface GiftView {
   orderRef?: string | null;
 }
 
+/** What the three Profile list screens render (`324:1108`, `324:1210`, `324:1253`). */
+interface GiftListItemView {
+  id: string;
+  itemId: string;
+  wishlistId: string;
+  status: string;
+  isGroup: boolean;
+  item: { title: string; imageUrl: string | null; amountMinor: number | null; currency: string };
+  counterpartyName: string | null;
+  deliveredAt: string | null;
+  expiresAt: string | null;
+  thankYouSent: boolean;
+}
+
 interface Actor {
   token: string;
   userId: string;
@@ -333,6 +347,236 @@ describe('Gifting (e2e)', () => {
       const gift = (res.body as Envelope<GiftView>).data;
       expect(gift.mode).toBe('offline');
       expect(gift.status).toBe('purchased');
+    });
+  });
+
+  // ── The three Profile list screens ────────────────────────────────────────
+
+  describe('gift lists', () => {
+    it('carries the item, the counterparty and the group flag the cards need', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      const { itemId, wishlistId } = await wishlistWithItem(owner);
+      await reserve(gifter, itemId, { hiddenFromOwner: false }).expect(201);
+
+      const given = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/given`)
+          .set(auth(gifter.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+
+      expect(given.data).toHaveLength(1);
+      const row = given.data[0];
+      expect(row.wishlistId).toBe(wishlistId);
+      expect(row.item.title).toBe('Headphones');
+      expect(row.item.amountMinor).toBe(249900);
+      expect(row.item.currency).toBe('INR');
+      expect(row.isGroup).toBe(false);
+      expect(row.thankYouSent).toBe(false);
+      expect(row.deliveredAt).toBeNull();
+      // A first name, never a full identity, and never an id.
+      expect(row.counterpartyName).toBe('Aarav');
+      expect(JSON.stringify(row)).not.toContain(owner.userId);
+    });
+
+    it('names the gifter on a received row only for gifts the owner may see', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      await reserve(gifter, itemId, { hiddenFromOwner: false }).expect(201);
+
+      const received = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/received`)
+          .set(auth(owner.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+
+      expect(received.data).toHaveLength(1);
+      expect(received.data[0].counterpartyName).toBe('Aarav');
+    });
+
+    /**
+     * The anti-spoiler rule, restated against the enriched shape: a surprise
+     * still in progress must not appear at all. A row that merely omitted the
+     * gifter's name would still tell the owner *that* something is coming.
+     */
+    it('keeps a hidden in-progress gift out of the received list entirely', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      const gift = (await reserve(gifter, itemId, { hiddenFromOwner: true }).expect(201))
+        .body as Envelope<GiftView>;
+
+      const beforeFulfil = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/received`)
+          .set(auth(owner.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+      expect(beforeFulfil.data).toHaveLength(0);
+
+      // Once it is fulfilled the surprise is over and the row appears.
+      await request(app.getHttpServer())
+        .post(`${V1}/gifts/${gift.data.id}/purchase`)
+        .set(auth(gifter.token))
+        .send({})
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${V1}/gifts/${gift.data.id}/fulfill`)
+        .set(auth(gifter.token))
+        .send({})
+        .expect(200);
+
+      const afterFulfil = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/received`)
+          .set(auth(owner.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+      expect(afterFulfil.data).toHaveLength(1);
+      expect(afterFulfil.data[0].item.title).toBe('Headphones');
+    });
+
+    it('reports a thank-you as sent once the recipient sends it', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      const gift = (await reserve(gifter, itemId, { hiddenFromOwner: false }).expect(201))
+        .body as Envelope<GiftView>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/gifts/${gift.data.id}/purchase`)
+        .set(auth(gifter.token))
+        .send({})
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${V1}/gifts/${gift.data.id}/fulfill`)
+        .set(auth(gifter.token))
+        .send({})
+        .expect(200);
+
+      // Fulfilment drafts the note through a fire-and-forget event listener,
+      // so the draft is not written by the time `/gifts/:id/fulfill` returns.
+      await new Promise((r) => setTimeout(r, 200));
+
+      // Fulfilment drafts the note; the recipient sends it.
+      const notes = (
+        await request(app.getHttpServer()).get(`${V1}/thank-you`).set(auth(owner.token)).expect(200)
+      ).body as Envelope<{ id: string }[]>;
+      expect(notes.data).toHaveLength(1);
+      await request(app.getHttpServer())
+        .post(`${V1}/thank-you/${notes.data[0].id}/send-now`)
+        .set(auth(owner.token))
+        .expect(200);
+
+      const given = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/given`)
+          .set(auth(gifter.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+      expect(given.data[0].thankYouSent).toBe(true);
+    });
+
+    it('lists a live reservation on hold and drops it once it completes', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      const gift = (await reserve(gifter, itemId).expect(201)).body as Envelope<GiftView>;
+
+      const onHold = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/on-hold`)
+          .set(auth(gifter.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+      expect(onHold.data).toHaveLength(1);
+      expect(onHold.data[0].expiresAt).not.toBeNull();
+
+      for (const step of ['purchase', 'fulfill', 'complete']) {
+        await request(app.getHttpServer())
+          .post(`${V1}/gifts/${gift.data.id}/${step}`)
+          .set(auth(gifter.token))
+          .send({})
+          .expect(200);
+      }
+
+      const after = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/on-hold`)
+          .set(auth(gifter.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+      expect(after.data).toHaveLength(0);
+    });
+
+    /**
+     * Caught on device: a fulfilled gift appeared here, so one card read
+     * "Delivered on 17 Aug" *and* "On hold" with a "Gift Now" button.
+     */
+    it('drops a gift from on-hold as soon as it is fulfilled', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      const gift = (await reserve(gifter, itemId).expect(201)).body as Envelope<GiftView>;
+
+      const onHold = async (): Promise<GiftListItemView[]> =>
+        (
+          (
+            await request(app.getHttpServer())
+              .get(`${V1}/gifts/on-hold`)
+              .set(auth(gifter.token))
+              .expect(200)
+          ).body as Envelope<GiftListItemView[]>
+        ).data;
+
+      expect(await onHold()).toHaveLength(1);
+
+      // Purchased is still on hold — bought, not yet handed over.
+      await request(app.getHttpServer())
+        .post(`${V1}/gifts/${gift.data.id}/purchase`)
+        .set(auth(gifter.token))
+        .send({})
+        .expect(200);
+      expect(await onHold()).toHaveLength(1);
+
+      // Fulfilled means it reached the recipient; it belongs in Given now.
+      await request(app.getHttpServer())
+        .post(`${V1}/gifts/${gift.data.id}/fulfill`)
+        .set(auth(gifter.token))
+        .send({})
+        .expect(200);
+      expect(await onHold()).toHaveLength(0);
+
+      const given = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/given`)
+          .set(auth(gifter.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+      expect(given.data).toHaveLength(1);
+    });
+
+    it('still renders a row whose item has since been deleted', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      const { itemId, wishlistId } = await wishlistWithItem(owner);
+      await reserve(gifter, itemId, { hiddenFromOwner: false }).expect(201);
+
+      await request(app.getHttpServer())
+        .delete(`${V1}/wishlists/${wishlistId}/items/${itemId}`)
+        .set(auth(owner.token));
+
+      const given = (
+        await request(app.getHttpServer())
+          .get(`${V1}/gifts/given`)
+          .set(auth(gifter.token))
+          .expect(200)
+      ).body as Envelope<GiftListItemView[]>;
+      expect(given.data).toHaveLength(1);
+      expect(given.data[0].item.title).toBeTruthy();
     });
   });
 

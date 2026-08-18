@@ -91,7 +91,7 @@ moment, and the theme tests assert every foreground/background pair clears
 
 ### Fonts
 
-Montserrat (UI) and Playfair Display (display/wordmark) are bundled as variable
+Montserrat (UI) and Cormorant Garamond (display/wordmark) are bundled as variable
 fonts under `assets/fonts/` rather than fetched at runtime — no flash of
 fallback type on first launch, works offline, deterministic in tests. Weights
 move the `wght` axis via `FontVariation`; `FontWeight` alone does not.

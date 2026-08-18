@@ -3,6 +3,7 @@ import 'package:wishtick_flutter/features/events/data/invite_repository.dart';
 import 'package:wishtick_flutter/features/events/domain/public_invite.dart';
 import 'package:wishtick_flutter/features/gifting/data/gifting_repository.dart';
 import 'package:wishtick_flutter/features/gifting/domain/gift.dart';
+import 'package:wishtick_flutter/features/gifting/domain/gift_list_item.dart';
 import 'package:wishtick_flutter/features/gifting/domain/order.dart';
 import 'package:wishtick_flutter/features/wishlist/domain/wishlist.dart';
 
@@ -211,11 +212,15 @@ class FakeGiftingRepository implements GiftingRepository {
     return updated;
   }
 
-  @override
-  Future<List<Gift>> listGiven() async => List.of(gifts);
+  /// The real server joins the item in; the fake fills a placeholder title,
+  /// since no test here asserts on one.
+  GiftListItem _row(Gift gift) => GiftListItem.fromGift(gift, title: 'Item');
 
   @override
-  Future<List<Gift>> listOnHold() async {
+  Future<List<GiftListItem>> listGiven() async => gifts.map(_row).toList();
+
+  @override
+  Future<List<GiftListItem>> listOnHold() async {
     onHoldCalls++;
     return gifts
         .where(
@@ -225,11 +230,12 @@ class FakeGiftingRepository implements GiftingRepository {
             GiftStatus.fulfilled,
           }.contains(g.status),
         )
+        .map(_row)
         .toList();
   }
 
   @override
-  Future<List<ReceivedGift>> listReceived() async => const [];
+  Future<List<GiftListItem>> listReceived() async => const [];
 
   @override
   Future<List<Order>> listOrders() async => List.of(orders);

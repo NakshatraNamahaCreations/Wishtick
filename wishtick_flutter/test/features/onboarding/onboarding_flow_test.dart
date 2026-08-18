@@ -77,7 +77,9 @@ void main() {
       'ananya@example.com',
     );
     await tester.pumpAndSettle();
-    await tapVisible(tester, find.text('dd/mm/yyyy'));
+    // Only the calendar icon opens the picker now — the box itself is a real
+    // TextField for manual entry.
+    await tapVisible(tester, find.byIcon(Icons.calendar_today_outlined));
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     await tapVisible(tester, find.text('Female'));

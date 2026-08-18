@@ -57,3 +57,43 @@ export const toRecipientView = (gift: GiftDocument): RecipientGiftView => ({
   mode: gift.mode,
   createdAt: gift.createdAt,
 });
+
+/**
+ * A gift as one row of "Gifts Given" / "Received" / "On Hold"
+ * (`324:1253`, `324:1108`, `324:1210`).
+ *
+ * The bare [GiftView] carries ids only, which is right for the gifting flow but
+ * useless to a list screen: every one of those frames shows the item's photo,
+ * its title and its price, who it is for or from, and where the delivery got
+ * to. Assembling that per row on the client would be four round-trips a card.
+ */
+export interface GiftListItemView {
+  id: string;
+  itemId: string;
+  wishlistId: string;
+  type: GiftType;
+  mode: GiftMode;
+  status: GiftStatus;
+  /** True for a group gift — the "Group Gift" chip, and the Group tab. */
+  isGroup: boolean;
+  item: {
+    title: string;
+    imageUrl: string | null;
+    amountMinor: number | null;
+    currency: string;
+  };
+  /**
+   * "For Rohan" on a gift you gave, "From Rohan" on one you received.
+   *
+   * Null when naming them would give something away — see [toGiftListItemView]
+   * and the recipient-side rule in gifting.service.
+   */
+  counterpartyName: string | null;
+  /** From the linked order, when there is one. */
+  deliveredAt: Date | null;
+  /** Where the reservation stands, for the "Held for 1d 3h" chip. */
+  expiresAt: Date | null;
+  /** Whether the recipient has already thanked the gifter (`324:1108`). */
+  thankYouSent: boolean;
+  createdAt: Date;
+}

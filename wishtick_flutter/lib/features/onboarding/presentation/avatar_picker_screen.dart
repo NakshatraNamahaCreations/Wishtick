@@ -38,7 +38,10 @@ class _AvatarPickerScreenState extends ConsumerState<AvatarPickerScreen> {
   }
 
   void _afterConfirm() {
-    if (mounted) context.pop();
+    // Pops with the chosen key as well as writing it to the onboarding draft:
+    // Edit Profile (`90:21`) reuses this screen but keeps its own form state,
+    // so it reads the result rather than the draft.
+    if (mounted) context.pop(_selected?.key);
   }
 
   @override

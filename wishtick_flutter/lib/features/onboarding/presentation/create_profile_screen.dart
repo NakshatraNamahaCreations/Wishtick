@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -33,6 +34,13 @@ class CreateProfileScreen extends ConsumerStatefulWidget {
 class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
   late final TextEditingController _name;
   late final TextEditingController _email;
+  late final TextEditingController _dob;
+  late final FocusNode _dobFocus;
+
+  /// Set only while the manual-entry box holds a complete but impossible or
+  /// out-of-range date ("31/02/2020", a birth year in the future, ...). The
+  /// field stays quiet below eight digits so it doesn't nag mid-keystroke.
+  String? _dobError;
 
   @override
   void initState() {
@@ -40,29 +48,86 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     final draft = ref.read(profileFormProvider).draft;
     _name = TextEditingController(text: draft.name);
     _email = TextEditingController(text: draft.email);
+    _dob = TextEditingController(text: draft.dateOfBirthDisplay);
+    _dobFocus = FocusNode();
   }
 
   @override
   void dispose() {
     _name.dispose();
     _email.dispose();
+    _dob.dispose();
+    _dobFocus.dispose();
     super.dispose();
   }
 
+  static DateTime get _today => DateTime.now();
+
+  /// Matches [_pickDateOfBirth]'s own bounds, so a typed date the calendar
+  /// itself would refuse to show is refused the same way.
+  static DateTime get _earliestDob => DateTime(_today.year - 120);
+
   Future<void> _pickDateOfBirth() async {
-    final now = DateTime.now();
+    final now = _today;
     final current = ref.read(profileFormProvider).draft.dateOfBirth;
+    // Opening the picker shouldn't leave the keyboard half up behind it.
+    _dobFocus.unfocus();
 
     final picked = await showDatePicker(
       context: context,
       initialDate: current ?? DateTime(now.year - 25, now.month, now.day),
       // Nobody alive is older than this, and a birthday cannot be in the future.
-      firstDate: DateTime(now.year - 120),
+      firstDate: _earliestDob,
       lastDate: now,
       helpText: 'Date of birth',
     );
-    if (picked != null) {
-      ref.read(profileFormProvider.notifier).setDateOfBirth(picked);
+    if (picked == null) return;
+    ref.read(profileFormProvider.notifier).setDateOfBirth(picked);
+    _dob.text = ref.read(profileFormProvider).draft.dateOfBirthDisplay;
+    setState(() => _dobError = null);
+  }
+
+  /// Parses a complete `dd/mm/yyyy` box into a real calendar date, or `null`
+  /// if the day doesn't exist in that month (`DateTime` itself would happily
+  /// roll "31/02" over into March, which reads as silently wrong here).
+  static DateTime? _parseDob(String formatted) {
+    if (formatted.length != 10) return null;
+    final day = int.tryParse(formatted.substring(0, 2));
+    final month = int.tryParse(formatted.substring(3, 5));
+    final year = int.tryParse(formatted.substring(6, 10));
+    if (day == null || month == null || year == null) return null;
+    if (month < 1 || month > 12) return null;
+    // Day 0 of next month == the last real day of this one.
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    if (day < 1 || day > daysInMonth) return null;
+    return DateTime(year, month, day);
+  }
+
+  /// Runs after every keystroke — [_DateInputFormatter] has already turned
+  /// the raw digits into `dd/mm/yyyy` by the time this sees them.
+  void _onDobChanged(String formatted) {
+    final digitCount = formatted.replaceAll('/', '').length;
+    if (digitCount < 8) {
+      // Still typing (or mid-erase) — don't leave a stale committed date
+      // sitting behind a box that no longer displays it.
+      if (_dobError != null) setState(() => _dobError = null);
+      ref.read(profileFormProvider.notifier).clearDateOfBirth();
+      return;
+    }
+
+    final parsed = _parseDob(formatted);
+    final error = switch (parsed) {
+      null => "That date doesn't exist — check the day and month",
+      _ when parsed.isAfter(_today) => "That's still in the future",
+      _ when parsed.isBefore(_earliestDob) => 'Please double-check the year',
+      _ => null,
+    };
+
+    setState(() => _dobError = error);
+    if (error == null && parsed != null) {
+      ref.read(profileFormProvider.notifier).setDateOfBirth(parsed);
+    } else {
+      ref.read(profileFormProvider.notifier).clearDateOfBirth();
     }
   }
 
@@ -151,53 +216,62 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
                             label: 'Your Name',
                             required: true,
                             errorText: state.fieldErrors['displayName'],
-                            child: TextField(
-                              controller: _name,
-                              textCapitalization: TextCapitalization.words,
-                              onChanged: ref
-                                  .read(profileFormProvider.notifier)
-                                  .setName,
-                              decoration: const InputDecoration(
-                                hintText: 'Enter your full name',
-                                prefixIcon: Icon(
-                                  Icons.person_outline,
-                                  size: AppSizes.iconMd,
+                            child: _FieldShadow(
+                              child: TextField(
+                                controller: _name,
+                                textCapitalization: TextCapitalization.words,
+                                onChanged: ref
+                                    .read(profileFormProvider.notifier)
+                                    .setName,
+                                decoration: const InputDecoration(
+                                  hintText: 'Enter your full name',
+                                  prefixIcon: Icon(
+                                    Icons.person_outline,
+                                    size: AppSizes.iconMd,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: AppSpacing.huge),
+                          const SizedBox(height: AppSpacing.xl),
                           LabelledField(
                             label: 'Email ID',
                             required: true,
                             errorText: state.fieldErrors['email'],
-                            child: TextField(
-                              controller: _email,
-                              keyboardType: TextInputType.emailAddress,
-                              autocorrect: false,
-                              onChanged: ref
-                                  .read(profileFormProvider.notifier)
-                                  .setEmail,
-                              decoration: const InputDecoration(
-                                hintText: 'Enter your Email ID',
-                                prefixIcon: Icon(
-                                  Icons.mail_outline,
-                                  size: AppSizes.iconMd,
+                            child: _FieldShadow(
+                              child: TextField(
+                                controller: _email,
+                                keyboardType: TextInputType.emailAddress,
+                                autocorrect: false,
+                                onChanged: ref
+                                    .read(profileFormProvider.notifier)
+                                    .setEmail,
+                                decoration: const InputDecoration(
+                                  hintText: 'Enter your Email ID',
+                                  prefixIcon: Icon(
+                                    Icons.mail_outline,
+                                    size: AppSizes.iconMd,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: AppSpacing.huge),
+                          const SizedBox(height: AppSpacing.xl),
                           LabelledField(
                             label: 'Date of Birth',
                             required: true,
-                            errorText: state.fieldErrors['dateOfBirth'],
-                            child: _DateOfBirthField(
-                              value: draft.dateOfBirthDisplay,
-                              onTap: _pickDateOfBirth,
+                            errorText:
+                                _dobError ?? state.fieldErrors['dateOfBirth'],
+                            child: _FieldShadow(
+                              child: _DateOfBirthField(
+                                controller: _dob,
+                                focusNode: _dobFocus,
+                                onChanged: _onDobChanged,
+                                onPickDate: _pickDateOfBirth,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: AppSpacing.huge),
+                          const SizedBox(height: AppSpacing.xl),
                           LabelledField(
                             label: 'Gender',
                             required: true,
@@ -424,47 +498,136 @@ class _SelectAvatarCard extends StatelessWidget {
   }
 }
 
-class _DateOfBirthField extends StatelessWidget {
-  const _DateOfBirthField({required this.value, required this.onTap});
+/// Lifts a field off the page with a soft drop shadow — not in the Figma
+/// export (a flattened static image cannot carry a shadow effect), but the
+/// same treatment on Name, Email and Date of Birth keeps them reading as one
+/// matching set.
+class _FieldShadow extends StatelessWidget {
+  const _FieldShadow({required this.child});
 
-  final String value;
-  final VoidCallback onTap;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final empty = value.isEmpty;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: AppSizes.inputHeight,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        decoration: BoxDecoration(
-          // Matches the themed TextField fill so this hand-rolled field is
-          // indistinguishable from its siblings.
-          color: colors.surfaceAlt,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: colors.border),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                empty ? 'dd/mm/yyyy' : value,
-                style: context.text.bodyLarge?.copyWith(
-                  color: empty ? colors.textMuted : colors.textPrimary,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        boxShadow: [
+          BoxShadow(
+            color: colors.shadow.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Free-typed `dd/mm/yyyy`, formatted as you go, plus a calendar icon that is
+/// its own separate tap target.
+///
+/// Tapping the text opens the keyboard, never the picker — tapping the icon
+/// opens the picker, never the keyboard. Making the whole box open the
+/// picker (the old behaviour) meant there was no way to type a date by hand.
+class _DateOfBirthField extends StatelessWidget {
+  const _DateOfBirthField({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onPickDate,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onPickDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Container(
+      height: AppSizes.inputHeight,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      decoration: BoxDecoration(
+        // Matches the themed TextField fill so this hand-rolled field is
+        // indistinguishable from its siblings.
+        color: colors.surfaceAlt,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onChanged: onChanged,
+              keyboardType: TextInputType.number,
+              inputFormatters: [_DateInputFormatter()],
+              style: context.text.bodyLarge?.copyWith(
+                color: colors.textPrimary,
+              ),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                filled: false,
+                border: InputBorder.none,
+                hintText: 'dd/mm/yyyy',
+                hintStyle: context.text.bodyLarge?.copyWith(
+                  color: colors.textMuted,
                 ),
               ),
             ),
-            Icon(
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onPickDate,
+            child: Icon(
               Icons.calendar_today_outlined,
               size: AppSizes.iconMd,
               color: colors.textMuted,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// Turns raw digit entry into `dd/mm/yyyy` as the user types — inserting the
+/// slashes for them and capping input at 8 digits — while keeping the caret
+/// where the digit count says it should be, not just parked at the end.
+class _DateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digitsBeforeCaret = newValue.text
+        .substring(0, newValue.selection.end.clamp(0, newValue.text.length))
+        .replaceAll(RegExp(r'[^0-9]'), '')
+        .length;
+
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final limited = digits.length > 8 ? digits.substring(0, 8) : digits;
+
+    final buffer = StringBuffer();
+    var caret = limited.length;
+    for (var i = 0; i < limited.length; i++) {
+      buffer.write(limited[i]);
+      if (i + 1 == digitsBeforeCaret) caret = buffer.length;
+      if (i == 1 || i == 3) buffer.write('/');
+    }
+    if (digitsBeforeCaret == 0) caret = 0;
+
+    return TextEditingValue(
+      text: buffer.toString(),
+      selection: TextSelection.collapsed(offset: caret),
     );
   }
 }

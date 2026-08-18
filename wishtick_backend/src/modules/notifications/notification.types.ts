@@ -2,6 +2,11 @@ export enum NotificationChannel {
   IN_APP = 'in_app',
   EMAIL = 'email',
   SMS = 'sms',
+  /**
+   * A device push. Unlike the others its address is a *set* of registered FCM
+   * tokens rather than one string, so the dispatcher gives it its own branch.
+   */
+  PUSH = 'push',
 }
 
 /**
@@ -103,13 +108,13 @@ export const NOTIFICATION_SPECS: Record<NotificationType, NotificationSpec> = {
     template: 'gift-purchased',
   },
   [NotificationType.GIFT_FULFILLED]: {
-    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL],
+    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL, NotificationChannel.PUSH],
     priority: NotificationPriority.NORMAL,
     category: NotificationCategory.GIFTS,
     template: 'gift-fulfilled',
   },
   [NotificationType.GROUP_GIFT_FUNDED]: {
-    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL],
+    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL, NotificationChannel.PUSH],
     priority: NotificationPriority.NORMAL,
     category: NotificationCategory.GROUP_GIFTS,
     template: 'group-gift-funded',
@@ -139,7 +144,12 @@ export const NOTIFICATION_SPECS: Record<NotificationType, NotificationSpec> = {
     template: 'group-gift-fulfilled',
   },
   [NotificationType.EVENT_REMINDER]: {
-    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL, NotificationChannel.SMS],
+    channels: [
+      NotificationChannel.IN_APP,
+      NotificationChannel.EMAIL,
+      NotificationChannel.SMS,
+      NotificationChannel.PUSH,
+    ],
     priority: NotificationPriority.NORMAL,
     category: NotificationCategory.EVENTS,
     template: 'event-reminder',
@@ -169,13 +179,13 @@ export const NOTIFICATION_SPECS: Record<NotificationType, NotificationSpec> = {
     template: 'account-security',
   },
   [NotificationType.REEL_RELEASED]: {
-    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL],
+    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL, NotificationChannel.PUSH],
     priority: NotificationPriority.NORMAL,
     category: NotificationCategory.REELS,
     template: 'reel-released',
   },
   [NotificationType.MEMORY_UNLOCKED]: {
-    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL],
+    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL, NotificationChannel.PUSH],
     priority: NotificationPriority.NORMAL,
     category: NotificationCategory.MEMORIES,
     template: 'memory-unlocked',

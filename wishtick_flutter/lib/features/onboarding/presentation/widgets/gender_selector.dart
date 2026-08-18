@@ -6,8 +6,11 @@ import '../../domain/profile_draft.dart';
 
 /// Three gender tiles — Figma `31:608`.
 ///
-/// The selected tile fills with plum, inverts its text and carries a check badge
-/// in the top-right corner; the others stay a soft lavender.
+/// The selected tile fills with plum, inverts its text and carries a check
+/// badge in the top-right corner; the others are flat white, per the Figma
+/// design — no hairline. On the beige page that leaves the tile barely a shade
+/// off the background until it is either tapped or scanned by touch, which is
+/// the trade-off of matching the design exactly here.
 class GenderSelector extends StatelessWidget {
   const GenderSelector({
     required this.value,
@@ -18,11 +21,17 @@ class GenderSelector extends StatelessWidget {
   final Gender? value;
   final ValueChanged<Gender> onChanged;
 
-  static const _icons = {
-    Gender.male: Icons.male,
-    Gender.female: Icons.female,
-    Gender.other: Icons.transgender,
+  /// Widgets rather than [IconData]: Male and Female use Material glyphs, but
+  /// Other is the brand asset, and [Icon]/[ImageIcon] both take their size and
+  /// colour from the ambient [IconTheme] `_Tile` applies, so either can sit
+  /// here interchangeably.
+  static const _icons = <Gender, Widget>{
+    Gender.male: Icon(Icons.male),
+    Gender.female: Icon(Icons.female),
+    Gender.other: ImageIcon(AssetImage(_othersAsset)),
   };
+
+  static const _othersAsset = 'assets/icons/others.png';
 
   @override
   Widget build(BuildContext context) {
@@ -54,11 +63,11 @@ class _Tile extends StatelessWidget {
   });
 
   final Gender gender;
-  final IconData icon;
+  final Widget icon;
   final bool selected;
   final VoidCallback onTap;
 
-  static const _height = 84.0;
+  static const _height = 72.0;
 
   /// The check disc sits *astride* the tile's top edge — measured at Ø30 with
   /// its right edge flush to the tile's and 5px of it above the top edge.
@@ -86,14 +95,20 @@ class _Tile extends StatelessWidget {
               width: double.infinity,
               height: _height,
               decoration: BoxDecoration(
-                color: selected ? colors.primary : colors.optionFill,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
+                color: selected ? colors.primary : colors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.xl),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: AppSizes.iconMd, color: foreground),
-                  const SizedBox(height: AppSpacing.md),
+                  IconTheme(
+                    data: IconThemeData(
+                      size: AppSizes.iconLg,
+                      color: foreground,
+                    ),
+                    child: icon,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
                   Text(
                     gender.label,
                     textAlign: TextAlign.center,

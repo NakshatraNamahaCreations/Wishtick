@@ -11,6 +11,8 @@ import type { AppConfig } from 'src/config/configuration';
 import { QUEUE } from 'src/infra/queue/queue.constants';
 import { Event, type EventDocument } from 'src/modules/events/schemas/event.schema';
 import { Gift, type GiftDocument } from 'src/modules/gifting/schemas/gift.schema';
+import { MediaService } from 'src/modules/media/media.service';
+import { MediaPurpose } from 'src/modules/media/schemas/media.schema';
 import { UsersService } from 'src/modules/users/users.service';
 import {
   WishlistItem,
@@ -21,6 +23,8 @@ import { THANK_YOU_SEND_JOB, thankYouJobId, type ThankYouSendJobData } from './n
 import { NotificationService } from './notification.service';
 import { NotificationType } from './notification.types';
 import {
+  THANK_YOU_KINDS_WITH_MEDIA,
+  ThankYouKind,
   ThankYouNote,
   ThankYouStatus,
   type ThankYouNoteDocument,
@@ -38,6 +42,7 @@ export class ThankYouService {
     @InjectModel(Event.name) private readonly eventModel: Model<EventDocument>,
     @InjectQueue(QUEUE.NOTIFICATIONS) private readonly queue: Queue,
     private readonly users: UsersService,
+    private readonly media: MediaService,
     private readonly notifications: NotificationService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
@@ -121,18 +126,87 @@ export class ThankYouService {
       .exec();
   }
 
+  /**
+   * The compose screens (`2015:271`, `2015:382`, `2209:104`) all land here.
+   *
+   * A recorded photo/voice/video *attaches* to the note; it never replaces the
+   * subject and body, because what reaches the gifter's inbox is an email and
+   * no mail client plays a voice note. The attachment is what the in-app
+   * preview and the arrival card render.
+   */
   async edit(
     noteId: string,
     userId: string,
-    input: { subject?: string; body?: string },
+    input: { subject?: string; body?: string; kind?: ThankYouKind; mediaId?: string | null },
   ): Promise<ThankYouNoteDocument> {
     const note = await this.loadOwn(noteId, userId);
     this.assertUnsent(note);
     if (input.subject) note.subject = input.subject;
     if (input.body) note.body = input.body;
+    if (input.kind !== undefined) await this.attachMedia(note, userId, input.kind, input.mediaId);
     note.editedAt = new Date();
     await note.save();
     return note;
+  }
+
+  /**
+   * Points the note at an upload the caller owns, or clears it for a text note.
+   *
+   * Ownership is re-checked here rather than trusted from the client: a media
+   * id is guessable, and without this anyone could attach someone else's
+   * recording to their own note and have it rendered under their name.
+   */
+  private async attachMedia(
+    note: ThankYouNoteDocument,
+    userId: string,
+    kind: ThankYouKind,
+    mediaId?: string | null,
+  ): Promise<void> {
+    if (!THANK_YOU_KINDS_WITH_MEDIA.includes(kind)) {
+      note.kind = kind;
+      note.mediaId = null;
+      note.mediaUrl = null;
+      return;
+    }
+    if (!mediaId) {
+      throw new AppException(
+        ErrorCode.THANK_YOU_MEDIA_REQUIRED,
+        `A ${kind} thank-you needs a recording`,
+        400,
+      );
+    }
+    const media = await this.media.getReadyOwned(userId, mediaId);
+    if (media.purpose !== MediaPurpose.THANK_YOU) {
+      throw new AppException(
+        ErrorCode.MEDIA_TYPE_NOT_ALLOWED,
+        'This media was not uploaded as a thank-you',
+        400,
+      );
+    }
+    ThankYouService.assertKindMatchesMedia(kind, media.contentType);
+    note.kind = kind;
+    note.mediaId = media._id;
+    note.mediaUrl = media.url;
+  }
+
+  /**
+   * A photo note must carry an image and a video note a video — the kind is
+   * what the client picks a player for, so a mismatch is a broken screen.
+   */
+  private static assertKindMatchesMedia(kind: ThankYouKind, contentType: string | null): void {
+    const family = (contentType ?? '').split('/')[0];
+    const expected: Record<string, string> = {
+      [ThankYouKind.PHOTO]: 'image',
+      [ThankYouKind.AUDIO]: 'audio',
+      [ThankYouKind.VIDEO]: 'video',
+    };
+    if (expected[kind] && family !== expected[kind]) {
+      throw new AppException(
+        ErrorCode.MEDIA_TYPE_NOT_ALLOWED,
+        `A ${kind} thank-you needs ${expected[kind]} media, not ${contentType ?? 'unknown'}`,
+        400,
+      );
+    }
   }
 
   async sendNow(noteId: string, userId: string): Promise<ThankYouNoteDocument> {
@@ -163,6 +237,10 @@ export class ThankYouService {
         gifterName: note.context.gifterName,
         recipientName: note.context.recipientName,
         itemTitle: note.context.itemTitle,
+        // Carried so the in-app card can play the recording without a second
+        // fetch. The email template only ever renders subject and body.
+        kind: note.kind,
+        mediaUrl: note.mediaUrl,
       },
     });
     note.status = ThankYouStatus.SENT;

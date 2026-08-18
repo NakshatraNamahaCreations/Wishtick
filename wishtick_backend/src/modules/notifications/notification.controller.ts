@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   HttpCode,
@@ -19,7 +20,12 @@ import { Public } from 'src/common/decorators/public.decorator';
 import { AppException } from 'src/common/errors/app.exception';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import type { AppConfig } from 'src/config/configuration';
-import { UpdatePreferenceDto, UnsubscribeQueryDto } from './dto/notification.dto';
+import {
+  RegisterDeviceDto,
+  UpdatePreferenceDto,
+  UnsubscribeQueryDto,
+} from './dto/notification.dto';
+import { DeviceTokenService } from './device-token.service';
 import { NotificationService } from './notification.service';
 import { NotificationChannel } from './notification.types';
 import {
@@ -34,8 +40,42 @@ import {
 export class NotificationController {
   constructor(
     private readonly notifications: NotificationService,
+    private readonly devices: DeviceTokenService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
+
+  @Post('me/devices')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Register this install for push',
+    description:
+      'Upserts on the token, not on (user, token): a handset handed to a second account keeps ' +
+      'the same FCM token, and a second row would deliver one person’s notifications to ' +
+      'the other.',
+  })
+  registerDevice(
+    @CurrentUser('id') userId: string,
+    @Body() dto: RegisterDeviceDto,
+  ): Promise<{ id: string }> {
+    return this.devices.register(userId, dto);
+  }
+
+  @Delete('me/devices/:token')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Drop this install’s push token — what sign-out calls',
+    description:
+      'Scoped to the caller: a token is a delivery address, and unregistering an arbitrary one ' +
+      'would be a way to silence someone else.',
+  })
+  unregisterDevice(
+    @CurrentUser('id') userId: string,
+    @Param('token') token: string,
+  ): Promise<void> {
+    return this.devices.unregister(userId, token);
+  }
 
   @Get('notifications')
   @ApiBearerAuth()

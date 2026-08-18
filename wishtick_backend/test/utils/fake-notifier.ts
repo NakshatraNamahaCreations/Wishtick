@@ -1,4 +1,5 @@
 import type { IMailer, SendMailInput } from 'src/infra/notifier/mailer.port';
+import type { IPushSender, SendPushInput, SendPushResult } from 'src/infra/notifier/push.port';
 import type { ISmsSender, SendSmsInput } from 'src/infra/notifier/sms.port';
 
 /**
@@ -63,5 +64,40 @@ export class FakeSmsSender implements ISmsSender {
 
   reset(): void {
     this.sent.length = 0;
+  }
+}
+
+/**
+ * Captures pushes instead of sending them, and lets a test declare which
+ * tokens the provider would have rejected.
+ *
+ * [unregistered] is the important half: the dispatcher is supposed to revoke
+ * every token FCM reports dead, and without a way to simulate that rejection
+ * the pruning path would never be exercised.
+ */
+export class FakePushSender implements IPushSender {
+  readonly sent: SendPushInput[] = [];
+
+  /** Tokens the next send should report as no longer registered. */
+  unregistered = new Set<string>();
+
+  send(input: SendPushInput): Promise<SendPushResult> {
+    this.sent.push(input);
+    const dead = input.tokens.filter((t) => this.unregistered.has(t));
+    return Promise.resolve({ sent: input.tokens.length - dead.length, unregistered: dead });
+  }
+
+  get last(): SendPushInput | undefined {
+    return this.sent[this.sent.length - 1];
+  }
+
+  /** Every token any send in this run was addressed to. */
+  get tokens(): string[] {
+    return this.sent.flatMap((s) => s.tokens);
+  }
+
+  reset(): void {
+    this.sent.length = 0;
+    this.unregistered.clear();
   }
 }

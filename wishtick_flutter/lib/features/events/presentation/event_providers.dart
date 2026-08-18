@@ -2,10 +2,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/events_repository.dart';
 import '../domain/event.dart';
+import '../domain/invited_event.dart';
 
 /// The host's own events.
 final myEventsProvider = FutureProvider.autoDispose<List<WishtickEventDetail>>(
   (ref) => ref.watch(eventsRepositoryProvider).listMine(),
+);
+
+/// Events other people invited you to.
+final invitedEventsProvider = FutureProvider.autoDispose<List<InvitedEvent>>(
+  (ref) => ref.watch(eventsRepositoryProvider).listInvited(),
 );
 
 /// One event, by id.

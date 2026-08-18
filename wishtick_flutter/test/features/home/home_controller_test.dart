@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wishtick_flutter/core/network/api_exception.dart';
+import 'package:wishtick_flutter/features/addresses/data/addresses_repository.dart';
+import 'package:wishtick_flutter/features/addresses/domain/address.dart';
 import 'package:wishtick_flutter/features/group_gift/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/home/data/home_repository.dart';
 import 'package:wishtick_flutter/features/home/presentation/home_controller.dart';
@@ -15,19 +17,31 @@ void main() {
   ({
     ProviderContainer container,
     FakeHomeRepository home,
+    FakeAddressesRepository addresses,
     FakeWishlistRepository wishlists,
   })
-  build({FakeHomeRepository? home, FakeWishlistRepository? wishlists}) {
+  build({
+    FakeHomeRepository? home,
+    FakeAddressesRepository? addresses,
+    FakeWishlistRepository? wishlists,
+  }) {
     final homeRepo = home ?? FakeHomeRepository();
+    final addressRepo = addresses ?? FakeAddressesRepository();
     final wishlistRepo = wishlists ?? FakeWishlistRepository();
     final container = ProviderContainer(
       overrides: [
         homeRepositoryProvider.overrideWithValue(homeRepo),
+        addressesRepositoryProvider.overrideWithValue(addressRepo),
         wishlistRepositoryProvider.overrideWithValue(wishlistRepo),
       ],
     );
     addTearDown(container.dispose);
-    return (container: container, home: homeRepo, wishlists: wishlistRepo);
+    return (
+      container: container,
+      home: homeRepo,
+      addresses: addressRepo,
+      wishlists: wishlistRepo,
+    );
   }
 
   HomeController controllerOf(ProviderContainer c) =>
@@ -38,10 +52,10 @@ void main() {
     test('fills every rail and does not refetch once loaded', () async {
       final t = build(
         home: FakeHomeRepository(
-          addresses: [buildAddress()],
           events: [buildEvent()],
           groupGifts: [buildGroupGift()],
         ),
+        addresses: FakeAddressesRepository(addresses: [buildAddress()]),
         wishlists: FakeWishlistRepository(wishlists: [buildWishlist()]),
       );
 
@@ -54,17 +68,16 @@ void main() {
       expect(state.events, hasLength(1));
       expect(state.groupGifts, hasLength(1));
       expect(state.wishlists, hasLength(1));
-      expect(t.home.listAddressCalls, 1);
+      expect(t.addresses.listCalls, 1);
     });
   });
 
   group('partial failure', () {
     test('one dead rail does not blank the others', () async {
       final t = build(
-        home: FakeHomeRepository(
-          addresses: [buildAddress()],
-          groupGifts: [buildGroupGift()],
-        )..eventFailure = down,
+        home: FakeHomeRepository(groupGifts: [buildGroupGift()])
+          ..eventFailure = down,
+        addresses: FakeAddressesRepository(addresses: [buildAddress()]),
         wishlists: FakeWishlistRepository(wishlists: [buildWishlist()]),
       );
 
@@ -81,9 +94,9 @@ void main() {
     test('surfaces an error only when every rail fails', () async {
       final t = build(
         home: FakeHomeRepository()
-          ..addressFailure = down
           ..eventFailure = down
           ..groupGiftFailure = down,
+        addresses: FakeAddressesRepository()..failure = down,
         wishlists: FakeWishlistRepository()..failure = down,
       );
 
@@ -105,17 +118,17 @@ void main() {
 
     test('picks the flagged address, not merely the first', () async {
       final t = build(
-        home: FakeHomeRepository(
+        addresses: FakeAddressesRepository(
           addresses: [
-            buildAddress(id: 'a1', label: 'Work', isDefault: false),
-            buildAddress(id: 'a2', label: 'Home', isDefault: true),
+            buildAddress(id: 'a1', label: AddressLabel.work, isDefault: false),
+            buildAddress(id: 'a2', label: AddressLabel.home, isDefault: true),
           ],
         ),
       );
 
       await controllerOf(t.container).ensureLoaded();
 
-      expect(stateOf(t.container).defaultAddress?.label, 'Home');
+      expect(stateOf(t.container).defaultAddress?.label, AddressLabel.home);
     });
   });
 

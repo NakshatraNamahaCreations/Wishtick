@@ -4,6 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/network/idempotency_key.dart';
 import '../domain/gift.dart';
+import '../domain/gift_list_item.dart';
 import '../domain/order.dart';
 
 /// Talks to the backend's `gifting` and `orders` modules.
@@ -97,26 +98,30 @@ class GiftingRepository {
     return Gift.fromJson(json);
   }
 
-  // ── Dashboard sections ──────────────────────────────────────────────────
+  // ── The three list screens ──────────────────────────────────────────────
+  //
+  // All three answer [GiftListItem], not [Gift]: the cards need the item's
+  // photo, title and price and the other person's first name, and the server
+  // joins those in one query rather than leaving the client to fetch each row.
 
-  /// Everything the caller is giving, in any state.
-  Future<List<Gift>> listGiven() => _giftList('/gifts/given');
+  /// "Gifts Given" (`324:1253`) — everything the caller is giving, single or
+  /// group, in any state.
+  Future<List<GiftListItem>> listGiven() => _giftList('/gifts/given');
 
-  /// Still in the caller's hands — reserved, purchased or fulfilled.
-  Future<List<Gift>> listOnHold() => _giftList('/gifts/on-hold');
+  /// "Gifts On Hold" (`324:1210`) — reserved, purchased or fulfilled.
+  Future<List<GiftListItem>> listOnHold() => _giftList('/gifts/on-hold');
 
-  /// Gifts coming *to* the caller. A much smaller shape than [Gift]: surprises
-  /// still in progress are omitted server-side, and the gifter is never named.
-  Future<List<ReceivedGift>> listReceived() async {
-    final json = await _api.get<List<dynamic>>('/gifts/received');
-    return json
-        .map((e) => ReceivedGift.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
+  /// "Gifts Received" (`324:1108`).
+  ///
+  /// A surprise still in progress is omitted server-side — not merely
+  /// anonymised — so this list can never hint that something is coming.
+  Future<List<GiftListItem>> listReceived() => _giftList('/gifts/received');
 
-  Future<List<Gift>> _giftList(String path) async {
+  Future<List<GiftListItem>> _giftList(String path) async {
     final json = await _api.get<List<dynamic>>(path);
-    return json.map((e) => Gift.fromJson(e as Map<String, dynamic>)).toList();
+    return json
+        .map((e) => GiftListItem.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   // ── Orders ──────────────────────────────────────────────────────────────

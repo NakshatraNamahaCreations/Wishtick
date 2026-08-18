@@ -1,6 +1,7 @@
 import 'package:wishtick_flutter/features/events/data/events_repository.dart';
 import 'package:wishtick_flutter/features/events/domain/event.dart';
 import 'package:wishtick_flutter/features/events/domain/invite_template.dart';
+import 'package:wishtick_flutter/features/events/domain/invited_event.dart';
 
 WishtickEventDetail buildEvent({
   String id = 'evt_1',
@@ -105,6 +106,11 @@ class FakeEventsRepository implements EventsRepository {
 
   @override
   Future<List<WishtickEventDetail>> listMine() async => [event];
+
+  /// Empty by default: these tests exercise the host's side, and inventing an
+  /// invitation would put a guest rail in front of screens that have none.
+  @override
+  Future<List<InvitedEvent>> listInvited() async => const [];
 
   @override
   Future<WishtickEventDetail> get(String id) async => event;

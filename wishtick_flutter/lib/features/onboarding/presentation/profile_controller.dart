@@ -70,6 +70,12 @@ class ProfileFormController extends Notifier<ProfileFormState> {
   void setEmail(String value) => _update(state.draft.copyWith(email: value));
   void setDateOfBirth(DateTime value) =>
       _update(state.draft.copyWith(dateOfBirth: value));
+
+  /// Backs out of a committed date of birth — used while the manual-entry
+  /// field is mid-edit, so a half-erased box can't leave a stale date behind
+  /// it that Continue would silently save.
+  void clearDateOfBirth() =>
+      _update(state.draft.copyWith(clearDateOfBirth: true));
   void setGender(Gender value) => _update(state.draft.copyWith(gender: value));
 
   /// Picking a preset clears any uploaded photo, mirroring the backend.

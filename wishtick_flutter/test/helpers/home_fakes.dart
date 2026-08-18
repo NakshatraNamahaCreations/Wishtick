@@ -1,30 +1,35 @@
 import 'package:wishtick_flutter/core/network/api_exception.dart';
+import 'package:wishtick_flutter/features/addresses/data/addresses_repository.dart';
+import 'package:wishtick_flutter/features/addresses/domain/address.dart';
 import 'package:wishtick_flutter/features/discover/data/discover_repository.dart';
 import 'package:wishtick_flutter/features/discover/domain/discover_feed.dart';
 import 'package:wishtick_flutter/features/group_gift/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/home/data/home_repository.dart';
-import 'package:wishtick_flutter/features/home/domain/address.dart';
 import 'package:wishtick_flutter/features/home/domain/upcoming_occasion.dart';
 import 'package:wishtick_flutter/features/home/domain/wishtick_event.dart';
 
 Address buildAddress({
   String id = 'addr_1',
-  String label = 'Home',
+  AddressLabel label = AddressLabel.home,
   String city = 'Mysuru',
   String pincode = '570031',
   bool isDefault = true,
 }) => Address(
   id: id,
   label: label,
-  recipientName: 'Ananya Sharma',
-  phone: '+919876543210',
-  line1: 'D-Block, JP Nagar',
-  line2: null,
+  fullName: 'Ananya Sharma',
+  mobile: '+919876543210',
+  altMobile: null,
+  email: null,
+  line1: 'D-Block',
+  locality: 'JP Nagar',
+  landmark: null,
+  pincode: pincode,
   city: city,
   state: 'Karnataka',
-  pincode: pincode,
-  country: 'India',
+  countryCode: 'IN',
   isDefault: isDefault,
+  formatted: 'D-Block, JP Nagar, $city, Karnataka $pincode',
 );
 
 WishtickEvent buildEvent({
@@ -84,94 +89,20 @@ UpcomingOccasion buildOccasion({
 /// which is what lets a test prove one dead rail does not blank the screen.
 class FakeHomeRepository implements HomeRepository {
   FakeHomeRepository({
-    List<Address>? addresses,
     List<WishtickEvent>? events,
     List<GroupGift>? groupGifts,
     List<UpcomingOccasion>? occasions,
-  }) : addresses = addresses ?? [],
-       events = events ?? [],
+  }) : events = events ?? [],
        groupGifts = groupGifts ?? [],
        occasions = occasions ?? [];
 
-  final List<Address> addresses;
   final List<WishtickEvent> events;
   final List<GroupGift> groupGifts;
   final List<UpcomingOccasion> occasions;
 
-  ApiException? addressFailure;
   ApiException? eventFailure;
   ApiException? groupGiftFailure;
   ApiException? occasionFailure;
-
-  int listAddressCalls = 0;
-
-  @override
-  Future<List<Address>> listAddresses() async {
-    listAddressCalls++;
-    final f = addressFailure;
-    if (f != null) throw f;
-    return List.of(addresses);
-  }
-
-  @override
-  Future<Address> createAddress({
-    required String label,
-    required String recipientName,
-    required String phone,
-    required String line1,
-    String? line2,
-    required String city,
-    required String state,
-    required String pincode,
-    String? country,
-    bool? isDefault,
-  }) async {
-    final f = addressFailure;
-    if (f != null) throw f;
-    final created = buildAddress(
-      id: 'addr_${addresses.length + 1}',
-      label: label,
-      city: city,
-      pincode: pincode,
-      isDefault: isDefault == true || addresses.isEmpty,
-    );
-    addresses.add(created);
-    return created;
-  }
-
-  @override
-  Future<Address> updateAddress(
-    String id, {
-    String? label,
-    String? recipientName,
-    String? phone,
-    String? line1,
-    String? line2,
-    String? city,
-    String? state,
-    String? pincode,
-    bool? isDefault,
-  }) async {
-    final f = addressFailure;
-    if (f != null) throw f;
-    final index = addresses.indexWhere((a) => a.id == id);
-    final updated = buildAddress(
-      id: id,
-      label: label ?? addresses[index].label,
-      city: city ?? addresses[index].city,
-      pincode: pincode ?? addresses[index].pincode,
-      isDefault: isDefault ?? addresses[index].isDefault,
-    );
-    addresses[index] = updated;
-    return updated;
-  }
-
-  @override
-  Future<void> removeAddress(String id) async {
-    final f = addressFailure;
-    if (f != null) throw f;
-    addresses.removeWhere((a) => a.id == id);
-  }
 
   @override
   Future<List<UpcomingOccasion>> upcomingOccasions({
@@ -232,5 +163,94 @@ class FakeDiscoverRepository implements DiscoverRepository {
         maxPriceMinor: null,
       ),
     );
+  }
+}
+
+/// Scriptable stand-in for the address book.
+///
+/// Split from [FakeHomeRepository] when the address book became a Profile
+/// screen with its own repository — Home only reads the list now.
+class FakeAddressesRepository implements AddressesRepository {
+  FakeAddressesRepository({List<Address>? addresses})
+    : addresses = addresses ?? [];
+
+  final List<Address> addresses;
+  ApiException? failure;
+  int listCalls = 0;
+
+  @override
+  Future<List<Address>> list() async {
+    listCalls++;
+    final f = failure;
+    if (f != null) throw f;
+    return List.of(addresses);
+  }
+
+  @override
+  Future<Address> create({
+    required String fullName,
+    required String mobile,
+    required String line1,
+    required String locality,
+    required String pincode,
+    required String city,
+    required String state,
+    AddressLabel? label,
+    String? altMobile,
+    String? email,
+    String? landmark,
+    bool? isDefault,
+  }) async {
+    final f = failure;
+    if (f != null) throw f;
+    final created = buildAddress(
+      id: 'addr_${addresses.length + 1}',
+      label: label ?? AddressLabel.home,
+      city: city,
+      pincode: pincode,
+      isDefault: isDefault == true || addresses.isEmpty,
+    );
+    addresses.add(created);
+    return created;
+  }
+
+  @override
+  Future<Address> update(
+    String id, {
+    AddressLabel? label,
+    String? fullName,
+    String? mobile,
+    String? altMobile,
+    String? email,
+    String? line1,
+    String? locality,
+    String? landmark,
+    String? pincode,
+    String? city,
+    String? state,
+    bool? isDefault,
+  }) async {
+    final f = failure;
+    if (f != null) throw f;
+    final index = addresses.indexWhere((a) => a.id == id);
+    final updated = buildAddress(
+      id: id,
+      label: label ?? addresses[index].label,
+      city: city ?? addresses[index].city,
+      pincode: pincode ?? addresses[index].pincode,
+      isDefault: isDefault ?? addresses[index].isDefault,
+    );
+    addresses[index] = updated;
+    return updated;
+  }
+
+  @override
+  Future<Address> setDefault(String id) => update(id, isDefault: true);
+
+  @override
+  Future<void> remove(String id) async {
+    final f = failure;
+    if (f != null) throw f;
+    addresses.removeWhere((a) => a.id == id);
   }
 }

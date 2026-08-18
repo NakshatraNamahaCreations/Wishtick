@@ -74,6 +74,6 @@ flutter:
     - family: Montserrat
       fonts:
         - asset: assets/fonts/Montserrat.ttf
-    - family: PlayfairDisplay
+    - family: CormorantGaramond
       fonts:
-        - asset: assets/fonts/PlayfairDisplay.ttf
+        - asset: assets/fonts/CormorantGaramond.ttf

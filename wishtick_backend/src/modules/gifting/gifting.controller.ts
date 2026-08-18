@@ -10,8 +10,9 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import { Idempotent } from 'src/common/idempotency/idempotent.decorator';
 import { GiftActionDto, GiftOfflineDto, ReserveItemDto } from './dto/gift.dto';
+import { GiftListService } from './gift-list.service';
 import { GiftingService } from './gifting.service';
-import type { GiftView, RecipientGiftView } from './gift.views';
+import type { GiftListItemView, GiftView } from './gift.views';
 
 /** Reserving is a real commitment; a tight bucket blunts scripted claiming. */
 const GIFT_THROTTLE = { default: { limit: 20, ttl: 60_000 } };
@@ -20,7 +21,10 @@ const GIFT_THROTTLE = { default: { limit: 20, ttl: 60_000 } };
 @Controller()
 @ApiBearerAuth()
 export class GiftingController {
-  constructor(private readonly gifting: GiftingService) {}
+  constructor(
+    private readonly gifting: GiftingService,
+    private readonly giftLists: GiftListService,
+  ) {}
 
   // ── Reserve / release (item-scoped) ────────────────────────────────────────
 
@@ -129,23 +133,30 @@ export class GiftingController {
   // ── Dashboard sections ─────────────────────────────────────────────────────
 
   @Get('gifts/given')
-  @ApiOperation({ summary: 'Gifts you are giving' })
-  given(@CurrentUser('id') userId: string): Promise<GiftView[]> {
-    return this.gifting.listGiven(userId);
+  @ApiOperation({
+    summary: 'Gifts you are giving (`324:1253`)',
+    description:
+      'Rows carry the item, the recipient’s first name and the delivery state — what the ' +
+      'list screen draws. Group gifts are included; the frame has a Group tab.',
+  })
+  given(@CurrentUser('id') userId: string): Promise<GiftListItemView[]> {
+    return this.giftLists.listGiven(userId);
   }
 
   @Get('gifts/received')
   @ApiOperation({
-    summary: 'Gifts you have received',
-    description: 'Surprises still in progress (hidden + reserved/purchased) are omitted.',
+    summary: 'Gifts you have received (`324:1108`)',
+    description:
+      'Surprises still in progress (hidden + reserved/purchased) are omitted — which is also ' +
+      'why naming the gifter here gives nothing away.',
   })
-  received(@CurrentUser('id') userId: string): Promise<RecipientGiftView[]> {
-    return this.gifting.listReceived(userId);
+  received(@CurrentUser('id') userId: string): Promise<GiftListItemView[]> {
+    return this.giftLists.listReceived(userId);
   }
 
   @Get('gifts/on-hold')
-  @ApiOperation({ summary: 'Gifts on hold by you (reserved / purchased / fulfilled)' })
-  onHold(@CurrentUser('id') userId: string): Promise<GiftView[]> {
-    return this.gifting.listOnHold(userId);
+  @ApiOperation({ summary: 'Gifts on hold by you (`324:1210`)' })
+  onHold(@CurrentUser('id') userId: string): Promise<GiftListItemView[]> {
+    return this.giftLists.listOnHold(userId);
   }
 }

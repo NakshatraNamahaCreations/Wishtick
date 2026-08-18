@@ -71,7 +71,7 @@ class _MobileNumberScreenState extends ConsumerState<MobileNumberScreen> {
     final ready = state.canRequestCode;
 
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
@@ -291,13 +291,13 @@ class _SparkleBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Container(
-      width: 44,
-      height: 44,
+      width: 30,
+      height: 30,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: colors.surfaceAlt,
       ),
-      child: SparkleIcon(size: 22, color: colors.primary),
+      child: SparkleIcon(size: AppSizes.iconSm, color: colors.primary),
     );
   }
 }

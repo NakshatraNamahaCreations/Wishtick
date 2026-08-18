@@ -7,6 +7,7 @@ import '../../wishlist/domain/wishlist.dart';
 import '../../wishlist/domain/wishlist_item.dart';
 import '../data/gifting_repository.dart';
 import '../domain/gift.dart';
+import '../domain/gift_list_item.dart';
 
 @immutable
 class GiftItemState {
@@ -24,7 +25,7 @@ class GiftItemState {
   /// Your own gift on this item, if you already have one. Null both when the
   /// item is free and when *someone else* holds it — the server never says who,
   /// so the difference is [WishlistItem.status], not this.
-  final Gift? myGift;
+  final GiftListItem? myGift;
 
   final String? error;
   final bool busy;
@@ -51,7 +52,7 @@ class GiftItemState {
   GiftItemState copyWith({
     WishlistItem? item,
     Wishlist? wishlist,
-    Gift? myGift,
+    GiftListItem? myGift,
     String? error,
     bool? busy,
     bool clearError = false,
@@ -118,7 +119,7 @@ class GiftItemController extends Notifier<GiftItemState> {
         arg.$2,
         hiddenFromOwner: hiddenFromOwner,
       );
-      state = state.copyWith(myGift: gift, busy: false);
+      state = state.copyWith(myGift: _asRow(gift), busy: false);
       // Pulls the item's new status back, so the screen stops offering to
       // reserve something you now hold.
       await _reloadItem();
@@ -153,7 +154,7 @@ class GiftItemController extends Notifier<GiftItemState> {
     state = state.copyWith(busy: true, clearError: true);
     try {
       final updated = await _gifting.purchase(gift.id, note: note);
-      state = state.copyWith(myGift: updated, busy: false);
+      state = state.copyWith(myGift: _asRow(updated), busy: false);
       await _reloadItem();
       return updated;
     } on ApiException catch (e) {
@@ -161,6 +162,15 @@ class GiftItemController extends Notifier<GiftItemState> {
       return null;
     }
   }
+
+  /// The transition endpoints answer the transactional [Gift]; this screen
+  /// holds the list shape. The item is already loaded, so folding one into the
+  /// other costs nothing and keeps a single type on the state.
+  GiftListItem _asRow(Gift gift) => GiftListItem.fromGift(
+    gift,
+    title: state.item?.title ?? '',
+    imageUrl: state.item?.coverImageUrl,
+  );
 
   Future<void> _reloadItem() async {
     try {

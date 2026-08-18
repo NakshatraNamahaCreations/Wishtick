@@ -89,15 +89,15 @@ class _ColorsScreenState extends ConsumerState<ColorsScreen> {
               Container(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: colors.celebrationSubtle,
+                  color: colors.noteSubtle,
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     SparkleIcon(
                       size: AppSizes.iconMd,
-                      color: colors.celebration,
+                      color: colors.onNoteSubtle,
                     ),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
@@ -106,7 +106,7 @@ class _ColorsScreenState extends ConsumerState<ColorsScreen> {
                         'This colors will be used to personalize you '
                         'wishtick experience',
                         style: context.text.bodyMedium?.copyWith(
-                          color: colors.textPrimary,
+                          color: colors.onNoteSubtle,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -135,7 +135,7 @@ class _ColorsScreenState extends ConsumerState<ColorsScreen> {
   }
 }
 
-/// One white card per colour family: emoji-free title row per the design,
+/// One white card per colour family: an emoji-style leading icon plus title,
 /// then five labelled swatch circles.
 class _ColorGroupCard extends StatelessWidget {
   const _ColorGroupCard({
@@ -148,9 +148,20 @@ class _ColorGroupCard extends StatelessWidget {
   final Set<String> selectedKeys;
   final ValueChanged<String> onToggle;
 
+  /// Keyed by `meta.group`, not the display label — stable across a
+  /// groupLabel copy edit, and matches the seed's own group keys
+  /// (`taxonomy.seed.ts`).
+  static const _icons = <String, String>{
+    'neutral': 'assets/icons/Neutrals_Slate.png',
+    'earth': 'assets/icons/Earth_Tones.png',
+    'pastel': 'assets/icons/Pastels.png',
+    'blue': 'assets/icons/Blues.png',
+  };
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final icon = _icons[group.group];
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -161,12 +172,24 @@ class _ColorGroupCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            group.label,
-            style: context.text.titleMedium?.copyWith(
-              color: colors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            children: [
+              if (icon != null) ...[
+                Image.asset(
+                  icon,
+                  width: AppSizes.iconLg,
+                  height: AppSizes.iconLg,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Text(
+                group.label,
+                style: context.text.titleMedium?.copyWith(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.lg),
           Row(

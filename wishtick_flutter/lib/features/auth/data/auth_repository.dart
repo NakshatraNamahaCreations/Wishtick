@@ -44,6 +44,13 @@ class AuthRepository {
 
   /// OTP parameters, mirrored from the backend config so the UI can show an
   /// accurate resend countdown and code length without guessing.
+  /// Six, matching `OTP_LENGTH` (default 6) in the backend's configuration.
+  ///
+  /// This read 4 until the device walk caught it: the server sent a six-digit
+  /// code, the screen drew four boxes and auto-submitted the first four, and
+  /// OTP sign-in could not succeed at all. Everything on that screen — the box
+  /// count, the "n-digit" line, the auto-submit and the Verify button's enabled
+  /// state — is derived from this constant, so it is the only place to change.
   static const otpLength = 6;
   static const otpResendCooldown = Duration(seconds: 60);
   static const otpValidity = Duration(minutes: 10);

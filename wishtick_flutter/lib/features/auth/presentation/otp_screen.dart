@@ -76,7 +76,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     // Completing sign-in flips the session to authenticated, and the router's
     // redirect takes over from there.
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),

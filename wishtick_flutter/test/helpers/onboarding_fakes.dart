@@ -64,7 +64,13 @@ OnboardingStatus buildStatus({
 
 /// Scriptable stand-in for the onboarding API.
 class FakeOnboardingRepository implements OnboardingRepository {
-  FakeOnboardingRepository({this.completed = false});
+  FakeOnboardingRepository({this.completed = false, OnboardingOptions? options})
+    // ignore: prefer_initializing_formals
+    : _options = options;
+
+  /// Overrides [buildOptions] when a test needs a specific catalogue shape
+  /// (e.g. real colour-group keys) rather than the compact default.
+  final OnboardingOptions? _options;
 
   /// What `status()` reports, and what a save flips once the profile is stored.
   bool completed;
@@ -129,7 +135,7 @@ class FakeOnboardingRepository implements OnboardingRepository {
     optionsCalls++;
     final failure = optionsFailure;
     if (failure != null) throw failure;
-    return buildOptions();
+    return _options ?? buildOptions();
   }
 
   @override

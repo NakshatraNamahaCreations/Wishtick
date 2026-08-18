@@ -58,7 +58,7 @@ import { UsersModule } from 'src/modules/users/users.module';
 import { AffiliateSyncProcessor } from 'src/modules/products/affiliate-sync.processor';
 import { ProductsModule } from 'src/modules/products/products.module';
 import { WishlistsModule } from 'src/modules/wishlists/wishlists.module';
-import { FakeMailer, FakeSmsSender } from './fake-notifier';
+import { FakeMailer, FakePushSender, FakeSmsSender } from './fake-notifier';
 import { FakeQueue } from './fake-queue';
 import { TestInfraModule } from './test-infra.module';
 
@@ -67,6 +67,8 @@ export interface TestApp {
   redis: Redis;
   mailer: FakeMailer;
   sms: FakeSmsSender;
+  /** Records device pushes, and can declare tokens the provider rejected. */
+  push: FakePushSender;
   /** Records jobs enqueued on the scheduler queue (anonymization, reminders). */
   scheduler: FakeQueue;
   /** Records jobs enqueued on the notifications queue (dispatch, thank-you, digest). */
@@ -110,6 +112,7 @@ export async function createTestApp(
   const redis = new RedisMock();
   const mailer = new FakeMailer();
   const sms = new FakeSmsSender();
+  const push = new FakePushSender();
   const scheduler = new FakeQueue();
   const notifications = new FakeQueue();
   const reels = new FakeQueue();
@@ -145,7 +148,7 @@ export async function createTestApp(
         throttlers: [{ name: 'default', ttl: throttleTtl, limit: throttleLimit }],
       }),
       EventEmitterModule.forRoot({ global: true }),
-      TestInfraModule.forRoot({ redis, mailer, sms }),
+      TestInfraModule.forRoot({ redis, mailer, sms, push }),
       // The real StorageModule, not a fake: STORAGE_DRIVER=local in the test
       // env, so it selects the local adapter and uploads land in a temp dir.
       // Faking it here would leave the presign → PUT → confirm path — the part
@@ -281,6 +284,7 @@ export async function createTestApp(
     redis,
     mailer,
     sms,
+    push,
     scheduler,
     notifications,
     reels,

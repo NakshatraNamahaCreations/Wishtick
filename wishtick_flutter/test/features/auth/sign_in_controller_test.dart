@@ -12,6 +12,16 @@ import '../../helpers/auth_fakes.dart';
 import '../../helpers/onboarding_fakes.dart';
 
 void main() {
+  /// Well-formed codes, whatever length the backend uses.
+  ///
+  /// These were the literals '1234' / '0000', which stopped being valid codes
+  /// the day `otpLength` was corrected from 4 to 6 — every test here then
+  /// failed for that reason alone. Deriving them means a future change to the
+  /// contract cannot strand them again.
+  final validCode = '1' * AuthRepository.otpLength;
+  final wrongCode = '0' * AuthRepository.otpLength;
+  final tooShort = '1' * (AuthRepository.otpLength - 1);
+
   ({
     ProviderContainer container,
     FakeAuthRepository auth,
@@ -137,9 +147,9 @@ void main() {
       final t = build();
       await atCodeStep(t);
 
-      await controllerOf(t.container).submitCode('123456');
+      await controllerOf(t.container).submitCode(validCode);
 
-      expect(t.auth.verifiedSignIns.single.code, '123456');
+      expect(t.auth.verifiedSignIns.single.code, validCode);
       expect(stateOf(t.container).completed, isTrue);
       expect(t.tokens.saveCount, 1);
       expect(
@@ -152,7 +162,7 @@ void main() {
       final t = build();
       await atCodeStep(t, name: 'Ananya');
 
-      await controllerOf(t.container).submitCode('123456');
+      await controllerOf(t.container).submitCode(validCode);
 
       expect(t.auth.verifiedSignIns.single.name, 'Ananya');
     });
@@ -161,7 +171,7 @@ void main() {
       final t = build()..auth.nextIsNewUser = true;
       await atCodeStep(t);
 
-      await controllerOf(t.container).submitCode('123456');
+      await controllerOf(t.container).submitCode(validCode);
 
       expect(stateOf(t.container).isNewUser, isTrue);
     });
@@ -170,7 +180,7 @@ void main() {
       final t = build();
       await atCodeStep(t);
 
-      await controllerOf(t.container).submitCode('123');
+      await controllerOf(t.container).submitCode(tooShort);
 
       expect(t.auth.verifiedSignIns, isEmpty);
       expect(stateOf(t.container).completed, isFalse);
@@ -186,7 +196,7 @@ void main() {
         details: {'attemptsRemaining': 3},
       );
 
-      await controllerOf(t.container).submitCode('000000');
+      await controllerOf(t.container).submitCode(wrongCode);
 
       final state = stateOf(t.container);
       expect(state.error, 'That code is incorrect.');
@@ -205,7 +215,7 @@ void main() {
         statusCode: 400,
       );
 
-      await controllerOf(t.container).submitCode('000000');
+      await controllerOf(t.container).submitCode(wrongCode);
 
       expect(
         stateOf(t.container).error,
@@ -222,7 +232,7 @@ void main() {
         statusCode: 429,
       );
 
-      await controllerOf(t.container).submitCode('000000');
+      await controllerOf(t.container).submitCode(wrongCode);
 
       expect(
         stateOf(t.container).error,
@@ -239,7 +249,7 @@ void main() {
         statusCode: 403,
       );
 
-      await controllerOf(t.container).submitCode('000000');
+      await controllerOf(t.container).submitCode(wrongCode);
 
       expect(stateOf(t.container).error, 'This account is suspended: spam');
     });

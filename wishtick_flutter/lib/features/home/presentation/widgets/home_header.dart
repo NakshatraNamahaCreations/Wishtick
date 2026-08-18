@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/theme_extensions.dart';
-import '../../domain/address.dart';
+import '../../../addresses/domain/address.dart';
 
 /// Home's plum header (Figma `51:11`): wordmark, delivery location, the
 /// notification bell, and the search field.
@@ -12,6 +12,7 @@ class HomeHeader extends StatelessWidget {
     required this.onLocationTap,
     required this.onSearchTap,
     required this.onNotificationsTap,
+    this.unreadCount = 0,
     super.key,
   });
 
@@ -20,6 +21,9 @@ class HomeHeader extends StatelessWidget {
   final VoidCallback onLocationTap;
   final VoidCallback onSearchTap;
   final VoidCallback onNotificationsTap;
+
+  /// How many notifications are unread. Zero draws a bare bell.
+  final int unreadCount;
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +91,7 @@ class HomeHeader extends StatelessWidget {
                                 child: Text(
                                   saved == null
                                       ? 'Location Missing'
-                                      : '${saved.label} · ${saved.shortLine}',
+                                      : '${saved.label.display} · ${saved.shortLine}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: context.text.bodySmall?.copyWith(
@@ -110,9 +114,39 @@ class HomeHeader extends StatelessWidget {
                   ),
                   IconButton(
                     onPressed: onNotificationsTap,
-                    icon: Icon(
-                      Icons.notifications_none,
-                      color: colors.textOnDark,
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          Icons.notifications_none,
+                          color: colors.textOnDark,
+                        ),
+                        if (unreadCount > 0)
+                          Positioned(
+                            top: -2,
+                            right: -2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.xs,
+                              ),
+                              constraints: const BoxConstraints(minWidth: 16),
+                              decoration: BoxDecoration(
+                                color: colors.accent,
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.pill,
+                                ),
+                              ),
+                              child: Text(
+                                unreadCount > 9 ? '9+' : '$unreadCount',
+                                textAlign: TextAlign.center,
+                                style: context.text.labelSmall?.copyWith(
+                                  color: colors.onAccent,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],

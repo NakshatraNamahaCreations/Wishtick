@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wishtick_flutter/app.dart';
 import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/core/network/token_storage.dart';
+import 'package:wishtick_flutter/core/theme/app_colors.dart';
+import 'package:wishtick_flutter/core/theme/app_dimens.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/core/theme/theme_controller.dart';
 import 'package:wishtick_flutter/core/widgets/wishtick_swipe_button.dart';
@@ -98,13 +100,105 @@ void main() {
     await typeInto(tester, fieldWithHint('Enter your full name'), name);
     await typeInto(tester, fieldWithHint('Enter your Email ID'), email);
 
-    // The date field opens a picker; OK accepts the default (25 years ago).
-    await tapVisible(tester, find.text('dd/mm/yyyy'));
+    // Only the calendar icon opens the picker now — the box itself is a real
+    // TextField for manual entry. OK accepts the default (25 years ago).
+    await tapVisible(tester, find.byIcon(Icons.calendar_today_outlined));
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
 
     await tapVisible(tester, find.text('Female'));
   }
+
+  group('gender tiles', () {
+    /// The tile's own filled box, found by the label it wraps.
+    BoxDecoration decorationFor(WidgetTester tester, String label) {
+      final container = tester.widget<Container>(
+        find
+            .ancestor(of: find.text(label), matching: find.byType(Container))
+            .first,
+      );
+      return container.decoration! as BoxDecoration;
+    }
+
+    testWidgets('are flat white with no border until chosen', (tester) async {
+      await pumpOnboarding(tester);
+      await tester.ensureVisible(find.text('Female'));
+      await tester.pumpAndSettle();
+
+      final colors = WishtickColors.light;
+      for (final label in ['Male', 'Female', 'Other']) {
+        final decoration = decorationFor(tester, label);
+        expect(decoration.color, colors.surface, reason: '$label fill');
+        // Matches the Figma design exactly — no hairline, unlike the "Select
+        // Avatar" card above it.
+        expect(decoration.border, isNull, reason: '$label border');
+      }
+    });
+
+    testWidgets('the chosen one fills with plum instead', (tester) async {
+      await pumpOnboarding(tester);
+      await tester.ensureVisible(find.text('Female'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Female'));
+      await tester.pumpAndSettle();
+
+      final colors = WishtickColors.light;
+      expect(decorationFor(tester, 'Female').color, colors.primary);
+      expect(decorationFor(tester, 'Male').color, colors.surface);
+    });
+
+    testWidgets('Male and Female use Material glyphs, Other the brand asset', (
+      tester,
+    ) async {
+      await pumpOnboarding(tester);
+      await tester.ensureVisible(find.text('Female'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.male), findsOneWidget);
+      expect(find.byIcon(Icons.female), findsOneWidget);
+      final image = tester.widget<ImageIcon>(find.byType(ImageIcon));
+      expect((image.image as AssetImage).assetName, 'assets/icons/others.png');
+    });
+
+    testWidgets(
+      'a tile is compact — a shorter box, more rounded, with a bigger icon '
+      'set tighter above its label',
+      (tester) async {
+        await pumpOnboarding(tester);
+        await tester.ensureVisible(find.text('Female'));
+        await tester.pumpAndSettle();
+
+        final tile = tester.widget<Container>(
+          find
+              .ancestor(
+                of: find.text('Female'),
+                matching: find.byType(Container),
+              )
+              .first,
+        );
+        expect(tile.constraints?.maxHeight, 72);
+        expect(
+          (tile.decoration! as BoxDecoration).borderRadius,
+          BorderRadius.circular(AppRadius.xl),
+        );
+
+        final iconTheme = tester.widget<IconTheme>(
+          find
+              .ancestor(
+                of: find.byIcon(Icons.female),
+                matching: find.byType(IconTheme),
+              )
+              .first,
+        );
+        expect(iconTheme.data.size, AppSizes.iconLg);
+
+        final iconBottom = tester.getBottomLeft(find.byIcon(Icons.female)).dy;
+        final labelTop = tester.getTopLeft(find.text('Female')).dy;
+        expect(labelTop - iconBottom, closeTo(AppSpacing.sm, 2));
+      },
+    );
+  });
 
   group('layout', () {
     testWidgets('shows the design’s header, copy and fields', (tester) async {
@@ -135,6 +229,51 @@ void main() {
       for (final gender in Gender.values) {
         expect(find.text(gender.label), findsOneWidget);
       }
+    });
+
+    testWidgets('the text fields cast a soft shadow, lifting them off the '
+        'page', (tester) async {
+      await pumpOnboarding(tester);
+
+      // Name, Email and Date of Birth are meant to read as one matching set
+      // (see the note in _FieldShadow) — checking all three catches a
+      // regression that only wraps some of them.
+      for (final finder in [
+        fieldWithHint('Enter your full name'),
+        fieldWithHint('Enter your Email ID'),
+        find.text('dd/mm/yyyy'),
+      ]) {
+        // The Date of Birth field's own Container paints a nearer
+        // DecoratedBox (its fill and border) than the shadow wrapper around
+        // it, so this looks across every DecoratedBox ancestor for the one
+        // actually carrying a shadow rather than assuming it is the closest.
+        final ancestors = find.ancestor(
+          of: finder,
+          matching: find.byType(DecoratedBox),
+        );
+        final hasShadow = ancestors.evaluate().any((element) {
+          final decoration =
+              (element.widget as DecoratedBox).decoration as BoxDecoration;
+          final shadow = decoration.boxShadow;
+          return shadow != null && shadow.isNotEmpty;
+        });
+        expect(hasShadow, isTrue, reason: 'no shadow found above $finder');
+      }
+    });
+
+    testWidgets('the gap between fields is a tight fixed gap, not the old '
+        'double-height space', (tester) async {
+      await pumpOnboarding(tester);
+      final emailLabel = find.text('Email ID *', findRichText: true);
+      await tester.ensureVisible(emailLabel);
+      await tester.pumpAndSettle();
+
+      final fieldBottom = tester
+          .getBottomLeft(fieldWithHint('Enter your full name'))
+          .dy;
+      final nextLabelTop = tester.getTopLeft(emailLabel).dy;
+
+      expect(nextLabelTop - fieldBottom, closeTo(20, 4));
     });
   });
 
@@ -202,6 +341,101 @@ void main() {
       );
       expect(find.text('Please enter your email'), findsNothing);
     });
+  });
+
+  group('date of birth entry', () {
+    testWidgets('tapping the box opens the keyboard, not the calendar', (
+      tester,
+    ) async {
+      await pumpOnboarding(tester);
+
+      await tapVisible(tester, fieldWithHint('dd/mm/yyyy'));
+
+      expect(
+        find.text('OK'),
+        findsNothing,
+        reason: 'tapping the text should never pop the date picker',
+      );
+    });
+
+    testWidgets('only the calendar icon opens the picker', (tester) async {
+      await pumpOnboarding(tester);
+
+      await tapVisible(tester, find.byIcon(Icons.calendar_today_outlined));
+
+      expect(find.text('OK'), findsOneWidget);
+    });
+
+    testWidgets('typed digits are auto-formatted into dd/mm/yyyy', (
+      tester,
+    ) async {
+      await pumpOnboarding(tester);
+
+      await typeInto(tester, fieldWithHint('dd/mm/yyyy'), '18082001');
+
+      expect(
+        tester.widget<TextField>(fieldWithHint('dd/mm/yyyy')).controller?.text,
+        '18/08/2001',
+      );
+    });
+
+    testWidgets('a complete, valid typed date saves correctly', (tester) async {
+      final onboarding = await pumpOnboarding(tester);
+      await typeInto(
+        tester,
+        fieldWithHint('Enter your Email ID'),
+        'ananya@example.com',
+      );
+      await typeInto(tester, fieldWithHint('dd/mm/yyyy'), '18082001');
+      await tapVisible(tester, find.text('Female'));
+
+      await swipeToContinue(tester);
+
+      expect(onboarding.savedProfiles.single.dateOfBirthIso, '2001-08-18');
+    });
+
+    testWidgets(
+      "a date that doesn't exist is called out, not silently accepted",
+      (tester) async {
+        final onboarding = await pumpOnboarding(tester);
+
+        // February never has 31 days.
+        await typeInto(tester, fieldWithHint('dd/mm/yyyy'), '31022020');
+
+        expect(
+          find.text("That date doesn't exist — check the day and month"),
+          findsOneWidget,
+        );
+
+        await swipeToContinue(tester);
+        expect(onboarding.savedProfiles, isEmpty);
+      },
+    );
+
+    testWidgets('a birth date in the future is called out', (tester) async {
+      await pumpOnboarding(tester);
+
+      await typeInto(tester, fieldWithHint('dd/mm/yyyy'), '01012099');
+
+      expect(find.text("That's still in the future"), findsOneWidget);
+    });
+
+    testWidgets(
+      'erasing back to an incomplete date drops the stale commit, not '
+      'just the display',
+      (tester) async {
+        final onboarding = await pumpOnboarding(tester);
+        await typeInto(tester, fieldWithHint('dd/mm/yyyy'), '18082001');
+
+        // Back down to five digits — no longer a complete date.
+        await typeInto(tester, fieldWithHint('dd/mm/yyyy'), '18/08');
+
+        await swipeToContinue(tester);
+
+        expect(onboarding.savedProfiles, isEmpty);
+        expect(find.text('Please choose your date of birth'), findsOneWidget);
+      },
+    );
   });
 
   group('submitting', () {

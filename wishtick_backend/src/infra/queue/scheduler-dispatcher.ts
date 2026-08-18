@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import { QUEUE } from './queue.constants';
 import { SchedulerRegistry } from './scheduler-registry';
@@ -10,24 +10,37 @@ import { SchedulerRegistry } from './scheduler-registry';
  * Routes each job to the handler its owning module registered in
  * SchedulerRegistry. See that file for why a single dispatcher is required
  * rather than one `@Processor` per module.
+ *
+ * `autorun: false` is load-bearing. Feature modules register their handlers in
+ * `onModuleInit`, which for a module imported *after* QueueModule runs later
+ * than this worker's construction. A job already overdue at boot — a memory
+ * whose unlock instant passed while the process was down — would otherwise be
+ * picked up before its handler existed, and the capsule would never open. The
+ * worker is started in `onApplicationBootstrap` instead, which Nest runs only
+ * once every `onModuleInit` has completed.
  */
 @Injectable()
-@Processor(QUEUE.SCHEDULER)
-export class SchedulerDispatcher extends WorkerHost {
+@Processor(QUEUE.SCHEDULER, { autorun: false })
+export class SchedulerDispatcher extends WorkerHost implements OnApplicationBootstrap {
   private readonly logger = new Logger(SchedulerDispatcher.name);
 
   constructor(private readonly registry: SchedulerRegistry) {
     super();
   }
 
+  onApplicationBootstrap(): void {
+    // Every registrar has now run, so no job can arrive before its handler.
+    void this.worker.run();
+  }
+
   async process(job: Job): Promise<unknown> {
     const handler = this.registry.get(job.name);
     if (!handler) {
-      // Not silently completed: an unrouted job is a wiring gap, and marking it
-      // done would hide it. It stays visible in the logs (and, since we do not
-      // swallow it as success, in BullMQ's failed set is avoided by returning).
-      this.logger.warn(`No scheduler handler for job "${job.name}" (id ${job.id ?? '?'})`);
-      return { skipped: true, reason: 'no-handler' };
+      // Thrown, not returned. Returning would mark the job complete and drop
+      // it, silently losing whatever it was meant to do; failing leaves it in
+      // BullMQ's failed set where it can be seen and replayed.
+      this.logger.error(`No scheduler handler for job "${job.name}" (id ${job.id ?? '?'})`);
+      throw new Error(`No scheduler handler registered for job "${job.name}"`);
     }
     return handler(job.data);
   }

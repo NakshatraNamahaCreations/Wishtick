@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/event.dart';
 import '../domain/invite_template.dart';
+import '../domain/invited_event.dart';
 
 /// Which file "Download Guest List" should produce (`4096:206`).
 enum GuestListFormat {
@@ -46,6 +47,17 @@ class EventsRepository {
     final json = await _api.get<List<dynamic>>('/events/mine');
     return json
         .map((e) => WishtickEventDetail.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Events other people invited you to (`324:973`'s Invites tab).
+  ///
+  /// A different shape from [listMine]: a guest sees the card and their own
+  /// RSVP, never the guest list or the host's editing surface.
+  Future<List<InvitedEvent>> listInvited() async {
+    final json = await _api.get<List<dynamic>>('/events/invited');
+    return json
+        .map((e) => InvitedEvent.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 

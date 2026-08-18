@@ -119,11 +119,12 @@ class ProfileDraft {
     String? photoMediaId,
     bool clearAvatar = false,
     bool clearPhoto = false,
+    bool clearDateOfBirth = false,
   }) {
     return ProfileDraft(
       name: name ?? this.name,
       email: email ?? this.email,
-      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      dateOfBirth: clearDateOfBirth ? null : (dateOfBirth ?? this.dateOfBirth),
       gender: gender ?? this.gender,
       avatar: clearAvatar ? null : (avatar ?? this.avatar),
       photoMediaId: clearPhoto ? null : (photoMediaId ?? this.photoMediaId),

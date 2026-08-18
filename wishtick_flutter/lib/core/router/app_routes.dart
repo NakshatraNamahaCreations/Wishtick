@@ -174,6 +174,33 @@ abstract final class AppRoutes {
   // Create flow, launched from the centre nav button
   static const create = '/create';
 
+  // Profile (Sprint 9) — everything reachable from the hub at `64:158`.
+  static const editProfile = '/profile/edit';
+  static const giftsReceived = '/profile/gifts/received';
+  static const giftsGiven = '/profile/gifts/given';
+  static const giftsOnHold = '/profile/gifts/on-hold';
+  static const myEvents = '/profile/events';
+  static const addressBook = '/profile/addresses';
+  static const helpCentre = '/profile/help';
+  static const aboutUs = '/profile/about';
+  static const privacyPolicy = '/profile/privacy';
+
+  // Notifications
+  static const notifications = '/notifications';
+  static const notificationSettings = '/notifications/settings';
+
+  /// A gift that has arrived (`2012:72`), opened from its notification.
+  static String giftArrival(String giftId) => '/gifts/$giftId/arrived';
+
+  /// The thank-you a fulfilled gift drafted (`2015:271`, `2209:104`).
+  static String thankYou(String noteId) => '/thank-you/$noteId';
+
+  /// Its preview before sending (`2209:141`, `2227:146`, `2209:156`).
+  static String thankYouPreview(String noteId) => '/thank-you/$noteId/preview';
+
+  /// The confirmation after it goes (`2209:203`).
+  static String thankYouSent(String noteId) => '/thank-you/$noteId/sent';
+
   // Settings
   static const appearance = '/profile/appearance';
 

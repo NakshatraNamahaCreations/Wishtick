@@ -51,6 +51,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.infoSubtle,
     required this.celebration,
     required this.celebrationSubtle,
+    required this.noteSubtle,
+    required this.onNoteSubtle,
     required this.navBackground,
     required this.navSelected,
     required this.navUnselected,
@@ -169,6 +171,14 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   final Color celebration;
   final Color celebrationSubtle;
 
+  /// Fill for the onboarding "note" callout — a translucent wash, unlike the
+  /// other `*Subtle` tokens which are solid tints. See
+  /// [AppPalette.noteFillSubtle].
+  final Color noteSubtle;
+
+  /// Text/icon drawn on [noteSubtle].
+  final Color onNoteSubtle;
+
   final Color navBackground;
   final Color navSelected;
   final Color navUnselected;
@@ -227,6 +237,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     infoSubtle: AppPalette.bluePale,
     celebration: AppPalette.goldDeep,
     celebrationSubtle: AppPalette.goldSoft,
+    noteSubtle: AppPalette.noteFillSubtle,
+    onNoteSubtle: AppPalette.noteInk,
     navBackground: AppPalette.white,
     navSelected: AppPalette.plumMuted,
     navUnselected: AppPalette.textMuted,
@@ -287,6 +299,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     infoSubtle: AppPalette.darkBlueSubtle,
     celebration: AppPalette.goldSoft,
     celebrationSubtle: AppPalette.darkGoldSubtle,
+    noteSubtle: AppPalette.darkGoldSubtle,
+    onNoteSubtle: AppPalette.amberSoft,
     navBackground: AppPalette.darkSurface,
     navSelected: AppPalette.pink,
     navUnselected: AppPalette.darkTextMuted,
@@ -335,6 +349,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color? infoSubtle,
     Color? celebration,
     Color? celebrationSubtle,
+    Color? noteSubtle,
+    Color? onNoteSubtle,
     Color? navBackground,
     Color? navSelected,
     Color? navUnselected,
@@ -381,6 +397,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       infoSubtle: infoSubtle ?? this.infoSubtle,
       celebration: celebration ?? this.celebration,
       celebrationSubtle: celebrationSubtle ?? this.celebrationSubtle,
+      noteSubtle: noteSubtle ?? this.noteSubtle,
+      onNoteSubtle: onNoteSubtle ?? this.onNoteSubtle,
       navBackground: navBackground ?? this.navBackground,
       navSelected: navSelected ?? this.navSelected,
       navUnselected: navUnselected ?? this.navUnselected,
@@ -433,6 +451,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       infoSubtle: c(infoSubtle, other.infoSubtle),
       celebration: c(celebration, other.celebration),
       celebrationSubtle: c(celebrationSubtle, other.celebrationSubtle),
+      noteSubtle: c(noteSubtle, other.noteSubtle),
+      onNoteSubtle: c(onNoteSubtle, other.onNoteSubtle),
       navBackground: c(navBackground, other.navBackground),
       navSelected: c(navSelected, other.navSelected),
       navUnselected: c(navUnselected, other.navUnselected),

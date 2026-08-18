@@ -11,8 +11,9 @@ import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/sparkle_icon.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
-import '../../home/domain/address.dart';
-import '../../home/presentation/delivery_location_screen.dart';
+import '../../addresses/domain/address.dart';
+import '../../addresses/presentation/add_address_screen.dart';
+import '../../addresses/presentation/address_providers.dart';
 import '../../home/presentation/home_controller.dart';
 import '../../wishlist/presentation/widgets/product_detail_body.dart';
 import '../data/gifting_repository.dart';
@@ -69,6 +70,7 @@ class _GiftDetailsScreenState extends ConsumerState<GiftDetailsScreen> {
       MaterialPageRoute(builder: (context) => const AddAddressScreen()),
     );
     if (added == true && mounted) {
+      ref.invalidate(addressBookProvider);
       await ref.read(homeProvider.notifier).refresh();
     }
   }
@@ -77,8 +79,8 @@ class _GiftDetailsScreenState extends ConsumerState<GiftDetailsScreen> {
     await Clipboard.setData(
       ClipboardData(
         text:
-            '${address.recipientName}\n${address.formatted}\n'
-            'Phone: ${address.phone}',
+            '${address.fullName}\n${address.formatted}\n'
+            'Phone: ${address.mobile}',
       ),
     );
     if (!mounted) return;
@@ -327,7 +329,7 @@ class _AddressCard extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                address.label,
+                address.label.display,
                 style: context.text.titleSmall?.copyWith(
                   color: colors.textPrimary,
                   fontWeight: FontWeight.w700,
@@ -341,9 +343,9 @@ class _AddressCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(address.recipientName),
+                Text(address.fullName),
                 Text(address.formatted),
-                Text('Phone Number: ${address.phone}'),
+                Text('Phone Number: ${address.mobile}'),
               ],
             ),
           ),

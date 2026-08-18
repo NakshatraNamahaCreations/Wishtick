@@ -18,6 +18,19 @@ interface Actor {
   email: string;
   name: string;
 }
+interface ThankYouRow {
+  id: string;
+  kind: string;
+  mediaUrl: string | null;
+  body: string;
+  context: { gifterName: string };
+}
+
+/** A 1x1 PNG — the smallest thing the media pipeline will accept as real bytes. */
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 describe('Notifications (e2e)', () => {
   let ctx: TestApp;
@@ -89,6 +102,32 @@ describe('Notifications (e2e)', () => {
 
   const notifications = (actor: Actor) =>
     request(app.getHttpServer()).get(`${V1}/notifications`).set(auth(actor.token));
+
+  /** Presign → PUT the bytes → confirm, for a thank-you attachment. */
+  const uploadThankYouMedia = async (actor: Actor): Promise<string> => {
+    const ticket = (
+      await request(app.getHttpServer())
+        .post(`${V1}/media/upload-url`)
+        .set(auth(actor.token))
+        .send({ purpose: 'thank_you', contentType: 'image/png' })
+        .expect(201)
+    ).body as Envelope<{ mediaId: string; uploadUrl: string }>;
+
+    const url = new URL(ticket.data.uploadUrl);
+    await request(app.getHttpServer())
+      .put(url.pathname + url.search)
+      .set('Content-Type', 'image/png')
+      .send(PNG_BYTES)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(`${V1}/media/confirm`)
+      .set(auth(actor.token))
+      .send({ mediaId: ticket.data.mediaId })
+      .expect(201);
+
+    return ticket.data.mediaId;
+  };
 
   beforeAll(async () => {
     ctx = await createTestApp();
@@ -247,6 +286,104 @@ describe('Notifications (e2e)', () => {
         .get(`${V1}/thank-you/${note.id}`)
         .set(auth(stranger.token))
         .expect(403);
+    });
+
+    it('attaches a recording and clears it again when the kind goes back to text', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      await fulfilledGift(owner, gifter);
+      await settle();
+
+      const note = (
+        (
+          await request(app.getHttpServer())
+            .get(`${V1}/thank-you`)
+            .set(auth(owner.token))
+            .expect(200)
+        ).body as Envelope<ThankYouRow[]>
+      ).data[0];
+      expect(note.kind).toBe('text');
+      expect(note.mediaUrl).toBeNull();
+
+      const mediaId = await uploadThankYouMedia(owner);
+      const withPhoto = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/thank-you/${note.id}`)
+          .set(auth(owner.token))
+          .send({ kind: 'photo', mediaId })
+          .expect(200)
+      ).body as Envelope<ThankYouRow>;
+      expect(withPhoto.data.kind).toBe('photo');
+      expect(withPhoto.data.mediaUrl).toBeTruthy();
+
+      // Switching back to text drops the attachment; the words survive.
+      const backToText = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/thank-you/${note.id}`)
+          .set(auth(owner.token))
+          .send({ kind: 'text' })
+          .expect(200)
+      ).body as Envelope<ThankYouRow>;
+      expect(backToText.data.kind).toBe('text');
+      expect(backToText.data.mediaUrl).toBeNull();
+      expect(backToText.data.body).toContain('Headphones');
+    });
+
+    it('refuses a media kind with no recording, and a photo kind pointed at audio', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      await fulfilledGift(owner, gifter);
+      await settle();
+
+      const note = (
+        (
+          await request(app.getHttpServer())
+            .get(`${V1}/thank-you`)
+            .set(auth(owner.token))
+            .expect(200)
+        ).body as Envelope<ThankYouRow[]>
+      ).data[0];
+
+      const missing = await request(app.getHttpServer())
+        .patch(`${V1}/thank-you/${note.id}`)
+        .set(auth(owner.token))
+        .send({ kind: 'audio' })
+        .expect(400);
+      expect((missing.body as Envelope<unknown>).error?.code).toBe('THANK_YOU_MEDIA_REQUIRED');
+
+      // The upload is a PNG, so calling it audio must not be accepted — the
+      // client picks a player from `kind` and would render a broken screen.
+      const mediaId = await uploadThankYouMedia(owner);
+      const mismatched = await request(app.getHttpServer())
+        .patch(`${V1}/thank-you/${note.id}`)
+        .set(auth(owner.token))
+        .send({ kind: 'audio', mediaId })
+        .expect(400);
+      expect((mismatched.body as Envelope<unknown>).error?.code).toBe('MEDIA_TYPE_NOT_ALLOWED');
+    });
+
+    it('will not let one person attach another person’s upload', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      await fulfilledGift(owner, gifter);
+      await settle();
+
+      const note = (
+        (
+          await request(app.getHttpServer())
+            .get(`${V1}/thank-you`)
+            .set(auth(owner.token))
+            .expect(200)
+        ).body as Envelope<ThankYouRow[]>
+      ).data[0];
+
+      // The gifter's own upload, referenced from the owner's note.
+      const strangersMedia = await uploadThankYouMedia(gifter);
+      await request(app.getHttpServer())
+        .patch(`${V1}/thank-you/${note.id}`)
+        .set(auth(owner.token))
+        .send({ kind: 'photo', mediaId: strangersMedia })
+        .expect(404);
     });
   });
 

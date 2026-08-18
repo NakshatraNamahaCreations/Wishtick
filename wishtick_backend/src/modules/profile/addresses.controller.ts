@@ -20,9 +20,10 @@ import { AddressesService, type AddressView } from './addresses.service';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 
 /**
- * The user's saved delivery addresses (Figma `2293:25`). Home's
- * "Where To Deliver?" header reads the default; checkout in Sprint 5 picks
- * one by id.
+ * The user's saved delivery addresses (`2293:25`, `324:1295`, `324:1340`).
+ *
+ * Home's "Where To Deliver?" header reads the default, checkout picks one by
+ * id, and the Profile address book manages the lot.
  */
 @ApiTags('profile')
 @Controller('me/addresses')
@@ -60,6 +61,17 @@ export class AddressesController {
     @Body() dto: UpdateAddressDto,
   ): Promise<AddressView> {
     return this.addresses.update(userId, id, dto);
+  }
+
+  @Post(':id/default')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Make this the address orders default to',
+    description: 'The promotion on its own — the previous default is demoted in the same call.',
+  })
+  @ApiResponseDoc({ status: 404, description: 'NOT_FOUND — unknown or not yours' })
+  setDefault(@CurrentUser('id') userId: string, @Param('id') id: string): Promise<AddressView> {
+    return this.addresses.setDefault(userId, id);
   }
 
   @Delete(':id')

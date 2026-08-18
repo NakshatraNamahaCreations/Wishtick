@@ -52,6 +52,17 @@ abstract final class AppPalette {
   static const amber = Color(0xFFF3AB4A);
   static const amberSoft = Color(0xFFF9D08B);
 
+  /// Fill and ink for the onboarding "note" callout (e.g. the colour-picker
+  /// screen's "this will personalise your experience" card).
+  static const noteFill = Color(0xFFDAA247);
+  static const noteInk = Color(0xFF955E0B);
+
+  /// [noteFill] at 28% opacity (0.28 × 255 ≈ 0x47) — a translucent wash, not
+  /// a solid tint, so the page colour shows faintly through it. Written as
+  /// its own literal rather than `noteFill.withValues(...)` because
+  /// [WishtickColors.light]/[WishtickColors.dark] are `const`.
+  static const noteFillSubtle = Color(0x47DAA247);
+
   /// Fills and inks for the RSVP pills on the guest list (`4099:1256`).
   ///
   /// Deliberately not [tealSoft]/[amberSoft]: those are mid-tone *accents*, and

@@ -3,6 +3,27 @@ import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 
 export type ThankYouNoteDocument = HydratedDocument<ThankYouNote>;
 
+/**
+ * What the recipient actually recorded.
+ *
+ * The note always carries a subject and body — the email that reaches the
+ * gifter is text, and a mail client cannot play a voice note. A non-text kind
+ * *adds* an attachment the in-app view plays; it does not replace the words.
+ */
+export enum ThankYouKind {
+  TEXT = 'text',
+  PHOTO = 'photo',
+  AUDIO = 'audio',
+  VIDEO = 'video',
+}
+
+/** The kinds that require [ThankYouNote.mediaId] to be set. */
+export const THANK_YOU_KINDS_WITH_MEDIA = [
+  ThankYouKind.PHOTO,
+  ThankYouKind.AUDIO,
+  ThankYouKind.VIDEO,
+];
+
 export enum ThankYouStatus {
   /** Auto-send is off for the author; waiting for a manual send. */
   DRAFT = 'draft',
@@ -65,6 +86,17 @@ export class ThankYouNote {
 
   @Prop({ type: String, required: true, maxlength: 2000 })
   body!: string;
+
+  @Prop({ type: String, enum: Object.values(ThankYouKind), default: ThankYouKind.TEXT })
+  kind!: ThankYouKind;
+
+  /** The recorded photo/voice note/video, when [kind] is not text. */
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'Media', default: null })
+  mediaId!: Types.ObjectId | null;
+
+  /** Denormalized at attach time so rendering a note reads one document. */
+  @Prop({ type: String, default: null })
+  mediaUrl!: string | null;
 
   @Prop({ type: String, enum: Object.values(ThankYouStatus), default: ThankYouStatus.SCHEDULED })
   status!: ThankYouStatus;

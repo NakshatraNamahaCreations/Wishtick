@@ -22,6 +22,10 @@ void main() {
     );
 
     test('the countdown counts down in the largest unit that fits', () {
+      // Every duration carries a minute of slack. `countdownLabel` reads the
+      // clock again and truncates, so an exact `Duration(hours: 4)` becomes
+      // 3h59m59s the moment the two `now()` calls land in different
+      // microseconds — which is a flaky test, not a bug in the label.
       final days = buildCapsule(
         unlockAt: DateTime.now().add(const Duration(days: 5, hours: 3)),
       );
@@ -33,12 +37,12 @@ void main() {
       expect(oneDay.countdownLabel, 'Unlocks in 1 day');
 
       final hours = buildCapsule(
-        unlockAt: DateTime.now().add(const Duration(hours: 4)),
+        unlockAt: DateTime.now().add(const Duration(hours: 4, minutes: 1)),
       );
       expect(hours.countdownLabel, 'Unlocks in 4 hours');
 
       final minutes = buildCapsule(
-        unlockAt: DateTime.now().add(const Duration(minutes: 20)),
+        unlockAt: DateTime.now().add(const Duration(minutes: 20, seconds: 30)),
       );
       expect(minutes.countdownLabel, 'Unlocks in 20 min');
     });

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/addresses/presentation/address_book_screen.dart';
 import '../../features/auth/presentation/mobile_number_screen.dart';
 import '../../features/auth/presentation/otp_screen.dart';
 import '../../features/auth/presentation/session_controller.dart';
@@ -14,9 +15,13 @@ import '../../features/events/presentation/event_guests_screen.dart';
 import '../../features/events/presentation/event_invite_preview_screen.dart';
 import '../../features/events/presentation/event_invite_templates_screen.dart';
 import '../../features/events/presentation/invite_screen.dart';
+import '../../features/events/presentation/my_events_screen.dart';
 import '../../features/events/presentation/upload_invitation_screen.dart';
+import '../../features/gifting/presentation/gift_arrival_screen.dart';
 import '../../features/gifting/presentation/gift_details_screen.dart';
 import '../../features/gifting/presentation/gift_item_screen.dart';
+import '../../features/gifting/presentation/gift_list_providers.dart';
+import '../../features/gifting/presentation/gift_list_screen.dart';
 import '../../features/gifting/presentation/order_confirmed_screen.dart';
 import '../../features/gifting/presentation/order_controller.dart';
 import '../../features/gifting/presentation/order_delivered_screen.dart';
@@ -39,6 +44,11 @@ import '../../features/memories/presentation/create_memory_unlock_screen.dart';
 import '../../features/memories/presentation/memories_tab_screen.dart';
 import '../../features/memories/presentation/memory_detail_screen.dart';
 import '../../features/memories/presentation/memory_experience_screen.dart';
+import '../../features/notifications/presentation/notification_center_screen.dart';
+import '../../features/notifications/presentation/notification_settings_screen.dart';
+import '../../features/notifications/presentation/thank_you_compose_screen.dart';
+import '../../features/notifications/presentation/thank_you_preview_screen.dart';
+import '../../features/notifications/presentation/thank_you_sent_screen.dart';
 import '../../features/onboarding/presentation/all_set_screen.dart';
 import '../../features/onboarding/presentation/avatar_picker_screen.dart';
 import '../../features/onboarding/presentation/category_detail_screen.dart';
@@ -47,6 +57,11 @@ import '../../features/onboarding/presentation/create_profile_screen.dart';
 import '../../features/onboarding/presentation/important_dates_screen.dart';
 import '../../features/onboarding/presentation/interests_screen.dart';
 import '../../features/onboarding/presentation/size_fit_screen.dart';
+import '../../features/profile/presentation/about_us_screen.dart';
+import '../../features/profile/presentation/edit_profile_screen.dart';
+import '../../features/profile/presentation/help_centre_screen.dart';
+import '../../features/profile/presentation/privacy_policy_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/settings/presentation/appearance_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/wishlist/domain/product.dart';
@@ -174,6 +189,97 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.appearance,
         builder: (context, state) => const AppearanceScreen(),
+      ),
+
+      // ── Profile (Sprint 9) ────────────────────────────────────────────────
+      //
+      // All pushed over the shell rather than inside the Profile branch: they
+      // are full-screen destinations in the frames, with no bottom nav.
+      GoRoute(
+        path: AppRoutes.editProfile,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.giftsReceived,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            const GiftListScreen(kind: GiftListKind.received),
+      ),
+      GoRoute(
+        path: AppRoutes.giftsGiven,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            const GiftListScreen(kind: GiftListKind.given),
+      ),
+      GoRoute(
+        path: AppRoutes.giftsOnHold,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            const GiftListScreen(kind: GiftListKind.onHold),
+      ),
+      GoRoute(
+        path: AppRoutes.myEvents,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const MyEventsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.addressBook,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const AddressBookScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.helpCentre,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const HelpCentreScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.aboutUs,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const AboutUsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.privacyPolicy,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const PrivacyPolicyScreen(),
+      ),
+
+      // ── Notifications (Sprint 9) ──────────────────────────────────────────
+      GoRoute(
+        path: AppRoutes.notifications,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const NotificationCenterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.notificationSettings,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const NotificationSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/gifts/:giftId/arrived',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            GiftArrivalScreen(giftId: state.pathParameters['giftId']!),
+      ),
+      GoRoute(
+        path: '/thank-you/:noteId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            ThankYouComposeScreen(noteId: state.pathParameters['noteId']!),
+        routes: [
+          GoRoute(
+            path: 'preview',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                ThankYouPreviewScreen(noteId: state.pathParameters['noteId']!),
+          ),
+          GoRoute(
+            path: 'sent',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                ThankYouSentScreen(noteId: state.pathParameters['noteId']!),
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.deliveryLocation,
@@ -504,11 +610,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.profile,
-                builder: (context, state) => const SprintPlaceholder(
-                  title: 'Profile',
-                  sprint: 'Sprint 9 — Notifications & Profile',
-                  figmaNodeId: '64:158',
-                ),
+                builder: (context, state) => const ProfileScreen(),
               ),
             ],
           ),
