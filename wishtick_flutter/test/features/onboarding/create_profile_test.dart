@@ -55,7 +55,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
     return onboarding;
   }
@@ -244,9 +244,9 @@ void main() {
         find.text('dd/mm/yyyy'),
       ]) {
         // The Date of Birth field's own Container paints a nearer
-        // DecoratedBox (its fill and border) than the shadow wrapper around
-        // it, so this looks across every DecoratedBox ancestor for the one
-        // actually carrying a shadow rather than assuming it is the closest.
+        // DecoratedBox (its fill) than the shadow wrapper around it, so this
+        // looks across every DecoratedBox ancestor for the one actually
+        // carrying a shadow rather than assuming it is the closest.
         final ancestors = find.ancestor(
           of: finder,
           matching: find.byType(DecoratedBox),
@@ -258,6 +258,35 @@ void main() {
           return shadow != null && shadow.isNotEmpty;
         });
         expect(hasShadow, isTrue, reason: 'no shadow found above $finder');
+      }
+    });
+
+    testWidgets('the Date of Birth box has no border, unlike Name and Email', (
+      tester,
+    ) async {
+      await pumpOnboarding(tester);
+
+      final container = tester.widget<Container>(
+        find
+            .ancestor(
+              of: fieldWithHint('dd/mm/yyyy'),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      expect((container.decoration! as BoxDecoration).border, isNull);
+
+      // The outer Container carrying no border isn't enough on its own — the
+      // app's InputDecorationTheme draws its own enabledBorder/focusedBorder
+      // on every TextField unless the field overrides all three explicitly,
+      // and that hairline is what a Container-only check would miss.
+      final field = tester.widget<TextField>(fieldWithHint('dd/mm/yyyy'));
+      for (final border in [
+        field.decoration?.border,
+        field.decoration?.enabledBorder,
+        field.decoration?.focusedBorder,
+      ]) {
+        expect(border, InputBorder.none);
       }
     });
 

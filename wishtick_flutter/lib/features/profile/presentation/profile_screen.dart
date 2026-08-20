@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/legal/legal_links.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
@@ -164,8 +163,7 @@ class ProfileScreen extends ConsumerWidget {
                   _Row(
                     icon: Icons.description_outlined,
                     label: 'Terms of Use',
-                    onTap: () =>
-                        unawaited(openLegalLink(context, LegalDoc.terms)),
+                    onTap: () => context.push<void>(AppRoutes.terms),
                   ),
                   _Row(
                     icon: Icons.privacy_tip_outlined,

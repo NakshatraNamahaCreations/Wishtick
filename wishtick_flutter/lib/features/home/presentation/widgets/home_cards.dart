@@ -336,60 +336,48 @@ class HomeWishlistCard extends StatelessWidget {
   }
 }
 
-/// The two editorial banners between Home's rails.
-///
-/// Rendered as themed gradient cards: the mock's artwork is not among the
-/// exported assets, and an invented image would misrepresent the design.
-class PromoBanner extends StatelessWidget {
-  const PromoBanner({
-    required this.title,
-    required this.body,
-    this.onDark = true,
-    super.key,
-  });
-
-  final String title;
-  final String body;
-
-  /// Plum-on-dark (the first banner) or the light celebration treatment.
-  final bool onDark;
+/// The two editorial banners between Home's rails (`51:11`) — both baked as
+/// complete flattened artwork (background, copy and illustration all in one
+/// PNG) rather than recreated in Flutter: the wording, typography and art
+/// are a single inseparable design, and rebuilding it from tokens would
+/// drift the moment either changed.
+class CelebrateMomentBanner extends StatelessWidget {
+  const CelebrateMomentBanner({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final foreground = onDark ? colors.textOnDark : colors.textPrimary;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        // `gradients.celebration` rather than `headline`: headline's dark-mode
-        // stops are both light, which would leave this card's ivory text
-        // unreadable. Celebration stays plum-dark in both themes.
-        gradient: onDark ? context.gradients.celebration : null,
-        color: onDark ? null : colors.celebrationSubtle,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+    return Semantics(
+      label:
+          'Celebrate Every Moment. '
+          "From life's biggest milestones to everyday joys.",
+      child: const AspectRatio(
+        aspectRatio: 552 / 185,
+        child: Image(
+          image: AssetImage(
+            'assets/images/Home_page_banners/Celebration spotlight banner.png',
+          ),
+          fit: BoxFit.cover,
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: context.text.titleLarge?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w700,
-            ),
+    );
+  }
+}
+
+class BirthdaysBanner extends StatelessWidget {
+  const BirthdaysBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Birthdays Made Special. Never lose track of the gifts you love.',
+      child: const AspectRatio(
+        aspectRatio: 567 / 245,
+        child: Image(
+          image: AssetImage(
+            'assets/images/Home_page_banners/Birthday spotlight banner.png',
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            body,
-            style: context.text.bodySmall?.copyWith(
-              color: onDark
-                  ? foreground.withValues(alpha: 0.85)
-                  : colors.textSecondary,
-            ),
-          ),
-        ],
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }

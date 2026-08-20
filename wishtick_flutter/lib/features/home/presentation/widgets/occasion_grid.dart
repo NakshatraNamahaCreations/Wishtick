@@ -4,25 +4,51 @@ import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/theme_extensions.dart';
 
 /// One tile on Home's celebration grid.
-typedef OccasionTile = ({String key, String label, IconData icon});
+typedef OccasionTile = ({String key, String label, String image});
 
 /// The eight tiles Home shows (Figma `51:11`), in the mock's order.
 ///
 /// Every key is a real `occasion` taxonomy row — `rakhi` and `best_wishes`
 /// were seeded for this grid rather than pointed at a near-miss, so a tile's
 /// label always matches the key it filters by. "Custom Events" is the one
-/// exception: it is an action, not an occasion, and is handled separately.
+/// exception: it is an action, not an occasion, and is handled separately —
+/// it has no photo among `assets/images/Celebrations_images/`, and stays the
+/// highlighted sparkle-icon tile it already was.
 const kHomeOccasions = <OccasionTile>[
-  (key: 'birthday', label: 'Birthday', icon: Icons.cake_outlined),
-  (key: 'anniversary', label: 'Anniversary', icon: Icons.favorite_outline),
-  (key: 'wedding', label: 'Wedding', icon: Icons.church_outlined),
-  (key: 'housewarming', label: 'House Warming', icon: Icons.house_outlined),
-  (key: 'baby_shower', label: 'Mom to Be', icon: Icons.child_friendly_outlined),
-  (key: 'rakhi', label: 'Rakhi', icon: Icons.volunteer_activism_outlined),
+  (
+    key: 'birthday',
+    label: 'Birthday',
+    image: 'assets/images/Celebrations_images/Birthday.png',
+  ),
+  (
+    key: 'anniversary',
+    label: 'Anniversary',
+    image: 'assets/images/Celebrations_images/Anniversary.png',
+  ),
+  (
+    key: 'wedding',
+    label: 'Wedding',
+    image: 'assets/images/Celebrations_images/Wedding.png',
+  ),
+  (
+    key: 'housewarming',
+    label: 'House Warming',
+    image: 'assets/images/Celebrations_images/House_Warming.png',
+  ),
+  (
+    key: 'baby_shower',
+    label: 'Mom to Be',
+    image: 'assets/images/Celebrations_images/Mom_to_Be.png',
+  ),
+  (
+    key: 'rakhi',
+    label: 'Rakhi',
+    image: 'assets/images/Celebrations_images/Rakhi.png',
+  ),
   (
     key: 'best_wishes',
     label: 'Best Wishes',
-    icon: Icons.card_giftcard_outlined,
+    image: 'assets/images/Celebrations_images/Best_Wishes.png',
   ),
 ];
 
@@ -55,7 +81,7 @@ class OccasionGrid extends StatelessWidget {
           ),
         _Tile(
           label: kHomeOccasions[i].label,
-          icon: kHomeOccasions[i].icon,
+          image: kHomeOccasions[i].image,
           onTap: () => onOccasionTap(kHomeOccasions[i]),
         ),
       ],
@@ -92,18 +118,28 @@ class OccasionGrid extends StatelessWidget {
 class _Tile extends StatelessWidget {
   const _Tile({
     required this.label,
-    required this.icon,
     required this.onTap,
+    this.image,
+    this.icon,
     this.highlighted = false,
-  });
+  }) : assert(
+         (image == null) != (icon == null),
+         'a tile is either a photo or an icon, never both/neither',
+       );
 
   final String label;
-  final IconData icon;
+  final String? image;
+  final IconData? icon;
   final VoidCallback onTap;
   final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
+    final image = this.image;
+    if (image != null) {
+      return _PhotoTile(label: label, image: image, onTap: onTap);
+    }
+
     final colors = context.colors;
     final foreground = highlighted ? colors.onPrimary : colors.primary;
 
@@ -136,6 +172,60 @@ class _Tile extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A photo-backed tile — no card fill, matching the mock: the image's own
+/// rounded corners are the whole tile, with the caption sitting bare on the
+/// page below it.
+class _PhotoTile extends StatelessWidget {
+  const _PhotoTile({
+    required this.label,
+    required this.image,
+    required this.onTap,
+  });
+
+  final String label;
+  final String image;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Semantics(
+      button: true,
+      label: label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: onTap,
+        child: Column(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: Image.asset(
+                  image,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: context.text.bodySmall?.copyWith(
+                color: colors.textPrimary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );

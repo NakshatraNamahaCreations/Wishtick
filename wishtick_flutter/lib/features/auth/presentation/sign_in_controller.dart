@@ -26,6 +26,7 @@ class SignInState {
     this.isNewUser = false,
     this.acceptedTerms = false,
     this.marketingOptIn = false,
+    this.devCode,
   });
 
   const SignInState.initial()
@@ -40,7 +41,8 @@ class SignInState {
       completed = false,
       isNewUser = false,
       acceptedTerms = false,
-      marketingOptIn = false;
+      marketingOptIn = false,
+      devCode = null;
 
   final PhoneNumber? phone;
   final SignInStep step;
@@ -74,6 +76,11 @@ class SignInState {
   /// [SignInController.setMarketingOptIn] — the API has nowhere to put it yet.
   final bool marketingOptIn;
 
+  /// The code itself, when the backend was willing to say it (never in
+  /// production) — see [OtpRequestResult]. Lets the code screen show it
+  /// inline instead of it only reaching a console-log SMS adapter.
+  final String? devCode;
+
   bool get canResend => resendIn == Duration.zero && !busy;
 
   /// Everything the phone step needs before it may ask for a code.
@@ -93,6 +100,7 @@ class SignInState {
     bool? marketingOptIn,
     bool clearError = false,
     String? error,
+    String? devCode,
   }) {
     return SignInState(
       phone: phone ?? this.phone,
@@ -107,6 +115,7 @@ class SignInState {
       isNewUser: isNewUser ?? this.isNewUser,
       acceptedTerms: acceptedTerms ?? this.acceptedTerms,
       marketingOptIn: marketingOptIn ?? this.marketingOptIn,
+      devCode: devCode ?? this.devCode,
     );
   }
 }
@@ -155,12 +164,13 @@ class SignInController extends Notifier<SignInState> {
 
     state = state.copyWith(busy: true, clearError: true);
     try {
-      final validity = await _auth.requestSignInCode(phone.e164);
+      final result = await _auth.requestSignInCode(phone.e164);
       state = state.copyWith(
         busy: false,
         step: SignInStep.code,
-        codeExpiresIn: validity,
+        codeExpiresIn: result.validity,
         attemptsRemaining: null,
+        devCode: result.devCode,
       );
       _startResendCountdown();
     } on ApiException catch (e) {

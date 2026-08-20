@@ -13,7 +13,9 @@ import 'wishlist_detail_controller.dart';
 import 'wishlists_controller.dart';
 
 /// Figma `280:476` — Wishlist Name, Occasion, Cover Image, Description,
-/// Deliver To (not backed yet — see [_DeliverToRow]), Privacy.
+/// Privacy. The mock also shows a "Deliver To" affordance, but no address
+/// concept exists anywhere in the backend yet, so it is left out entirely
+/// rather than shipping a control that cannot do anything.
 ///
 /// Doubles as the edit screen (the design has no separate edit mock) — pass
 /// [editing] to prefill the form and save via `PATCH` instead of `POST`.
@@ -244,8 +246,6 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xxl),
-                    const _DeliverToRow(),
-                    const SizedBox(height: AppSpacing.xxl),
                     _RequiredLabel('Privacy', asField: true),
                     const SizedBox(height: AppSpacing.md),
                     for (final option in const [
@@ -405,41 +405,6 @@ class _CoverImagePicker extends StatelessWidget {
                 ),
         ),
       ),
-    );
-  }
-}
-
-/// The mock shows a "Deliver To" affordance, but no address concept exists
-/// anywhere in the backend yet — left inert rather than fabricating one.
-class _DeliverToRow extends StatelessWidget {
-  const _DeliverToRow();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Deliver To',
-          style: context.text.titleSmall?.copyWith(
-            color: colors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        TextButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Delivery addresses are coming soon.'),
-              ),
-            );
-          },
-          icon: const Icon(Icons.add_circle_outline),
-          label: const Text('Add Delivery Address'),
-        ),
-      ],
     );
   }
 }

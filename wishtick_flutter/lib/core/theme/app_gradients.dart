@@ -11,9 +11,17 @@ import 'app_palette.dart';
 class WishtickGradients extends ThemeExtension<WishtickGradients> {
   const WishtickGradients({
     required this.headline,
+    required this.header,
     required this.celebration,
-    required this.splash,
+    required this.curatedBanner,
   });
+
+  /// The plum masthead: Home's header card (`51:11`), and the hero on the
+  /// Terms and Privacy Policy screens.
+  ///
+  /// Deep plum at the status bar easing into the brand plum below it, so the
+  /// wordmark and the icons keep their contrast where the ink is darkest.
+  final LinearGradient header;
 
   /// Serif display headings that sweep plum → bronze left to right, as on the
   /// sign-in screen (Figma `17:329`).
@@ -22,32 +30,29 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
   /// The plum → violet wash behind celebratory sheet headers.
   final LinearGradient celebration;
 
-  /// The splash backdrop (Figma `143:356`) — a vertical plum wash falling from
-  /// [AppPalette.plumMuted] to near-black.
-  ///
-  /// **The one token that is identical in light and dark, on purpose.** The
-  /// splash is a brand moment rather than a page: it is the first frame the
-  /// user sees, the mark and wordmark are drawn *for* this backdrop, and the
-  /// screen carries no content that a light surface would serve better. Both
-  /// [light] and [dark] therefore point at the same [_splash] — this is not an
-  /// oversight to be "fixed" by giving dark its own stops.
-  final LinearGradient splash;
-
-  /// Shared by both themes — see [splash].
-  static const _splash = LinearGradient(
-    colors: [AppPalette.plumMuted, AppPalette.plumNight],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-  );
+  /// The Discover "CURATED GIFTS FOR EVERY OCCASION" banner's diagonal wash
+  /// (`280:131`) — its own wine-toned gradient, distinct from [celebration]
+  /// (used elsewhere for a different plum → violet treatment).
+  final LinearGradient curatedBanner;
 
   static const light = WishtickGradients(
     headline: LinearGradient(colors: [AppPalette.plumMuted, AppPalette.bronze]),
+    // The pair the light theme calls primaryDeep → primary.
+    header: LinearGradient(
+      colors: [AppPalette.plumInk, AppPalette.plumMuted],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    ),
     celebration: LinearGradient(
       colors: [AppPalette.plumDeep, AppPalette.violet],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     ),
-    splash: _splash,
+    curatedBanner: LinearGradient(
+      colors: [AppPalette.wine, AppPalette.wineInk],
+      begin: Alignment.bottomLeft,
+      end: Alignment.topRight,
+    ),
   );
 
   /// Both stops step up in luminance so the sweep stays legible on the dark
@@ -56,24 +61,35 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
     headline: LinearGradient(
       colors: [AppPalette.violetSoft, AppPalette.goldSoft],
     ),
+    header: LinearGradient(
+      colors: [AppPalette.plumDeep, AppPalette.plum],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    ),
     celebration: LinearGradient(
       colors: [AppPalette.plum, AppPalette.violet],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     ),
-    splash: _splash,
+    curatedBanner: LinearGradient(
+      colors: [AppPalette.wineSoft, AppPalette.wine],
+      begin: Alignment.bottomLeft,
+      end: Alignment.topRight,
+    ),
   );
 
   @override
   WishtickGradients copyWith({
     LinearGradient? headline,
+    LinearGradient? header,
     LinearGradient? celebration,
-    LinearGradient? splash,
+    LinearGradient? curatedBanner,
   }) {
     return WishtickGradients(
       headline: headline ?? this.headline,
+      header: header ?? this.header,
       celebration: celebration ?? this.celebration,
-      splash: splash ?? this.splash,
+      curatedBanner: curatedBanner ?? this.curatedBanner,
     );
   }
 
@@ -82,8 +98,13 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
     if (other == null) return this;
     return WishtickGradients(
       headline: LinearGradient.lerp(headline, other.headline, t)!,
+      header: LinearGradient.lerp(header, other.header, t)!,
       celebration: LinearGradient.lerp(celebration, other.celebration, t)!,
-      splash: LinearGradient.lerp(splash, other.splash, t)!,
+      curatedBanner: LinearGradient.lerp(
+        curatedBanner,
+        other.curatedBanner,
+        t,
+      )!,
     );
   }
 }

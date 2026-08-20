@@ -66,6 +66,13 @@ describe('Passwordless OTP sign-in (e2e)', () => {
       ).toBeGreaterThan(0);
       expect(ctx.sms.sent).toHaveLength(1);
 
+      // Outside production the response echoes the code it just sent by SMS —
+      // lets the app show it inline instead of the tester reading it off a
+      // console log. Must match the code that actually verifies the sign-in.
+      expect((requested.body as Envelope<{ devCode?: string }>).data.devCode).toBe(
+        ctx.sms.lastCode(),
+      );
+
       const res = await verifyCode(phone, ctx.sms.lastCode(), { name: 'Ananya' }).expect(200);
       const body = res.body as Envelope<OtpLoginPayload>;
 

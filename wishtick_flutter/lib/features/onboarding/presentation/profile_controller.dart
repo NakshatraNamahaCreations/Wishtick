@@ -14,6 +14,8 @@ class ProfileFormState {
     this.error,
     this.fieldErrors = const {},
     this.saved = false,
+    this.photoLocalPath,
+    this.uploadingPhoto = false,
   });
 
   final ProfileDraft draft;
@@ -27,13 +29,25 @@ class ProfileFormState {
 
   final bool saved;
 
+  /// The file just picked, so the circle shows it immediately.
+  ///
+  /// UI state, not part of [draft]: the draft is the API payload, and what the
+  /// server takes is the confirmed `photoMediaId` — the path on this handset
+  /// means nothing to it.
+  final String? photoLocalPath;
+
+  final bool uploadingPhoto;
+
   ProfileFormState copyWith({
     ProfileDraft? draft,
     bool? busy,
     String? error,
     Map<String, String>? fieldErrors,
     bool? saved,
+    String? photoLocalPath,
+    bool? uploadingPhoto,
     bool clearError = false,
+    bool clearPhotoPath = false,
   }) {
     return ProfileFormState(
       draft: draft ?? this.draft,
@@ -41,6 +55,10 @@ class ProfileFormState {
       error: clearError ? null : (error ?? this.error),
       fieldErrors: fieldErrors ?? this.fieldErrors,
       saved: saved ?? this.saved,
+      photoLocalPath: clearPhotoPath
+          ? null
+          : (photoLocalPath ?? this.photoLocalPath),
+      uploadingPhoto: uploadingPhoto ?? this.uploadingPhoto,
     );
   }
 }
@@ -79,11 +97,23 @@ class ProfileFormController extends Notifier<ProfileFormState> {
   void setGender(Gender value) => _update(state.draft.copyWith(gender: value));
 
   /// Picking a preset clears any uploaded photo, mirroring the backend.
-  void setAvatar(BundledAvatar avatar) =>
-      _update(state.draft.copyWith(avatar: avatar, clearPhoto: true));
+  void setAvatar(BundledAvatar avatar) {
+    state = state.copyWith(clearPhotoPath: true);
+    _update(state.draft.copyWith(avatar: avatar, clearPhoto: true));
+  }
 
-  void setPhoto(String mediaId) =>
-      _update(state.draft.copyWith(photoMediaId: mediaId, clearAvatar: true));
+  /// Records a confirmed upload, and the local file the circle draws until the
+  /// profile is saved.
+  void setPhoto(String mediaId, {String? localPath}) {
+    state = state.copyWith(photoLocalPath: localPath, clearError: true);
+    _update(state.draft.copyWith(photoMediaId: mediaId, clearAvatar: true));
+  }
+
+  void setUploadingPhoto(bool value) =>
+      state = state.copyWith(uploadingPhoto: value, clearError: value);
+
+  void failPhoto(String message) =>
+      state = state.copyWith(error: message, uploadingPhoto: false);
 
   /// Client-side checks for the four required fields.
   ///

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/features/addresses/data/addresses_repository.dart';
 import 'package:wishtick_flutter/features/addresses/domain/address.dart';
-import 'package:wishtick_flutter/features/group_gift/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/home/data/home_repository.dart';
 import 'package:wishtick_flutter/features/home/presentation/home_controller.dart';
 import 'package:wishtick_flutter/features/wishlist/data/wishlist_repository.dart';
@@ -129,43 +128,6 @@ void main() {
       await controllerOf(t.container).ensureLoaded();
 
       expect(stateOf(t.container).defaultAddress?.label, AddressLabel.home);
-    });
-  });
-
-  group('featuredGroupGift', () {
-    test('prefers a gift still taking money over a settled one', () async {
-      final t = build(
-        home: FakeHomeRepository(
-          groupGifts: [
-            buildGroupGift(id: 'done', status: GroupGiftStatus.fulfilled),
-            buildGroupGift(id: 'open', status: GroupGiftStatus.open),
-          ],
-        ),
-      );
-
-      await controllerOf(t.container).ensureLoaded();
-
-      expect(stateOf(t.container).featuredGroupGift?.id, 'open');
-    });
-
-    test('falls back to the newest when none are open', () async {
-      final t = build(
-        home: FakeHomeRepository(
-          groupGifts: [
-            buildGroupGift(id: 'done', status: GroupGiftStatus.fulfilled),
-          ],
-        ),
-      );
-
-      await controllerOf(t.container).ensureLoaded();
-
-      expect(stateOf(t.container).featuredGroupGift?.id, 'done');
-    });
-
-    test('is null when there are none, so the card is hidden', () async {
-      final t = build();
-      await controllerOf(t.container).ensureLoaded();
-      expect(stateOf(t.container).featuredGroupGift, isNull);
     });
   });
 }

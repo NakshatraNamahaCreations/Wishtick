@@ -12,13 +12,19 @@
       ]
     },
     {
+      // localhost, not a LAN IP: "adb reverse" (run automatically below)
+      // forwards the physical device's own localhost:3000 to this machine's
+      // backend over USB, so this keeps working across Wi-Fi/IP changes —
+      // the previous hardcoded LAN address went stale the moment this
+      // machine's DHCP lease changed.
       "name": "Wishtick (real API — physical device)",
       "request": "launch",
       "type": "dart",
       "program": "${workspaceFolder}/wishtick_flutter/lib/main.dart",
       "cwd": "${workspaceFolder}/wishtick_flutter",
+      "preLaunchTask": "adb reverse backend port",
       "args": [
-        "--dart-define=WISHTICK_API_BASE_URL=http://192.168.1.10:3000"
+        "--dart-define=WISHTICK_API_BASE_URL=http://localhost:3000"
       ]
     },
     {

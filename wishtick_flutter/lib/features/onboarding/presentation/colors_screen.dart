@@ -156,6 +156,10 @@ class _ColorGroupCard extends StatelessWidget {
     'earth': 'assets/icons/Earth_Tones.png',
     'pastel': 'assets/icons/Pastels.png',
     'blue': 'assets/icons/Blues.png',
+    'green': 'assets/icons/Greens.png',
+    'red': 'assets/icons/Red_Pinks.png',
+    'orange': 'assets/icons/Oranges_Yellows.png',
+    'purple': 'assets/icons/Purple_Violet.png',
   };
 
   @override

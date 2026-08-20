@@ -109,8 +109,11 @@ abstract final class AppTheme {
           minimumSize: const Size.fromHeight(AppSizes.buttonHeight),
           elevation: 0,
           textStyle: AppTypography.labelLarge,
+          // md, not a full pill — sampled off two exports (`199:145`,
+          // `17:329`) at ~12px and ~8px respectively against a ~53px-tall
+          // button; a pill would need half the button's own height (~26px).
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
         ),
       ),

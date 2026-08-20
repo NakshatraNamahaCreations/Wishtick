@@ -40,16 +40,6 @@ class HomeState {
     return saved.firstWhere((a) => a.isDefault, orElse: () => saved.first);
   }
 
-  /// Home shows one chip-in card; an open gift outranks a settled one.
-  GroupGift? get featuredGroupGift {
-    final gifts = groupGifts;
-    if (gifts == null || gifts.isEmpty) return null;
-    return gifts.firstWhere(
-      (g) => g.status.acceptsContributions,
-      orElse: () => gifts.first,
-    );
-  }
-
   bool get isLoaded =>
       addresses != null &&
       events != null &&

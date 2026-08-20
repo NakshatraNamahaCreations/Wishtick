@@ -122,7 +122,7 @@ added rather than bending the app to passwords:
 
 | Endpoint | Behaviour |
 |---|---|
-| `POST /auth/otp/request` | Sends a 6-digit code to any number, registered or not. 202. |
+| `POST /auth/otp/request` | Sends a 4-digit code to any number, registered or not. 202. |
 | `POST /auth/otp/verify` | Consumes the code, finds-or-creates the user, returns `{user, tokens, isNewUser}`. |
 
 Supporting changes: `OtpPurpose.SIGN_IN` (codes are salted by purpose, so a
@@ -166,8 +166,10 @@ onboarding rather than to auth — the route sits under `/onboarding`, not
 ### Notes from the exports
 
 - **OTP box count.** `17:530` draws four boxes but its own copy says "6-digit
-  code", and the backend issues six (`OTP_LENGTH=6`). Built with six. Worth
-  correcting in the design file.
+  code". `OTP_LENGTH` was briefly set to 6 to match the copy (see the device-walk
+  defect below), then reset to 4 per product decision — the box count the design
+  actually draws. The copy ("6-digit code") still needs correcting in the design
+  file to read "4-digit".
 - **"Every Ocassion Made Special!"** (`280:33`) is misspelled in the design —
   should be "Occasion". Implemented verbatim so code and design match; one word
   to change once confirmed.
@@ -1136,6 +1138,16 @@ The gifter pass found two more:
 11. **The Group tab told a gifter who had given two gifts that they had "not
     given a gift yet".** The empty text ignored the active filter; it names the
     tab now.
+12. **Onboarding's camera badge was still a placeholder.** Create Your Profile
+    (`31:608`) answered a tap with "Photo upload arrives in Sprint 9 — pick an
+    avatar below", and its own comment said the upload "lands with the
+    profile-edit screen in Sprint 9". Sprint 9 built that upload on Edit
+    Profile (`90:21`) and never came back for the screen the comment pointed
+    at, so the *first* place a new user meets the app still could not take a
+    photo. It now runs the same presign → PUT → confirm path, shows the picked
+    file in the circle while it uploads, and clears any chosen avatar — the two
+    are mutually exclusive server-side. The draft and controller already
+    carried `photoMediaId`; only the handler was stubbed.
 
 ### Still open
 

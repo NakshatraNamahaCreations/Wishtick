@@ -5,9 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/legal/legal_links.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
@@ -179,13 +177,13 @@ class _ConsentChecks extends StatelessWidget {
                 const TextSpan(text: 'I agree to the '),
                 _LegalSpan(
                   text: 'Terms & Conditions*',
-                  url: LegalLinks.terms,
+                  onTap: () => context.push<void>(AppRoutes.terms),
                   style: link,
                 ),
                 const TextSpan(text: ' & I have read the '),
                 _LegalSpan(
                   text: 'Privacy policy*',
-                  url: LegalLinks.privacy,
+                  onTap: () => context.push<void>(AppRoutes.privacyPolicy),
                   style: link,
                 ),
               ],
@@ -266,20 +264,17 @@ class _CheckRow extends StatelessWidget {
   }
 }
 
-/// An underlined legal link that opens [url] in the browser.
+/// An underlined legal link inside the consent sentence.
 ///
-/// A span rather than a widget so it wraps inside the sentence; the app has no
-/// in-app Terms or Privacy screen yet (Sprint 9), so these leave the app.
+/// A span rather than a widget so it wraps with the words around it. It opens
+/// the document in the app rather than the browser: someone deciding whether
+/// to agree should not have to leave the screen they are agreeing on, and the
+/// terms they are shown should be the ones this build ships with.
 class _LegalSpan extends TextSpan {
-  _LegalSpan({required String text, required String url, super.style})
+  _LegalSpan({required String text, required VoidCallback onTap, super.style})
     : super(
         text: text,
-        recognizer: TapGestureRecognizer()
-          ..onTap = () {
-            unawaited(
-              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-            );
-          },
+        recognizer: TapGestureRecognizer()..onTap = onTap,
       );
 }
 

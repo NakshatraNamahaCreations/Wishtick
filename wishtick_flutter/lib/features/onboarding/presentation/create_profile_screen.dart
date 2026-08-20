@@ -1,14 +1,17 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../../core/media/media_repository.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/date_entry_field.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_swipe_button.dart';
 import '../data/onboarding_repository.dart';
@@ -34,12 +37,10 @@ class CreateProfileScreen extends ConsumerStatefulWidget {
 class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
   late final TextEditingController _name;
   late final TextEditingController _email;
-  late final TextEditingController _dob;
-  late final FocusNode _dobFocus;
 
-  /// Set only while the manual-entry box holds a complete but impossible or
-  /// out-of-range date ("31/02/2020", a birth year in the future, ...). The
-  /// field stays quiet below eight digits so it doesn't nag mid-keystroke.
+  /// Set only while the manual-entry Date of Birth box holds a complete but
+  /// impossible or out-of-range date ("31/02/2020", a birth year in the
+  /// future, ...) — see [DateEntryField.onValidationError].
   String? _dobError;
 
   @override
@@ -48,86 +49,25 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     final draft = ref.read(profileFormProvider).draft;
     _name = TextEditingController(text: draft.name);
     _email = TextEditingController(text: draft.email);
-    _dob = TextEditingController(text: draft.dateOfBirthDisplay);
-    _dobFocus = FocusNode();
   }
 
   @override
   void dispose() {
     _name.dispose();
     _email.dispose();
-    _dob.dispose();
-    _dobFocus.dispose();
     super.dispose();
   }
 
-  static DateTime get _today => DateTime.now();
+  /// Nobody alive is older than this, and a birthday cannot be in the
+  /// future — matches [DateEntryField.firstDate]/`lastDate` below.
+  static DateTime get _earliestDob => DateTime(DateTime.now().year - 120);
 
-  /// Matches [_pickDateOfBirth]'s own bounds, so a typed date the calendar
-  /// itself would refuse to show is refused the same way.
-  static DateTime get _earliestDob => DateTime(_today.year - 120);
-
-  Future<void> _pickDateOfBirth() async {
-    final now = _today;
-    final current = ref.read(profileFormProvider).draft.dateOfBirth;
-    // Opening the picker shouldn't leave the keyboard half up behind it.
-    _dobFocus.unfocus();
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime(now.year - 25, now.month, now.day),
-      // Nobody alive is older than this, and a birthday cannot be in the future.
-      firstDate: _earliestDob,
-      lastDate: now,
-      helpText: 'Date of birth',
-    );
-    if (picked == null) return;
-    ref.read(profileFormProvider.notifier).setDateOfBirth(picked);
-    _dob.text = ref.read(profileFormProvider).draft.dateOfBirthDisplay;
-    setState(() => _dobError = null);
-  }
-
-  /// Parses a complete `dd/mm/yyyy` box into a real calendar date, or `null`
-  /// if the day doesn't exist in that month (`DateTime` itself would happily
-  /// roll "31/02" over into March, which reads as silently wrong here).
-  static DateTime? _parseDob(String formatted) {
-    if (formatted.length != 10) return null;
-    final day = int.tryParse(formatted.substring(0, 2));
-    final month = int.tryParse(formatted.substring(3, 5));
-    final year = int.tryParse(formatted.substring(6, 10));
-    if (day == null || month == null || year == null) return null;
-    if (month < 1 || month > 12) return null;
-    // Day 0 of next month == the last real day of this one.
-    final daysInMonth = DateTime(year, month + 1, 0).day;
-    if (day < 1 || day > daysInMonth) return null;
-    return DateTime(year, month, day);
-  }
-
-  /// Runs after every keystroke — [_DateInputFormatter] has already turned
-  /// the raw digits into `dd/mm/yyyy` by the time this sees them.
-  void _onDobChanged(String formatted) {
-    final digitCount = formatted.replaceAll('/', '').length;
-    if (digitCount < 8) {
-      // Still typing (or mid-erase) — don't leave a stale committed date
-      // sitting behind a box that no longer displays it.
-      if (_dobError != null) setState(() => _dobError = null);
-      ref.read(profileFormProvider.notifier).clearDateOfBirth();
-      return;
-    }
-
-    final parsed = _parseDob(formatted);
-    final error = switch (parsed) {
-      null => "That date doesn't exist — check the day and month",
-      _ when parsed.isAfter(_today) => "That's still in the future",
-      _ when parsed.isBefore(_earliestDob) => 'Please double-check the year',
-      _ => null,
-    };
-
-    setState(() => _dobError = error);
-    if (error == null && parsed != null) {
-      ref.read(profileFormProvider.notifier).setDateOfBirth(parsed);
+  void _onDobChanged(DateTime? value) {
+    final notifier = ref.read(profileFormProvider.notifier);
+    if (value == null) {
+      notifier.clearDateOfBirth();
     } else {
-      ref.read(profileFormProvider.notifier).clearDateOfBirth();
+      notifier.setDateOfBirth(value);
     }
   }
 
@@ -199,7 +139,11 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
                           Center(
                             child: _PhotoCircle(
                               avatar: draft.avatar,
-                              onPickPhoto: _onPickPhoto,
+                              localPath: state.photoLocalPath,
+                              busy: state.uploadingPhoto,
+                              onPickPhoto: state.uploadingPhoto
+                                  ? null
+                                  : () => unawaited(_onPickPhoto()),
                             ),
                           ),
                           const SizedBox(height: AppSpacing.xxl),
@@ -263,11 +207,52 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
                             errorText:
                                 _dobError ?? state.fieldErrors['dateOfBirth'],
                             child: _FieldShadow(
-                              child: _DateOfBirthField(
-                                controller: _dob,
-                                focusNode: _dobFocus,
-                                onChanged: _onDobChanged,
-                                onPickDate: _pickDateOfBirth,
+                              child: Container(
+                                height: AppSizes.inputHeight,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.lg,
+                                ),
+                                decoration: BoxDecoration(
+                                  // Matches the themed TextField fill so
+                                  // this hand-rolled field is
+                                  // indistinguishable from its siblings.
+                                  color: colors.surfaceAlt,
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.md,
+                                  ),
+                                ),
+                                child: DateEntryField(
+                                  initialDate: draft.dateOfBirth,
+                                  firstDate: _earliestDob,
+                                  lastDate: DateTime.now(),
+                                  pickerInitialDate: DateTime(
+                                    DateTime.now().year - 25,
+                                  ),
+                                  pickerHelpText: 'Date of birth',
+                                  onChanged: _onDobChanged,
+                                  onValidationError: (error) =>
+                                      setState(() => _dobError = error),
+                                  tooEarlyText: 'Please double-check the year',
+                                  tooLateText: "That's still in the future",
+                                  style: context.text.bodyLarge?.copyWith(
+                                    color: colors.textPrimary,
+                                  ),
+                                  decoration: InputDecoration(
+                                    isCollapsed: true,
+                                    filled: false,
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    hintStyle: context.text.bodyLarge?.copyWith(
+                                      color: colors.textMuted,
+                                    ),
+                                  ),
+                                  calendarIcon: Icon(
+                                    Icons.calendar_today_outlined,
+                                    size: AppSizes.iconMd,
+                                    color: colors.textMuted,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -323,26 +308,53 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     );
   }
 
-  void _onPickPhoto() {
-    // Uploading a photo needs the media presign → PUT → confirm round trip;
-    // that lands with the profile-edit screen in Sprint 9. Until then the
-    // bundled avatars are the supported route, so point at them rather than
-    // opening a picker that cannot finish.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Photo upload arrives in Sprint 9 — pick an avatar below.',
-        ),
-      ),
+  /// Picks a photo, uploads it, and points the draft at the confirmed media.
+  ///
+  /// The same presign → PUT → confirm round trip Edit Profile (`90:21`) uses;
+  /// this screen sat on a "coming in Sprint 9" snackbar until a device walk
+  /// found the camera badge still inert after that sprint had shipped the
+  /// upload everywhere else.
+  Future<void> _onPickPhoto() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
     );
+    if (picked == null) return;
+
+    final notifier = ref.read(profileFormProvider.notifier);
+    notifier.setUploadingPhoto(true);
+    try {
+      final media = await ref
+          .read(mediaRepositoryProvider)
+          .uploadFile(
+            file: picked,
+            purpose: MediaPurpose.profilePhoto,
+            fileName: picked.name,
+          );
+      notifier.setPhoto(media.id, localPath: picked.path);
+    } catch (_) {
+      notifier.failPhoto('Could not upload that photo.');
+    } finally {
+      notifier.setUploadingPhoto(false);
+    }
   }
 }
 
 class _PhotoCircle extends StatelessWidget {
-  const _PhotoCircle({required this.avatar, required this.onPickPhoto});
+  const _PhotoCircle({
+    required this.avatar,
+    required this.onPickPhoto,
+    this.localPath,
+    this.busy = false,
+  });
 
   final BundledAvatar? avatar;
-  final VoidCallback onPickPhoto;
+  final VoidCallback? onPickPhoto;
+
+  /// A just-picked file. Wins over [avatar] — the two are mutually exclusive
+  /// server-side, and picking one clears the other.
+  final String? localPath;
+  final bool busy;
 
   static const _diameter = 136.0;
   static const _badgeSize = 38.0;
@@ -368,9 +380,15 @@ class _PhotoCircle extends StatelessWidget {
               color: colors.surface,
             ),
             child: ClipOval(
-              child: Image.asset(preview.asset, fit: BoxFit.cover),
+              child: localPath == null
+                  ? Image.asset(preview.asset, fit: BoxFit.cover)
+                  : Image.file(File(localPath!), fit: BoxFit.cover),
             ),
           ),
+          if (busy)
+            const Positioned.fill(
+              child: Center(child: CircularProgressIndicator()),
+            ),
           Positioned(
             right: 0,
             bottom: AppSpacing.xs,
@@ -523,111 +541,6 @@ class _FieldShadow extends StatelessWidget {
         ],
       ),
       child: child,
-    );
-  }
-}
-
-/// Free-typed `dd/mm/yyyy`, formatted as you go, plus a calendar icon that is
-/// its own separate tap target.
-///
-/// Tapping the text opens the keyboard, never the picker — tapping the icon
-/// opens the picker, never the keyboard. Making the whole box open the
-/// picker (the old behaviour) meant there was no way to type a date by hand.
-class _DateOfBirthField extends StatelessWidget {
-  const _DateOfBirthField({
-    required this.controller,
-    required this.focusNode,
-    required this.onChanged,
-    required this.onPickDate,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onPickDate;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return Container(
-      height: AppSizes.inputHeight,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      decoration: BoxDecoration(
-        // Matches the themed TextField fill so this hand-rolled field is
-        // indistinguishable from its siblings.
-        color: colors.surfaceAlt,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: colors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: onChanged,
-              keyboardType: TextInputType.number,
-              inputFormatters: [_DateInputFormatter()],
-              style: context.text.bodyLarge?.copyWith(
-                color: colors.textPrimary,
-              ),
-              decoration: InputDecoration(
-                isCollapsed: true,
-                filled: false,
-                border: InputBorder.none,
-                hintText: 'dd/mm/yyyy',
-                hintStyle: context.text.bodyLarge?.copyWith(
-                  color: colors.textMuted,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onPickDate,
-            child: Icon(
-              Icons.calendar_today_outlined,
-              size: AppSizes.iconMd,
-              color: colors.textMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Turns raw digit entry into `dd/mm/yyyy` as the user types — inserting the
-/// slashes for them and capping input at 8 digits — while keeping the caret
-/// where the digit count says it should be, not just parked at the end.
-class _DateInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final digitsBeforeCaret = newValue.text
-        .substring(0, newValue.selection.end.clamp(0, newValue.text.length))
-        .replaceAll(RegExp(r'[^0-9]'), '')
-        .length;
-
-    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    final limited = digits.length > 8 ? digits.substring(0, 8) : digits;
-
-    final buffer = StringBuffer();
-    var caret = limited.length;
-    for (var i = 0; i < limited.length; i++) {
-      buffer.write(limited[i]);
-      if (i + 1 == digitsBeforeCaret) caret = buffer.length;
-      if (i == 1 || i == 3) buffer.write('/');
-    }
-    if (digitsBeforeCaret == 0) caret = 0;
-
-    return TextEditingValue(
-      text: buffer.toString(),
-      selection: TextSelection.collapsed(offset: caret),
     );
   }
 }

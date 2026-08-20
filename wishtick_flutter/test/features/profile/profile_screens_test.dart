@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wishtick_flutter/core/legal/legal_document_screen.dart';
+import 'package:wishtick_flutter/core/legal/privacy_document.dart';
+import 'package:wishtick_flutter/core/legal/terms_document.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/features/addresses/data/addresses_repository.dart';
 import 'package:wishtick_flutter/features/addresses/presentation/address_book_screen.dart';
@@ -14,7 +17,6 @@ import 'package:wishtick_flutter/features/notifications/presentation/notificatio
 import 'package:wishtick_flutter/features/profile/data/profile_repository.dart';
 import 'package:wishtick_flutter/features/profile/presentation/about_us_screen.dart';
 import 'package:wishtick_flutter/features/profile/presentation/help_centre_screen.dart';
-import 'package:wishtick_flutter/features/profile/presentation/privacy_policy_screen.dart';
 import 'package:wishtick_flutter/features/profile/presentation/profile_screen.dart';
 
 import '../../helpers/home_fakes.dart';
@@ -440,13 +442,43 @@ void main() {
       expect(find.textContaining('Wishtick creates a link'), findsOneWidget);
     });
 
-    testWidgets('Privacy Policy carries its effective date and sections', (
+    testWidgets('Privacy Policy opens on its summary and sections', (
       tester,
     ) async {
-      await pump(tester, const PrivacyPolicyScreen());
+      await pump(
+        tester,
+        const LegalDocumentScreen(document: PrivacyDocument.document),
+      );
 
-      expect(find.text('Effective Date: 22 JULY 2026'), findsOneWidget);
-      expect(find.text('Information We Collect'), findsOneWidget);
+      expect(find.text('Privacy Policy'), findsWidgets);
+      expect(find.text('41 sections'), findsOneWidget);
+      expect(find.text('Personal Information Collected'), findsOneWidget);
+    });
+
+    testWidgets('Terms jump to a section from the contents sheet', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const LegalDocumentScreen(document: TermsDocument.document),
+      );
+
+      // The whole document is laid out at once — that is what makes the jump
+      // possible — so "not visible" here means below the fold, not absent.
+      const target = 'Account Security';
+      expect(tester.getTopLeft(find.text(target)).dy, greaterThan(900));
+
+      await tester.tap(find.text('Jump to a section'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: find.byType(ListTile), matching: find.text(target)),
+      );
+      await tester.pumpAndSettle();
+
+      // Parked just under the app bar rather than behind it.
+      final heading = tester.getTopLeft(find.text(target)).dy;
+      expect(heading, greaterThan(kToolbarHeight));
+      expect(heading, lessThan(250));
     });
 
     testWidgets('About Us says Wishtick takes no payment', (tester) async {

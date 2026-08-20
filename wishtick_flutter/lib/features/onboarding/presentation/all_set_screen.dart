@@ -56,14 +56,25 @@ class _AllSetScreenState extends ConsumerState<AllSetScreen> {
       // Background inherits ThemeData.scaffoldBackgroundColor.
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xxl),
+          // Horizontal 20 (not the usual 24) and a taller bottom margin —
+          // both measured off the export (`199:145`): the button spans
+          // 20..372 of the 393-wide frame, and sits 37px clear of the
+          // bottom edge rather than the 24 every other margin here uses.
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            AppSpacing.xxl,
+            AppSpacing.xl,
+            AppSpacing.huge,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Spacer(flex: 3),
+              // 4, not the body's own 3 — the export sits the mark closer
+              // to the middle of the page than a straight 3:4 split gives.
+              const Spacer(flex: 4),
               SizedBox(
-                width: 288,
-                height: 288,
+                width: 220,
+                height: 220,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
@@ -86,15 +97,28 @@ class _AllSetScreenState extends ConsumerState<AllSetScreen> {
                         colors.primary,
                       ],
                     ),
-                    Image.asset(
-                      'assets/logo/logo.png',
-                      width: 160,
-                      height: 160,
+                    // Bottom-aligned, not centred like the confetti: pins
+                    // the image's own box edge to a known position so the
+                    // gap below only has the asset's baked-in transparent
+                    // margin to account for, not an unpredictable centring
+                    // offset too.
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Image.asset(
+                        'assets/logo/logo.png',
+                        width: 160,
+                        height: 160,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              // No gap here at all: `logo.png` already carries ~40px of
+              // transparent margin below the glyph itself at this render
+              // size (see splash_screen.dart's _Mark) — that transparency
+              // *is* the visible gap down to the headline, close to the
+              // Figma-measured 24px on its own. Any further SizedBox here
+              // would stack on top of it, not replace it.
               Text(
                 "You're all set!",
                 textAlign: TextAlign.center,

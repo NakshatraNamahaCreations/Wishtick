@@ -37,6 +37,10 @@ void main() {
       colorOption('cocoa', 'Cocoa', 'earth', 'Earth Tones'),
       colorOption('blush', 'Blush', 'pastel', 'Pastels'),
       colorOption('navy', 'Navy', 'blue', 'Blues'),
+      colorOption('forest', 'Forest', 'green', 'Greens'),
+      colorOption('cherry', 'Cherry', 'red', 'Red & Pinks'),
+      colorOption('orange', 'Orange', 'orange', 'Oranges & Yellows'),
+      colorOption('plum', 'Plum', 'purple', 'Purple & Violet'),
       // An unrecognised group — the icon lookup must fall back to no icon
       // rather than crashing on a missing asset.
       colorOption('mystery', 'Mystery', 'other', 'Other'),
@@ -88,6 +92,10 @@ void main() {
       'Earth Tones': 'assets/icons/Earth_Tones.png',
       'Pastels': 'assets/icons/Pastels.png',
       'Blues': 'assets/icons/Blues.png',
+      'Greens': 'assets/icons/Greens.png',
+      'Red & Pinks': 'assets/icons/Red_Pinks.png',
+      'Oranges & Yellows': 'assets/icons/Oranges_Yellows.png',
+      'Purple & Violet': 'assets/icons/Purple_Violet.png',
     }.entries) {
       testWidgets('$label gets its matching leading icon', (tester) async {
         await pumpColors(tester);

@@ -73,11 +73,12 @@ class EditProfileState {
     bool? uploadingPhoto,
     String? error,
     bool clearError = false,
+    bool clearDateOfBirth = false,
     bool? saved,
   }) => EditProfileState(
     name: name ?? this.name,
     email: email ?? this.email,
-    dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+    dateOfBirth: clearDateOfBirth ? null : (dateOfBirth ?? this.dateOfBirth),
     gender: gender ?? this.gender,
     photoMediaId: photoMediaId ?? this.photoMediaId,
     photoLocalPath: photoLocalPath ?? this.photoLocalPath,
@@ -112,6 +113,11 @@ class EditProfileController extends Notifier<EditProfileState> {
   void setEmail(String value) => state = state.copyWith(email: value);
   void setDateOfBirth(DateTime value) =>
       state = state.copyWith(dateOfBirth: value);
+
+  /// Backs out of a committed date of birth — see
+  /// `ProfileFormController.clearDateOfBirth` (onboarding's counterpart) for
+  /// why the manual-entry field needs this.
+  void clearDateOfBirth() => state = state.copyWith(clearDateOfBirth: true);
   void setGender(Gender value) => state = state.copyWith(gender: value);
 
   /// A picked avatar clears any uploaded photo, and vice versa: the backend

@@ -60,7 +60,6 @@ import '../../features/onboarding/presentation/size_fit_screen.dart';
 import '../../features/profile/presentation/about_us_screen.dart';
 import '../../features/profile/presentation/edit_profile_screen.dart';
 import '../../features/profile/presentation/help_centre_screen.dart';
-import '../../features/profile/presentation/privacy_policy_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/settings/presentation/appearance_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
@@ -72,6 +71,9 @@ import '../../features/wishlist/presentation/public_wishlist_screen.dart';
 import '../../features/wishlist/presentation/wishlist_detail_screen.dart';
 import '../../features/wishlist/presentation/wishlist_item_detail_screen.dart';
 import '../../features/wishlist/presentation/wishlist_tab_screen.dart';
+import '../legal/legal_document_screen.dart';
+import '../legal/privacy_document.dart';
+import '../legal/terms_document.dart';
 import '../theme/theme_extensions.dart';
 import '../widgets/sprint_placeholder.dart';
 import 'app_routes.dart';
@@ -112,8 +114,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       // break the share.
       final isPublicLink =
           location.startsWith('/w/') || location.startsWith('/i/');
+      // The Terms and the Privacy Policy are linked from the consent line on
+      // the sign-in screen, which is read *before* there is a session. Sending
+      // that tap to /welcome would answer "what am I agreeing to?" with the
+      // carousel.
+      final isLegal = location.startsWith(AppRoutes.legal);
 
-      if (isPublicLink) return null;
+      if (isPublicLink || isLegal) return null;
 
       // Hold on the splash until the stored session has been resolved.
       if (!session.isResolved) return onSplash ? null : AppRoutes.splash;
@@ -239,9 +246,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AboutUsScreen(),
       ),
       GoRoute(
+        path: AppRoutes.terms,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            const LegalDocumentScreen(document: TermsDocument.document),
+      ),
+      GoRoute(
         path: AppRoutes.privacyPolicy,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const PrivacyPolicyScreen(),
+        builder: (context, state) =>
+            const LegalDocumentScreen(document: PrivacyDocument.document),
       ),
 
       // ── Notifications (Sprint 9) ──────────────────────────────────────────

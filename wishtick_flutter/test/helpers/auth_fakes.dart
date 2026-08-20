@@ -83,6 +83,10 @@ class FakeAuthRepository implements AuthRepository {
   /// What `verifySignInCode` reports for a successful verification.
   bool nextIsNewUser = false;
 
+  /// What the next `requestSignInCode` reports as `devCode` — null by
+  /// default, matching production.
+  String? nextDevCode;
+
   @override
   Future<AuthUser> me() async {
     meCalls++;
@@ -97,11 +101,14 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Duration> requestSignInCode(String phone) async {
+  Future<OtpRequestResult> requestSignInCode(String phone) async {
     requestedSignInFor.add(phone);
     final failure = requestCodeFailure;
     if (failure != null) throw failure;
-    return AuthRepository.otpValidity;
+    return OtpRequestResult(
+      validity: AuthRepository.otpValidity,
+      devCode: nextDevCode,
+    );
   }
 
   @override

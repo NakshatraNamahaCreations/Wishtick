@@ -102,10 +102,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const PromoBanner(
-                  title: 'Celebrate Every Moment',
-                  body: "From life's biggest milestones to everyday joys.",
-                ),
+                const CelebrateMomentBanner(),
                 const SizedBox(height: AppSpacing.xl),
                 OccasionGrid(
                   onOccasionTap: (o) => unawaited(_openOccasion(o)),
@@ -118,6 +115,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     context.push<void>(AppRoutes.groupGift(gift.id)),
                   ),
                 ),
+                const BirthdaysBanner(),
+                const SizedBox(height: AppSpacing.xl),
                 _EventRail(
                   state: state,
                   // Only an invited event can open: the token comes back on
@@ -149,29 +148,74 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-/// The gold chip-in card. Hidden entirely when there is no group gift —
-/// an empty placeholder would imply the feature had failed.
-class _GroupGiftRail extends StatelessWidget {
+/// The gold chip-in carousel (Figma `51:11` shows it paged, "1/4") — one
+/// card per gift still open to contributions. Hidden entirely when there is
+/// none: an empty placeholder would imply the feature had failed.
+class _GroupGiftRail extends ConsumerStatefulWidget {
   const _GroupGiftRail({required this.state, required this.onChipIn});
 
   final HomeState state;
   final ValueChanged<GroupGift> onChipIn;
 
   @override
+  ConsumerState<_GroupGiftRail> createState() => _GroupGiftRailState();
+}
+
+class _GroupGiftRailState extends ConsumerState<_GroupGiftRail> {
+  final _controller = PageController();
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final gift = state.featuredGroupGift;
-    if (gift == null) return const SizedBox.shrink();
+    // Settled gifts are left off the rail — a "Chip in" button on a gift
+    // that can no longer accept one would mislead.
+    final gifts = (widget.state.groupGifts ?? const [])
+        .where((g) => g.status.acceptsContributions)
+        .toList();
+    if (gifts.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-      child: GroupGiftCard(
-        gift: gift,
-        // The host's own name for it (Sprint 6b). Older group gifts predate
-        // the field, so the message and then a neutral label stand in.
-        title: gift.title.trim().isNotEmpty
-            ? gift.title
-            : (gift.message ?? 'Group Gift'),
-        onChipIn: () => onChipIn(gift),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 260,
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: gifts.length,
+              onPageChanged: (i) => setState(() => _page = i),
+              itemBuilder: (context, index) {
+                final gift = gifts[index];
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index == gifts.length - 1 ? 0 : AppSpacing.sm,
+                  ),
+                  child: GroupGiftCard(
+                    gift: gift,
+                    // The host's own name for it (Sprint 6b). Older group
+                    // gifts predate the field, so the message and then a
+                    // neutral label stand in.
+                    title: gift.title.trim().isNotEmpty
+                        ? gift.title
+                        : (gift.message ?? 'Group Gift'),
+                    onChipIn: () => widget.onChipIn(gift),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (gifts.length > 1) ...[
+            const SizedBox(height: AppSpacing.md),
+            CarouselDots(index: _page, count: gifts.length),
+          ],
+        ],
       ),
     );
   }

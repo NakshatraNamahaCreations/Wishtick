@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wishtick_flutter/core/theme/app_colors.dart';
 import 'package:wishtick_flutter/features/onboarding/data/onboarding_repository.dart';
 import 'package:wishtick_flutter/features/onboarding/domain/onboarding_options.dart';
 import 'package:wishtick_flutter/features/onboarding/presentation/size_fit_screen.dart';
@@ -265,5 +266,44 @@ void main() {
         expect(slim, regular);
       },
     );
+  });
+
+  group('UK/US/EU toggle', () {
+    testWidgets(
+      'the track is a step darker than the page, not the same colour',
+      (tester) async {
+        await pumpSizeFit(tester);
+
+        // .at(1): the nearest Container ancestor is the selected pill
+        // itself (UK is selected by default) — the outer track is the next
+        // one out.
+        final track = tester.widget<Container>(
+          find
+              .ancestor(of: find.text('UK'), matching: find.byType(Container))
+              .at(1),
+        );
+        final trackColor = (track.decoration! as BoxDecoration).color;
+        expect(trackColor, WishtickColors.light.toggleTrack);
+        expect(
+          trackColor,
+          isNot(WishtickColors.light.background),
+          reason: 'a track the same colour as the page reads as invisible',
+        );
+      },
+    );
+
+    testWidgets('the selected system still fills with plum', (tester) async {
+      await pumpSizeFit(tester);
+
+      final selected = tester.widget<Container>(
+        find
+            .ancestor(of: find.text('UK'), matching: find.byType(Container))
+            .first,
+      );
+      expect(
+        (selected.decoration! as BoxDecoration).color,
+        WishtickColors.light.primary,
+      );
+    });
   });
 }

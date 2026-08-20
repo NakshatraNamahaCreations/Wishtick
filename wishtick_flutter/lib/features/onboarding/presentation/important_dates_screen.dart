@@ -7,11 +7,17 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/date_entry_field.dart';
+import '../../../core/widgets/success_banner.dart';
 import '../domain/onboarding_options.dart';
 import 'onboarding_flow_controller.dart';
 import 'widgets/labelled_field.dart';
 import 'widgets/onboarding_step_scaffold.dart';
 import 'widgets/selection_footer.dart';
+
+/// Anniversaries live in the past; upcoming one-offs a few years out.
+DateTime get _earliestOccasion => DateTime(DateTime.now().year - 120);
+DateTime get _latestOccasion => DateTime(DateTime.now().year + 5);
 
 /// Step 5 — "Never Miss a Celebration" (Figma `199:10`; `204:321`/`204:371`
 /// are its occasion-carousel states).
@@ -32,6 +38,19 @@ class _ImportantDatesScreenState extends ConsumerState<ImportantDatesScreen> {
   final _relation = TextEditingController();
   String? _occasionKey;
   DateTime? _date;
+  String? _dateError;
+
+  /// Bumped after every successful save so the date field's `Key` changes —
+  /// it owns its own typed text internally, so this is what makes it clear
+  /// itself back to empty along with [_date] rather than keep showing a
+  /// date that was just saved and reset underneath it.
+  int _dateFieldGeneration = 0;
+
+  /// Null when no banner is showing. Bumped on every successful save so a
+  /// fresh [SuccessBanner] (a new `Key`) mounts even if one is already
+  /// mid-dwell from a save moments earlier, replaying the animation instead
+  /// of being a no-op against the still-mounted one.
+  int? _bannerGeneration;
 
   @override
   void initState() {
@@ -54,19 +73,6 @@ class _ImportantDatesScreenState extends ConsumerState<ImportantDatesScreen> {
       _occasionKey != null &&
       _date != null;
 
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _date ?? now,
-      // Anniversaries live in the past; upcoming one-offs a few years out.
-      firstDate: DateTime(now.year - 120),
-      lastDate: DateTime(now.year + 5),
-      helpText: 'Occasion date',
-    );
-    if (picked != null) setState(() => _date = picked);
-  }
-
   Future<void> _saveDate() async {
     final date = _date!;
     final iso =
@@ -86,6 +92,9 @@ class _ImportantDatesScreenState extends ConsumerState<ImportantDatesScreen> {
         _relation.clear();
         _occasionKey = null;
         _date = null;
+        _dateError = null;
+        _dateFieldGeneration++;
+        _bannerGeneration = (_bannerGeneration ?? 0) + 1;
       });
     }
   }
@@ -123,18 +132,28 @@ class _ImportantDatesScreenState extends ConsumerState<ImportantDatesScreen> {
             const _OccasionCarousel(),
             const SizedBox(height: AppSpacing.xl),
             _AddDateCard(
+              key: ValueKey(_dateFieldGeneration),
               name: _name,
               relation: _relation,
               occasionKey: _occasionKey,
               occasions: occasions,
-              date: _date,
+              dateError: _dateError,
               busy: flow.busy,
               canSave: _formComplete && !flow.busy,
               onChanged: () => setState(() {}),
               onOccasion: (key) => setState(() => _occasionKey = key),
-              onPickDate: _pickDate,
+              onDateChanged: (date) => setState(() => _date = date),
+              onDateError: (error) => setState(() => _dateError = error),
               onSave: _saveDate,
             ),
+            if (_bannerGeneration != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              SuccessBanner(
+                key: ValueKey(_bannerGeneration),
+                message: 'Date added successfully!',
+                onDismissed: () => setState(() => _bannerGeneration = null),
+              ),
+            ],
             if (flow.savedDates.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.xl),
               for (final saved in flow.savedDates) ...[
@@ -423,33 +442,29 @@ class _AddDateCard extends StatelessWidget {
     required this.relation,
     required this.occasionKey,
     required this.occasions,
-    required this.date,
+    required this.dateError,
     required this.busy,
     required this.canSave,
     required this.onChanged,
     required this.onOccasion,
-    required this.onPickDate,
+    required this.onDateChanged,
+    required this.onDateError,
     required this.onSave,
+    super.key,
   });
 
   final TextEditingController name;
   final TextEditingController relation;
   final String? occasionKey;
   final List<TaxonomyOption> occasions;
-  final DateTime? date;
+  final String? dateError;
   final bool busy;
   final bool canSave;
   final VoidCallback onChanged;
   final ValueChanged<String?> onOccasion;
-  final VoidCallback onPickDate;
+  final ValueChanged<DateTime?> onDateChanged;
+  final ValueChanged<String?> onDateError;
   final VoidCallback onSave;
-
-  String get _dateDisplay {
-    final d = date;
-    if (d == null) return '';
-    return '${d.day.toString().padLeft(2, '0')}/'
-        '${d.month.toString().padLeft(2, '0')}/${d.year}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -466,20 +481,20 @@ class _AddDateCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: colors.primary,
-                ),
-                child: Icon(
-                  Icons.add,
-                  size: AppSizes.iconMd,
-                  color: colors.onPrimary,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
+              // Container(
+              //   width: 28,
+              //   height: 28,
+              //   decoration: BoxDecoration(
+              //     shape: BoxShape.circle,
+              //     color: colors.primary,
+              //   ),
+              //   child: Icon(
+              //     Icons.add,
+              //     size: AppSizes.iconMd,
+              //     color: colors.onPrimary,
+              //   ),
+              // ),
+              // const SizedBox(width: AppSpacing.md),
               Text(
                 'Add a new date',
                 style: context.text.headlineSmall?.copyWith(
@@ -536,35 +551,20 @@ class _AddDateCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           LabelledField(
             label: 'Occasion Date',
-            child: GestureDetector(
-              onTap: onPickDate,
-              child: Container(
-                height: AppSizes.inputHeight,
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  border: Border.all(color: colors.border),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _dateDisplay.isEmpty ? 'dd/mm/yyyy' : _dateDisplay,
-                        style: context.text.bodyLarge?.copyWith(
-                          color: _dateDisplay.isEmpty
-                              ? colors.textMuted
-                              : colors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Icon(
-                      Icons.calendar_today_outlined,
-                      size: AppSizes.iconMd,
-                      color: colors.textMuted,
-                    ),
-                  ],
-                ),
+            errorText: dateError,
+            child: DateEntryField(
+              firstDate: _earliestOccasion,
+              lastDate: _latestOccasion,
+              pickerHelpText: 'Occasion date',
+              onChanged: onDateChanged,
+              onValidationError: onDateError,
+              tooEarlyText: 'Please double-check the year',
+              tooLateText: "That's a bit too far ahead",
+              decoration: pillFieldDecoration(context),
+              calendarIcon: Icon(
+                Icons.calendar_today_outlined,
+                size: AppSizes.iconMd,
+                color: colors.textMuted,
               ),
             ),
           ),

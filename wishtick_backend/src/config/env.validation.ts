@@ -49,7 +49,7 @@ export const envValidationSchema = Joi.object({
   JWT_AUDIENCE: Joi.string().default('wishtick-app'),
 
   // OTP / password reset
-  OTP_LENGTH: Joi.number().min(4).max(8).default(6),
+  OTP_LENGTH: Joi.number().min(4).max(8).default(4),
   OTP_TTL_SECONDS: Joi.number().min(60).default(600),
   OTP_MAX_ATTEMPTS: Joi.number().min(1).default(5),
   OTP_RESEND_COOLDOWN_SECONDS: Joi.number().min(0).default(60),

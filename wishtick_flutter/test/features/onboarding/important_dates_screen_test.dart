@@ -16,7 +16,7 @@ import '../../helpers/onboarding_fakes.dart';
 /// carousel's auto-advance timer repeats forever by design, so a settle that
 /// waits for the tree to go quiet never returns. Every wait here is a bounded
 /// `pump(duration)` instead.
-Future<void> pumpImportantDates(WidgetTester tester) async {
+Future<FakeOnboardingRepository> pumpImportantDates(WidgetTester tester) async {
   tester.platformDispatcher.accessibilityFeaturesTestValue =
       const FakeAccessibilityFeatures();
   addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
@@ -28,13 +28,10 @@ Future<void> pumpImportantDates(WidgetTester tester) async {
     ..devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
+  final onboarding = FakeOnboardingRepository();
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [
-        onboardingRepositoryProvider.overrideWithValue(
-          FakeOnboardingRepository(),
-        ),
-      ],
+      overrides: [onboardingRepositoryProvider.overrideWithValue(onboarding)],
       child: MaterialApp(
         theme: AppTheme.light,
         home: const ImportantDatesScreen(),
@@ -45,6 +42,7 @@ Future<void> pumpImportantDates(WidgetTester tester) async {
   // (FakeOnboardingRepository resolves on a bare microtask, no real delay).
   await tester.pump();
   await tester.pump();
+  return onboarding;
 }
 
 /// Advances the fake clock in fixed small steps rather than one large jump.
@@ -267,24 +265,136 @@ void main() {
         }
       },
     );
+  });
 
-    testWidgets('Occasion Date is also pill-shaped and white-filled', (
+  group('occasion date entry', () {
+    testWidgets('tapping the box focuses it, not the calendar', (tester) async {
+      await pumpImportantDates(tester);
+
+      final dobFinder = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == 'dd/mm/yyyy',
+      );
+      await tester.ensureVisible(dobFinder);
+      await tester.pump();
+      await tester.tap(dobFinder);
+      await tester.pump();
+
+      expect(find.text('OK'), findsNothing);
+    });
+
+    testWidgets('only the calendar icon opens the picker', (tester) async {
+      await pumpImportantDates(tester);
+
+      final icon = find.byIcon(Icons.calendar_today_outlined);
+      await tester.ensureVisible(icon);
+      await tester.pump();
+      await tester.tap(icon);
+      await tester.pump();
+
+      expect(find.text('OK'), findsOneWidget);
+    });
+
+    testWidgets(
+      'saving a date clears the typed box back to empty, not just the '
+      'underlying value',
+      (tester) async {
+        final onboarding = await pumpImportantDates(tester);
+
+        Finder fieldWithHint(String hint) => find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.hintText == hint,
+        );
+
+        await tester.enterText(fieldWithHint('e.g. Ananya, Rahul'), 'Rahul');
+        await tester.enterText(
+          fieldWithHint('e.g. Mom, Best Friend'),
+          'Brother',
+        );
+        await tester.pump();
+
+        final dropdown = find.text('Birthday').last;
+        await tester.ensureVisible(dropdown);
+        await tester.pump();
+        await tester.tap(dropdown);
+        await tester.pump();
+        await tester.tap(find.text('Birthday').last);
+        await tester.pump();
+
+        final dobFinder = find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.hintText == 'dd/mm/yyyy',
+        );
+        await tester.ensureVisible(dobFinder);
+        await tester.pump();
+        await tester.enterText(dobFinder, '18082001');
+        await tester.pump();
+
+        final saveButton = find.text('Save Date');
+        await tester.ensureVisible(saveButton);
+        await tester.pump();
+        await tester.tap(saveButton);
+        await tester.pump();
+
+        expect(onboarding.dates.single.personName, 'Rahul');
+        expect(tester.widget<TextField>(dobFinder).controller?.text, isEmpty);
+      },
+    );
+  });
+
+  group('save confirmation', () {
+    Future<void> saveADate(WidgetTester tester) async {
+      Finder fieldWithHint(String hint) => find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == hint,
+      );
+
+      await tester.enterText(fieldWithHint('e.g. Ananya, Rahul'), 'Rahul');
+      await tester.enterText(fieldWithHint('e.g. Mom, Best Friend'), 'Brother');
+      await tester.pump();
+
+      final dropdown = find.text('Birthday').last;
+      await tester.ensureVisible(dropdown);
+      await tester.pump();
+      await tester.tap(dropdown);
+      await tester.pump();
+      await tester.tap(find.text('Birthday').last);
+      await tester.pump();
+
+      final dobFinder = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == 'dd/mm/yyyy',
+      );
+      await tester.ensureVisible(dobFinder);
+      await tester.pump();
+      await tester.enterText(dobFinder, '18082001');
+      await tester.pump();
+
+      final saveButton = find.text('Save Date');
+      await tester.ensureVisible(saveButton);
+      await tester.pump();
+      await tester.tap(saveButton);
+      await tester.pump();
+    }
+
+    testWidgets('a success banner appears once the date is saved', (
       tester,
     ) async {
       await pumpImportantDates(tester);
+      await saveADate(tester);
 
-      final colors = WishtickColors.light;
-      final container = tester.widget<Container>(
-        find
-            .ancestor(
-              of: find.text('dd/mm/yyyy'),
-              matching: find.byType(Container),
-            )
-            .first,
+      // Lets the entrance transition finish without invoking pumpAndSettle,
+      // which never returns here — the carousel's auto-advance timer repeats
+      // forever by design (see the file-level note above).
+      await stepClock(tester, AppDurations.normal);
+      expect(find.text('Date added successfully!'), findsOneWidget);
+    });
+
+    testWidgets('the banner is gone again after its dwell', (tester) async {
+      await pumpImportantDates(tester);
+      await saveADate(tester);
+
+      await stepClock(
+        tester,
+        AppDurations.normal + AppDurations.toastDwell + AppDurations.normal,
       );
-      final decoration = container.decoration! as BoxDecoration;
-      expect(decoration.color, colors.surface);
-      expect(decoration.borderRadius, BorderRadius.circular(AppRadius.pill));
+
+      expect(find.text('Date added successfully!'), findsNothing);
     });
   });
 }

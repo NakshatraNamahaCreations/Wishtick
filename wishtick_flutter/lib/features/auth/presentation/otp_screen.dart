@@ -15,9 +15,11 @@ import 'sign_in_controller.dart';
 /// Close button, serif headline, the number with an "edit" link, one box per
 /// digit, a resend countdown, then "Verify".
 ///
-/// The design draws four boxes but its own copy says "6-digit code", and the
-/// backend issues six digits (`OTP_LENGTH=6`) — so six boxes are rendered. See
-/// the note in sprints.md.
+/// The design draws four boxes but its own copy says "6-digit code" — a
+/// design-file inconsistency, not resolved here. The backend issues four
+/// digits (`OTP_LENGTH=4`, a deliberate product choice), so four boxes are
+/// rendered, matching the design's box count rather than its copy. See the
+/// note in sprints.md.
 class OtpScreen extends ConsumerStatefulWidget {
   const OtpScreen({super.key});
 
@@ -113,6 +115,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 number: state.phone?.nationalNumber ?? '',
                 onEdit: _onEdit,
               ),
+              if (state.devCode != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Center(child: _DevCodeBanner(code: state.devCode!)),
+              ],
               const SizedBox(height: AppSpacing.xxl),
               _CodeBoxes(
                 length: _length,
@@ -172,6 +178,49 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shows the code straight from the API response — present only outside
+/// production (see `AuthService.requestOtpLogin` on the backend), so there is
+/// no environment check here: if the field is set, it is safe to show.
+class _DevCodeBanner extends StatelessWidget {
+  const _DevCodeBanner({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colors.warningSubtle,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.bug_report_outlined,
+            size: AppSizes.iconSm,
+            color: colors.onWarningSubtle,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            'Dev OTP: $code',
+            style: context.text.bodySmall?.copyWith(
+              color: colors.onWarningSubtle,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

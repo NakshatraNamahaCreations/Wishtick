@@ -110,7 +110,9 @@ export class AuthController {
   })
   @ApiResponseDoc({ status: 202, description: 'Code sent' })
   @ApiResponseDoc({ status: 429, description: 'OTP_COOLDOWN' })
-  requestOtpLogin(@Body() dto: RequestOtpLoginDto): Promise<{ expiresInSeconds: number }> {
+  requestOtpLogin(
+    @Body() dto: RequestOtpLoginDto,
+  ): Promise<{ expiresInSeconds: number; devCode?: string }> {
     return this.auth.requestOtpLogin(dto.phone);
   }
 

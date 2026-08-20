@@ -49,10 +49,12 @@ class DevAuthRepository implements AuthRepository {
   );
 
   @override
-  Future<Duration> requestSignInCode(String phone) async {
+  Future<OtpRequestResult> requestSignInCode(String phone) async {
     await Future<void>.delayed(_latency);
     await _prefs.setString(DevKeys.phone, phone);
-    return AuthRepository.otpValidity;
+    // No devCode: any correctly-sized code verifies here (see the class doc),
+    // so there is no one true code to show.
+    return const OtpRequestResult(validity: AuthRepository.otpValidity);
   }
 
   @override

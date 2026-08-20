@@ -159,7 +159,7 @@ export class AuthService implements OnModuleInit {
    * an account exists: the same call opens both the sign-up and the sign-in
    * door, so the response reveals nothing either way.
    */
-  async requestOtpLogin(phone: string): Promise<{ expiresInSeconds: number }> {
+  async requestOtpLogin(phone: string): Promise<{ expiresInSeconds: number; devCode?: string }> {
     const normalized = UsersService.normalizePhone(phone);
 
     // Refuse before spending an SMS on an account that could not sign in anyway.
@@ -169,7 +169,12 @@ export class AuthService implements OnModuleInit {
     const code = await this.otp.issue(OtpPurpose.SIGN_IN, normalized);
     await this.authNotifications.sendPhoneVerification(normalized, code);
 
-    return { expiresInSeconds: this.config.get('otp.ttlSeconds', { infer: true }) };
+    return {
+      expiresInSeconds: this.config.get('otp.ttlSeconds', { infer: true }),
+      // Lets the app show the code inline instead of reading it off the SMS
+      // adapter's console log — never sent once real SMS delivery is live.
+      ...(this.config.get('app.isProduction', { infer: true }) ? {} : { devCode: code }),
+    };
   }
 
   /**

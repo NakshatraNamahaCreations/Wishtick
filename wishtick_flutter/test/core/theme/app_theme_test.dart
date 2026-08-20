@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wishtick_flutter/core/theme/app_colors.dart';
+import 'package:wishtick_flutter/core/theme/app_dimens.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/core/theme/theme_extensions.dart';
 
@@ -41,6 +42,16 @@ void main() {
         expect(theme.colorScheme.primary, colors.primary);
         expect(theme.colorScheme.surface, colors.surface);
         expect(theme.colorScheme.error, colors.danger);
+      }
+    });
+
+    test('the primary button is a rounded rect, not a full pill — sampled '
+        'off the exports at ~8-12px against a ~53px button height', () {
+      for (final theme in [AppTheme.light, AppTheme.dark]) {
+        final shape =
+            theme.elevatedButtonTheme.style!.shape!.resolve({})!
+                as RoundedRectangleBorder;
+        expect(shape.borderRadius, BorderRadius.circular(AppRadius.md));
       }
     });
   });

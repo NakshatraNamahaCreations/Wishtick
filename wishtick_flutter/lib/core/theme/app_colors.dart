@@ -27,6 +27,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.surfaceAlt,
     required this.optionFill,
     required this.chipFill,
+    required this.suggestionChipFill,
     required this.payment,
     required this.paymentSubtle,
     required this.surfaceSunken,
@@ -53,6 +54,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.celebrationSubtle,
     required this.noteSubtle,
     required this.onNoteSubtle,
+    required this.splashBackground,
+    required this.toggleTrack,
     required this.navBackground,
     required this.navSelected,
     required this.navUnselected,
@@ -109,6 +112,11 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   /// Sits on the page rather than on a card, so it is deeper than
   /// [optionFill], which would vanish against beige.
   final Color chipFill;
+
+  /// Fill of the save-to-wishlist screen's "Quick Suggestions" note chips — a
+  /// translucent wash, unlike [chipFill]'s solid tint. See
+  /// [AppPalette.suggestionChipFill].
+  final Color suggestionChipFill;
 
   /// The money-handling accent: UPI panels, "collected in your account",
   /// settle-up amounts. Text and icons.
@@ -179,6 +187,18 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   /// Text/icon drawn on [noteSubtle].
   final Color onNoteSubtle;
 
+  /// The splash screen's backdrop — identical in light and dark, on purpose.
+  /// It only ever shows for the instant before `splash_screen.gif`'s first
+  /// frame paints, so it just has to match the GIF's own darkest tone rather
+  /// than follow the active theme.
+  final Color splashBackground;
+
+  /// Fill for a segmented-control track (e.g. the UK/US/EU shoe-size
+  /// toggle) — a step darker than [background] so the track itself reads,
+  /// with the selected pill standing off that in turn. Sampled from the
+  /// Figma export (`51:42`) at exactly [AppPalette.ivoryDeep].
+  final Color toggleTrack;
+
   final Color navBackground;
   final Color navSelected;
   final Color navUnselected;
@@ -212,6 +232,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     surfaceAlt: AppPalette.violetPale,
     optionFill: AppPalette.lavenderTile,
     chipFill: AppPalette.lavenderChip,
+    suggestionChipFill: AppPalette.suggestionChipFill,
     payment: AppPalette.payTeal,
     paymentSubtle: AppPalette.payMint,
     surfaceSunken: AppPalette.ivory,
@@ -239,6 +260,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     celebrationSubtle: AppPalette.goldSoft,
     noteSubtle: AppPalette.noteFillSubtle,
     onNoteSubtle: AppPalette.noteInk,
+    splashBackground: AppPalette.plumNight,
+    toggleTrack: AppPalette.ivoryDeep,
     navBackground: AppPalette.white,
     navSelected: AppPalette.plumMuted,
     navUnselected: AppPalette.textMuted,
@@ -273,6 +296,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     // No separate lavender in dark — a raised grey already reads as tappable.
     optionFill: AppPalette.darkSurfaceAlt,
     chipFill: AppPalette.darkSurfaceAlt,
+    // No translucent-plum equivalent on the dark ramp; the general chip fill
+    // already reads as tappable there.
+    suggestionChipFill: AppPalette.darkSurfaceAlt,
     payment: AppPalette.darkPayTeal,
     paymentSubtle: AppPalette.darkPaySubtle,
     surfaceSunken: AppPalette.darkSurfaceSunken,
@@ -301,6 +327,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     celebrationSubtle: AppPalette.darkGoldSubtle,
     noteSubtle: AppPalette.darkGoldSubtle,
     onNoteSubtle: AppPalette.amberSoft,
+    splashBackground: AppPalette.plumNight,
+    toggleTrack: AppPalette.darkSurfaceAlt,
     navBackground: AppPalette.darkSurface,
     navSelected: AppPalette.pink,
     navUnselected: AppPalette.darkTextMuted,
@@ -325,6 +353,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color? surfaceAlt,
     Color? optionFill,
     Color? chipFill,
+    Color? suggestionChipFill,
     Color? payment,
     Color? paymentSubtle,
     Color? surfaceSunken,
@@ -351,6 +380,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color? celebrationSubtle,
     Color? noteSubtle,
     Color? onNoteSubtle,
+    Color? splashBackground,
+    Color? toggleTrack,
     Color? navBackground,
     Color? navSelected,
     Color? navUnselected,
@@ -373,6 +404,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       surfaceAlt: surfaceAlt ?? this.surfaceAlt,
       optionFill: optionFill ?? this.optionFill,
       chipFill: chipFill ?? this.chipFill,
+      suggestionChipFill: suggestionChipFill ?? this.suggestionChipFill,
       payment: payment ?? this.payment,
       paymentSubtle: paymentSubtle ?? this.paymentSubtle,
       surfaceSunken: surfaceSunken ?? this.surfaceSunken,
@@ -399,6 +431,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       celebrationSubtle: celebrationSubtle ?? this.celebrationSubtle,
       noteSubtle: noteSubtle ?? this.noteSubtle,
       onNoteSubtle: onNoteSubtle ?? this.onNoteSubtle,
+      splashBackground: splashBackground ?? this.splashBackground,
+      toggleTrack: toggleTrack ?? this.toggleTrack,
       navBackground: navBackground ?? this.navBackground,
       navSelected: navSelected ?? this.navSelected,
       navUnselected: navUnselected ?? this.navUnselected,
@@ -427,6 +461,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       surfaceAlt: c(surfaceAlt, other.surfaceAlt),
       optionFill: c(optionFill, other.optionFill),
       chipFill: c(chipFill, other.chipFill),
+      suggestionChipFill: c(suggestionChipFill, other.suggestionChipFill),
       payment: c(payment, other.payment),
       paymentSubtle: c(paymentSubtle, other.paymentSubtle),
       surfaceSunken: c(surfaceSunken, other.surfaceSunken),
@@ -453,6 +488,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       celebrationSubtle: c(celebrationSubtle, other.celebrationSubtle),
       noteSubtle: c(noteSubtle, other.noteSubtle),
       onNoteSubtle: c(onNoteSubtle, other.onNoteSubtle),
+      splashBackground: c(splashBackground, other.splashBackground),
+      toggleTrack: c(toggleTrack, other.toggleTrack),
       navBackground: c(navBackground, other.navBackground),
       navSelected: c(navSelected, other.navSelected),
       navUnselected: c(navUnselected, other.navUnselected),

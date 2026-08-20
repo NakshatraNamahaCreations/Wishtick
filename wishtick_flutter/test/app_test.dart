@@ -70,10 +70,10 @@ void main() {
     return auth;
   }
 
-  /// Runs the splash animation out and lets the redirect settle.
+  /// Runs the splash's hold-time out and lets the redirect settle.
   Future<void> passSplash(WidgetTester tester) async {
     await tester.pump();
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
   }
 
@@ -82,9 +82,8 @@ void main() {
       await pumpApp(tester);
 
       expect(find.byType(SplashScreen), findsOneWidget);
-      expect(find.text('Wishtick'), findsOneWidget);
-      expect(find.text('Gifting, made together'), findsOneWidget);
-      expect(find.text('Setting up your celebrations'), findsOneWidget);
+      final image = tester.widget<Image>(find.byType(Image));
+      expect((image.image as AssetImage).assetName, SplashScreen.asset);
     });
 
     testWidgets('stays on the splash until the session resolves', (

@@ -4,12 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wishtick_flutter/app.dart';
+import 'package:wishtick_flutter/core/legal/legal_document_screen.dart';
 import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/core/network/token_storage.dart';
 import 'package:wishtick_flutter/core/theme/app_colors.dart';
 import 'package:wishtick_flutter/core/theme/app_dimens.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/core/theme/theme_controller.dart';
+import 'package:wishtick_flutter/core/widgets/circle_back_button.dart';
 import 'package:wishtick_flutter/core/widgets/wishtick_bottom_nav.dart';
 import 'package:wishtick_flutter/features/auth/data/auth_repository.dart';
 import 'package:wishtick_flutter/features/auth/presentation/mobile_number_screen.dart';
@@ -65,7 +67,7 @@ void main() {
     );
     // Past the splash and onto the welcome carousel.
     await tester.pump();
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
     return auth;
   }
@@ -422,6 +424,29 @@ void main() {
       expect(tester.widget<ElevatedButton>(button).onPressed, isNotNull);
     });
 
+    /// The documents open in the app, not the browser: someone deciding
+    /// whether to agree should not be thrown out of the screen they are
+    /// agreeing on, and should see the terms this build actually ships with.
+    testWidgets('the consent links open the documents in the app', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await reachMobileScreen(tester);
+
+      await tester.tapOnText(find.textRange.ofSubstring('Terms & Conditions*'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LegalDocumentScreen), findsOneWidget);
+      expect(find.text('40 sections'), findsOneWidget);
+
+      await tester.tap(find.byType(CircleBackButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(MobileNumberScreen), findsOneWidget);
+
+      await tester.tapOnText(find.textRange.ofSubstring('Privacy policy*'));
+      await tester.pumpAndSettle();
+      expect(find.text('41 sections'), findsOneWidget);
+    });
+
     testWidgets('requests a code and opens the OTP screen', (tester) async {
       final auth = await pumpApp(tester);
       await reachMobileScreen(tester);
@@ -458,8 +483,12 @@ void main() {
   });
 
   group('OTP screen', () {
-    Future<FakeAuthRepository> reachOtp(WidgetTester tester) async {
+    Future<FakeAuthRepository> reachOtp(
+      WidgetTester tester, {
+      String? devCode,
+    }) async {
       final auth = await pumpApp(tester);
+      auth.nextDevCode = devCode;
       await reachMobileScreen(tester);
       await enterNumber(tester, '9876543210');
       await acceptTerms(tester);
@@ -477,14 +506,13 @@ void main() {
       );
     });
 
-    /// Pins the constant to the server's own default rather than deriving from
-    /// it, which is the one thing the tests below cannot do.
-    ///
-    /// It read 4 while `OTP_LENGTH` defaulted to 6, and every other assertion
-    /// here is written in terms of `otpLength` — so they all passed against a
-    /// screen that could never accept a real code. Only a literal catches it.
+    /// Pins the constant to the backend's actual `OTP_LENGTH=4` rather than
+    /// deriving from it, which is the one thing the tests below cannot do —
+    /// every other assertion here is written in terms of `otpLength`, so a
+    /// drift between the two would pass them all against a screen that could
+    /// never accept a real code. Only a literal catches it.
     test('the code length matches the backend contract', () {
-      expect(AuthRepository.otpLength, 6);
+      expect(AuthRepository.otpLength, 4);
     });
 
     testWidgets('renders one box per digit of the backend code length', (
@@ -505,6 +533,20 @@ void main() {
         ),
         findsNWidgets(AuthRepository.otpLength),
       );
+    });
+
+    testWidgets('shows the code inline when the API sent one (dev/staging '
+        'only)', (tester) async {
+      await reachOtp(tester, devCode: '482913');
+
+      expect(find.text('Dev OTP: 482913'), findsOneWidget);
+    });
+
+    testWidgets('shows nothing extra when the API sent no code — the '
+        'production case', (tester) async {
+      await reachOtp(tester);
+
+      expect(find.textContaining('Dev OTP'), findsNothing);
     });
 
     testWidgets('shows the number and a resend countdown', (tester) async {

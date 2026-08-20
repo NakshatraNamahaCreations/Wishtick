@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
+import '../../../core/widgets/date_entry_field.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import 'create_event_controller.dart';
 
@@ -30,6 +30,10 @@ class _CreateEventDetailsScreenState
   late final TextEditingController _title;
   late final TextEditingController _venue;
   late final TextEditingController _description;
+
+  /// Set only while the manual-entry Event Date box holds a complete but
+  /// impossible or out-of-range date — see [DateEntryField.onValidationError].
+  String? _dateError;
 
   @override
   void initState() {
@@ -58,19 +62,13 @@ class _CreateEventDetailsScreenState
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final current = ref.read(createEventProvider).date;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? now.add(const Duration(days: 1)),
-      // An event in the past cannot be invited to, and the server refuses one
-      // — so the picker refuses it first.
-      firstDate: now,
-      lastDate: DateTime(now.year + 5),
-    );
-    if (picked == null || !mounted) return;
-    ref.read(createEventProvider.notifier).setDate(picked);
+  void _onDateChanged(DateTime? value) {
+    final notifier = ref.read(createEventProvider.notifier);
+    if (value == null) {
+      notifier.clearDate();
+    } else {
+      notifier.setDate(value);
+    }
   }
 
   Future<void> _pickTime() async {
@@ -144,14 +142,24 @@ class _CreateEventDetailsScreenState
           ),
           const SizedBox(height: AppSpacing.xl),
 
-          _PickerField(
-            label: 'Event Date *',
-            value: state.date == null
-                ? null
-                : DateFormat('d - MMM - yyyy').format(state.date!),
-            hint: '19 - Jul - 2026',
-            icon: Icons.calendar_today_outlined,
-            onTap: _pickDate,
+          DateEntryField(
+            initialDate: state.date,
+            firstDate: DateTime.now(),
+            lastDate: DateTime(DateTime.now().year + 5),
+            pickerInitialDate: DateTime.now().add(const Duration(days: 1)),
+            onChanged: _onDateChanged,
+            onValidationError: (error) => setState(() => _dateError = error),
+            tooEarlyText: 'That date has already passed',
+            tooLateText: "That's a bit too far ahead",
+            decoration: InputDecoration(
+              labelText: 'Event Date *',
+              errorText: _dateError,
+            ),
+            calendarIcon: Icon(
+              Icons.calendar_today_outlined,
+              size: AppSizes.iconMd,
+              color: colors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.xl),
 

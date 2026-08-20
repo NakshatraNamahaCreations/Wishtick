@@ -260,7 +260,7 @@ class _SystemToggle extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xxs),
       decoration: BoxDecoration(
-        color: colors.surface,
+        color: colors.toggleTrack,
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       child: Row(

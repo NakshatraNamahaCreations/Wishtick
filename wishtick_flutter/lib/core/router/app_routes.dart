@@ -183,7 +183,15 @@ abstract final class AppRoutes {
   static const addressBook = '/profile/addresses';
   static const helpCentre = '/profile/help';
   static const aboutUs = '/profile/about';
-  static const privacyPolicy = '/profile/privacy';
+
+  // Legal. Root-level rather than under `/profile`, because the sign-in screen
+  // links to them too — before there is a profile to be under.
+
+  /// Everything under here is readable with or without a session; the router's
+  /// redirect lets the whole prefix through.
+  static const legal = '/legal';
+  static const terms = '$legal/terms';
+  static const privacyPolicy = '$legal/privacy';
 
   // Notifications
   static const notifications = '/notifications';

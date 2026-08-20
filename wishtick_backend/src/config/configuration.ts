@@ -287,7 +287,7 @@ export const configuration = (): AppConfig => {
       workerConcurrency: toInt(process.env.ANALYTICS_WORKER_CONCURRENCY, 2),
     },
     otp: {
-      length: toInt(process.env.OTP_LENGTH, 6),
+      length: toInt(process.env.OTP_LENGTH, 4),
       ttlSeconds: toInt(process.env.OTP_TTL_SECONDS, 600),
       maxAttempts: toInt(process.env.OTP_MAX_ATTEMPTS, 5),
       resendCooldownSeconds: toInt(process.env.OTP_RESEND_COOLDOWN_SECONDS, 60),

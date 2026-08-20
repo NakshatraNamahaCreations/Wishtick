@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "adb reverse backend port",
+      "type": "shell",
+      "command": "adb",
+      // Forwards the physical device's own localhost:3000 to this machine's
+      // backend over USB — no LAN IP involved, so it keeps working whichever
+      // Wi-Fi network (or none) the phone and this machine are on. Only
+      // works with exactly one device attached; add "-s <serial>" here if
+      // you ever debug with more than one plugged in at once.
+      "args": ["reverse", "tcp:3000", "tcp:3000"],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

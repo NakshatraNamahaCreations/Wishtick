@@ -49,7 +49,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
     return onboarding;
   }
@@ -151,7 +151,9 @@ void main() {
     await tester.pumpAndSettle();
     await tapVisible(tester, find.text('Birthday').last);
     await tapVisible(tester, find.text('Birthday').last);
-    await tapVisible(tester, find.text('dd/mm/yyyy'));
+    // Only the calendar icon opens the picker now — the box itself is a
+    // real TextField for manual entry.
+    await tapVisible(tester, find.byIcon(Icons.calendar_today_outlined));
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     await tapVisible(tester, find.text('Save Date'));

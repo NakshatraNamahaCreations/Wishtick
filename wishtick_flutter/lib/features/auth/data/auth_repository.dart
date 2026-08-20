@@ -26,6 +26,16 @@ class AuthResult {
   );
 }
 
+/// Result of requesting a sign-in code — how long it stays valid, plus the
+/// code itself when the backend is willing to say it out loud (never in
+/// production; see `AuthService.requestOtpLogin`).
+class OtpRequestResult {
+  const OtpRequestResult({required this.validity, this.devCode});
+
+  final Duration validity;
+  final String? devCode;
+}
+
 /// Talks to the backend's `auth` module.
 ///
 /// Endpoint shapes come from `wishtick_backend/src/modules/auth`:
@@ -44,29 +54,31 @@ class AuthRepository {
 
   /// OTP parameters, mirrored from the backend config so the UI can show an
   /// accurate resend countdown and code length without guessing.
-  /// Six, matching `OTP_LENGTH` (default 6) in the backend's configuration.
   ///
-  /// This read 4 until the device walk caught it: the server sent a six-digit
-  /// code, the screen drew four boxes and auto-submitted the first four, and
-  /// OTP sign-in could not succeed at all. Everything on that screen — the box
-  /// count, the "n-digit" line, the auto-submit and the Verify button's enabled
-  /// state — is derived from this constant, so it is the only place to change.
-  static const otpLength = 6;
+  /// Four, matching `OTP_LENGTH=4` in the backend's `.env` — a deliberate
+  /// product choice, not the backend's own default. If it ever changes there,
+  /// it has to change here too: everything on the code screen — the box
+  /// count, the "n-digit" line, the auto-submit and the Verify button's
+  /// enabled state — is derived from this one constant.
+  static const otpLength = 4;
   static const otpResendCooldown = Duration(seconds: 60);
   static const otpValidity = Duration(minutes: 10);
   static const otpMaxAttempts = 5;
 
   /// Sends a sign-in code to [phone], whether or not it is registered.
-  ///
-  /// Returns how long the code stays valid, so the UI can show an accurate
-  /// expiry rather than assuming.
-  Future<Duration> requestSignInCode(String phone) async {
+  Future<OtpRequestResult> requestSignInCode(String phone) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/auth/otp/request',
       body: {'phone': phone},
     );
     final seconds = json['expiresInSeconds'] as int?;
-    return seconds == null ? otpValidity : Duration(seconds: seconds);
+    return OtpRequestResult(
+      validity: seconds == null ? otpValidity : Duration(seconds: seconds),
+      // Only ever present outside production — see AuthService.requestOtpLogin
+      // on the backend. Lets the sign-in screen show the code inline instead
+      // of it only reaching a console-log SMS adapter nobody on a phone can see.
+      devCode: json['devCode'] as String?,
+    );
   }
 
   /// Exchanges a sign-in code for a session, creating the account if the number

@@ -99,13 +99,22 @@ abstract final class AppPalette {
   /// The warm end of the same gradient.
   static const bronze = Color(0xFFB98B53);
 
-  /// The bottom stop of the splash backdrop (`143:356`), sampled from the
-  /// export on 2026-08-11. The top stop is [plumMuted], which the gradient
-  /// headline already uses.
+  /// The splash screen's backdrop, matching the darkest tone in
+  /// `splash_screen.gif`.
   ///
   /// Deliberately not [plumInk]: that is a violet-leaning ink (#23074A), and
-  /// this wash stays on the warm plum hue all the way down to near-black.
+  /// this stays on the warm plum hue the GIF itself uses.
   static const plumNight = Color(0xFF160516);
+
+  /// The Discover "CURATED GIFTS FOR EVERY OCCASION" banner's diagonal wash
+  /// (`280:131`) — a warmer, wine-toned plum distinct from [plum]/[plumDeep],
+  /// which the banner does not use.
+  static const wine = Color(0xFF671E41);
+  static const wineInk = Color(0xFF320D20);
+
+  /// Dark-theme stop, one step brighter than [wine] so the banner still
+  /// separates from the darker dark-mode page background.
+  static const wineSoft = Color(0xFF8A2F5B);
 
   /// Selected-state washes and lavender card fills.
   static const plumPale = Color(0xFFF3F0F4);
@@ -152,6 +161,11 @@ abstract final class AppPalette {
   /// `299:1658`. Deeper than [lavenderTile] because these sit on the beige
   /// page rather than on a white card, and the lighter tint disappears there.
   static const lavenderChip = Color(0xFFE2D9EA);
+
+  /// Fill of the "Quick Suggestions" note chips on the save-to-wishlist
+  /// screen (`280:584`) — #E9DBED at 92% opacity (0.92 × 255 ≈ 0xEB), a
+  /// translucent wash rather than [lavenderChip]'s solid tint.
+  static const suggestionChipFill = Color(0xEBE9DBED);
 
   /// The money-handling accent. Sampled from the "Receive Contributions via"
   /// panel (`299:1658`) and the settle-up UPI panels (`4092:174`, `4093:444`,

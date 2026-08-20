@@ -11,6 +11,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
+import '../../../core/widgets/date_entry_field.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../onboarding/domain/profile_draft.dart';
 import '../../onboarding/presentation/widgets/gender_selector.dart';
@@ -34,6 +35,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   TextEditingController? _name;
   TextEditingController? _email;
 
+  /// Set only while the manual-entry Date of Birth box holds a complete but
+  /// impossible or out-of-range date — see [DateEntryField.onValidationError].
+  String? _dobError;
+
   @override
   void dispose() {
     _name?.dispose();
@@ -48,20 +53,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _email ??= TextEditingController(text: state.email);
   }
 
-  Future<void> _pickDateOfBirth() async {
-    final now = DateTime.now();
-    final current = ref.read(editProfileProvider).dateOfBirth;
+  /// Nobody alive is older than this, and a birthday cannot be in the
+  /// future — matches [DateEntryField.firstDate]/`lastDate` below.
+  static DateTime get _earliestDob => DateTime(DateTime.now().year - 120);
 
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime(now.year - 25, now.month, now.day),
-      // Nobody alive is older than this, and a birthday cannot be in the future.
-      firstDate: DateTime(now.year - 120),
-      lastDate: now,
-      helpText: 'Date of birth',
-    );
-    if (picked != null) {
-      ref.read(editProfileProvider.notifier).setDateOfBirth(picked);
+  void _onDobChanged(DateTime? value) {
+    final notifier = ref.read(editProfileProvider.notifier);
+    if (value == null) {
+      notifier.clearDateOfBirth();
+    } else {
+      notifier.setDateOfBirth(value);
     }
   }
 
@@ -174,9 +175,23 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 LabelledField(
                   label: 'Date of Birth',
                   required: true,
-                  child: _DateField(
-                    value: state.dateOfBirthDisplay,
-                    onTap: () => unawaited(_pickDateOfBirth()),
+                  errorText: _dobError,
+                  child: DateEntryField(
+                    initialDate: state.dateOfBirth,
+                    firstDate: _earliestDob,
+                    lastDate: DateTime.now(),
+                    pickerInitialDate: DateTime(DateTime.now().year - 25),
+                    pickerHelpText: 'Date of birth',
+                    onChanged: _onDobChanged,
+                    onValidationError: (error) =>
+                        setState(() => _dobError = error),
+                    tooEarlyText: 'Please double-check the year',
+                    tooLateText: "That's still in the future",
+                    calendarIcon: Icon(
+                      Icons.calendar_today_outlined,
+                      size: AppSizes.iconMd,
+                      color: colors.primary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
@@ -375,37 +390,6 @@ class _SelectAvatarCard extends StatelessWidget {
               color: colors.primary,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Looks like a field, opens the date picker.
-class _DateField extends StatelessWidget {
-  const _DateField({required this.value, required this.onTap});
-
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: IgnorePointer(
-        child: TextField(
-          controller: TextEditingController(text: value),
-          decoration: InputDecoration(
-            hintText: '0/01/2000',
-            suffixIcon: Icon(
-              Icons.calendar_today_outlined,
-              size: AppSizes.iconMd,
-              color: colors.primary,
-            ),
-          ),
         ),
       ),
     );

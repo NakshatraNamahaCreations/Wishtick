@@ -64,6 +64,29 @@ void main() {
       expect(stateOf(t.container).busy, isFalse);
     });
 
+    test('carries the devCode the API returned into state, for the code '
+        'screen to show', () async {
+      final t = build();
+      t.auth.nextDevCode = '482913';
+      controllerOf(t.container).setPhone(PhoneNumber.parse(validPhone));
+      controllerOf(t.container).setAcceptedTerms(true);
+
+      await controllerOf(t.container).requestCode();
+
+      expect(stateOf(t.container).devCode, '482913');
+    });
+
+    test('leaves devCode null when the API does not send one — the '
+        'production case', () async {
+      final t = build();
+      controllerOf(t.container).setPhone(PhoneNumber.parse(validPhone));
+      controllerOf(t.container).setAcceptedTerms(true);
+
+      await controllerOf(t.container).requestCode();
+
+      expect(stateOf(t.container).devCode, isNull);
+    });
+
     test('does nothing for an incomplete number', () async {
       final t = build();
       controllerOf(t.container).setPhone(PhoneNumber.parse('98765'));

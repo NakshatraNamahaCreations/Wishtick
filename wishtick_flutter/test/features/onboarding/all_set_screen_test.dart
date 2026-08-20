@@ -55,4 +55,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.state, ConfettiControllerState.stopped);
   });
+
+  group('layout (Figma 199:145)', () {
+    Future<void> pumpFixedSize(WidgetTester tester) async {
+      tester.view
+        ..physicalSize = const Size(393, 852)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      // Reduced motion: the confetti burst itself is not under test here,
+      // and pumpAndSettle needs the tree to actually go quiet.
+      await pump(tester, reduce: true);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('no explicit gap sits between the mark and the headline — the '
+        "asset's own transparent margin is the gap", (tester) async {
+      await pumpFixedSize(tester);
+
+      final markBottom = tester.getBottomLeft(find.byType(Image)).dy;
+      final headlineTop = tester.getTopLeft(find.text("You're all set!")).dy;
+
+      expect(headlineTop - markBottom, closeTo(0, 1));
+    });
+
+    testWidgets('the button sits 20px in from each edge', (tester) async {
+      await pumpFixedSize(tester);
+
+      final button = tester.getRect(find.byType(ElevatedButton));
+      expect(button.left, closeTo(20, 1));
+      expect(393 - button.right, closeTo(20, 1));
+    });
+
+    testWidgets('the button clears the bottom edge by 40px', (tester) async {
+      await pumpFixedSize(tester);
+
+      final button = tester.getRect(find.byType(ElevatedButton));
+      expect(852 - button.bottom, closeTo(40, 1));
+    });
+  });
 }

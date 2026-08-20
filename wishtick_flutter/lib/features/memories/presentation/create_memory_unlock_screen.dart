@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
+import '../../../core/widgets/date_entry_field.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import 'create_memory_controller.dart';
 import 'memory_providers.dart';
@@ -25,19 +25,17 @@ class CreateMemoryUnlockScreen extends ConsumerStatefulWidget {
 
 class _CreateMemoryUnlockScreenState
     extends ConsumerState<CreateMemoryUnlockScreen> {
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final current = ref.read(createMemoryProvider).unlockDate;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? now.add(const Duration(days: 1)),
-      // An instant in the past is not a surprise, and the server refuses one —
-      // so the picker refuses it first.
-      firstDate: now,
-      lastDate: DateTime(now.year + 5),
-    );
-    if (picked == null || !mounted) return;
-    ref.read(createMemoryProvider.notifier).setUnlockDate(picked);
+  /// Set only while the manual-entry Unlock Date box holds a complete but
+  /// impossible or out-of-range date — see [DateEntryField.onValidationError].
+  String? _dateError;
+
+  void _onDateChanged(DateTime? value) {
+    final notifier = ref.read(createMemoryProvider.notifier);
+    if (value == null) {
+      notifier.clearUnlockDate();
+    } else {
+      notifier.setUnlockDate(value);
+    }
   }
 
   Future<void> _pickTime() async {
@@ -92,14 +90,24 @@ class _CreateMemoryUnlockScreenState
           ),
           const SizedBox(height: AppSpacing.section),
 
-          _PickerField(
-            label: 'Unlock Date *',
-            value: state.unlockDate == null
-                ? null
-                : DateFormat('d - MMM - yyyy').format(state.unlockDate!),
-            hint: '19 - Jul - 2026',
-            icon: Icons.calendar_today_outlined,
-            onTap: _pickDate,
+          DateEntryField(
+            initialDate: state.unlockDate,
+            firstDate: DateTime.now(),
+            lastDate: DateTime(DateTime.now().year + 5),
+            pickerInitialDate: DateTime.now().add(const Duration(days: 1)),
+            onChanged: _onDateChanged,
+            onValidationError: (error) => setState(() => _dateError = error),
+            tooEarlyText: 'That date has already passed',
+            tooLateText: "That's a bit too far ahead",
+            decoration: InputDecoration(
+              labelText: 'Unlock Date *',
+              errorText: _dateError,
+            ),
+            calendarIcon: Icon(
+              Icons.calendar_today_outlined,
+              size: AppSizes.iconMd,
+              color: colors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.xl),
           _PickerField(

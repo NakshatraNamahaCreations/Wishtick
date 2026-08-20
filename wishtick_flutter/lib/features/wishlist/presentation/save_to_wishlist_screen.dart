@@ -18,33 +18,58 @@ import 'wishlist_detail_controller.dart';
 const _kNoteSuggestions = [
   'She loves this',
   'Perfect for her',
-  'Best gift for her birthday',
+  'Best Gift for her birthday',
 ];
 
 /// Real taxonomy keys standing in for the mock's 8 occasion tiles — two
 /// (Rakhi, Custom Events) have no exact taxonomy match, so the closest real
 /// occasion (Festival, Special Moments) takes its place rather than a made-up
-/// key the backend would reject.
+/// key the backend would reject. Photos come from the same
+/// `Celebrations_images` set Home's occasion grid uses (Figma `280:584`);
+/// `special_moments` reuses `Best_Wishes.png` — this frame's own "Custom
+/// Events" tile is pixel-identical to it — and `just_because` gets its own
+/// crop since this frame's "Best Wishes" tile is a different photo than
+/// Home's.
 const _kOccasions = [
-  (key: 'birthday', label: 'Birthday', icon: Icons.cake_outlined),
-  (key: 'anniversary', label: 'Anniversary', icon: Icons.favorite_outline),
-  (key: 'wedding', label: 'Wedding', icon: Icons.church_outlined),
-  (key: 'housewarming', label: 'Housewarming', icon: Icons.house_outlined),
+  (
+    key: 'birthday',
+    label: 'Birthday',
+    image: 'assets/images/Celebrations_images/Birthday.png',
+  ),
+  (
+    key: 'anniversary',
+    label: 'Anniversary',
+    image: 'assets/images/Celebrations_images/Anniversary.png',
+  ),
+  (
+    key: 'wedding',
+    label: 'Wedding',
+    image: 'assets/images/Celebrations_images/Wedding.png',
+  ),
+  (
+    key: 'housewarming',
+    label: 'Housewarming',
+    image: 'assets/images/Celebrations_images/House_Warming.png',
+  ),
   (
     key: 'baby_shower',
     label: 'Baby Shower',
-    icon: Icons.child_friendly_outlined,
+    image: 'assets/images/Celebrations_images/Mom_to_Be.png',
   ),
   (
     key: 'special_moments',
     label: 'Special Moments',
-    icon: Icons.auto_awesome_outlined,
+    image: 'assets/images/Celebrations_images/Best_Wishes.png',
   ),
-  (key: 'festival', label: 'Festival', icon: Icons.celebration_outlined),
+  (
+    key: 'festival',
+    label: 'Festival',
+    image: 'assets/images/Celebrations_images/Rakhi.png',
+  ),
   (
     key: 'just_because',
     label: 'Just Because',
-    icon: Icons.card_giftcard_outlined,
+    image: 'assets/images/Celebrations_images/Just_Because.png',
   ),
 ];
 
@@ -298,13 +323,18 @@ class _SaveToWishlistScreenState extends ConsumerState<SaveToWishlistScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Wrap(
-                    spacing: AppSpacing.md,
-                    runSpacing: AppSpacing.md,
+                  GridView.count(
+                    crossAxisCount: 3,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    mainAxisSpacing: AppSpacing.lg,
+                    crossAxisSpacing: AppSpacing.md,
+                    childAspectRatio: 0.72,
                     children: [
                       for (final occasion in _kOccasions)
                         PickTile(
-                          icon: occasion.icon,
+                          image: occasion.image,
                           label: occasion.label,
                           selected: _occasionKey == occasion.key,
                           onTap: () => setState(
@@ -362,12 +392,23 @@ class _SaveToWishlistScreenState extends ConsumerState<SaveToWishlistScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Quick Suggestions',
-                    style: context.text.titleSmall?.copyWith(
-                      color: colors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Quick Suggestions',
+                        style: context.text.titleSmall?.copyWith(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Icon(
+                        Icons.auto_awesome,
+                        size: AppSizes.iconSm,
+                        color: colors.primary,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Wrap(
@@ -377,6 +418,12 @@ class _SaveToWishlistScreenState extends ConsumerState<SaveToWishlistScreen> {
                       for (final suggestion in _kNoteSuggestions)
                         ActionChip(
                           label: Text(suggestion),
+                          labelStyle: context.text.bodySmall?.copyWith(
+                            color: colors.primaryMuted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          backgroundColor: colors.suggestionChipFill,
+                          side: BorderSide.none,
                           onPressed: () =>
                               setState(() => _notes.text = suggestion),
                         ),

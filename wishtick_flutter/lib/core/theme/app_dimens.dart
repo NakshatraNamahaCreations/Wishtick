@@ -54,6 +54,13 @@ abstract final class AppSizes {
   static const iconSm = 16.0;
   static const iconMd = 20.0;
   static const iconLg = 24.0;
+
+  /// The Wishtick heart mark beside the wordmark.
+  ///
+  /// Bigger than [iconLg] because `assets/logo/logo.png` carries its own
+  /// transparent margin — the heart fills only ~72% of the square, so a
+  /// 24-px box draws a 17-px mark, well under what the header mock shows.
+  static const brandMark = 32.0;
   static const avatarSm = 32.0;
   static const avatarMd = 44.0;
   static const avatarLg = 96.0;
@@ -77,13 +84,16 @@ abstract final class AppDurations {
 
   /// How long the splash holds before routing.
   ///
-  /// Longer than the 2s the Figma progress bar implies: the screen now plays a
-  /// full brand sequence — the mark flips in, then the wordmark and tagline
-  /// assemble out of particles — and 2s left no time to read the result before
-  /// the redirect. Everything on the splash is timed as a fraction of this, so
-  /// changing it rescales the whole choreography.
-  static const splash = Duration(milliseconds: 4000);
+  /// Set to 4.5s, slightly short of `assets/images/splash_screen.gif`'s own
+  /// 5s runtime (120 frames) — the redirect fires a beat before the GIF's
+  /// final frames play, which is the intended cut, not a bug to "fix" by
+  /// matching the two durations exactly.
+  static const splash = Duration(milliseconds: 4500);
 
   /// How long the "You're all set!" confetti burst runs before settling.
   static const confettiBurst = Duration(seconds: 3);
+
+  /// How long a [SuccessBanner] holds fully visible before it exits —
+  /// separate from [normal], which is just its fade/slide transition time.
+  static const toastDwell = Duration(seconds: 2);
 }

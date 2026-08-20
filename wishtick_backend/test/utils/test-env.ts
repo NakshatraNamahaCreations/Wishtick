@@ -24,7 +24,7 @@ process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-that-is-definitely-long-en
 process.env.JWT_ACCESS_TTL = '15m';
 process.env.JWT_REFRESH_TTL = '30d';
 
-process.env.OTP_LENGTH = '6';
+process.env.OTP_LENGTH = '4';
 process.env.OTP_TTL_SECONDS = '600';
 process.env.OTP_MAX_ATTEMPTS = '5';
 // Zero by default so tests can request codes back-to-back; the cooldown suite

@@ -107,13 +107,14 @@ class CreateEventState {
     String? error,
     bool? busy,
     bool clearError = false,
+    bool clearDate = false,
   }) => CreateEventState(
     personName: personName ?? this.personName,
     relationKey: relationKey ?? this.relationKey,
     relationLabel: relationLabel ?? this.relationLabel,
     occasionKey: occasionKey ?? this.occasionKey,
     title: title ?? this.title,
-    date: date ?? this.date,
+    date: clearDate ? null : (date ?? this.date),
     time: time ?? this.time,
     venue: venue ?? this.venue,
     description: description ?? this.description,
@@ -157,6 +158,11 @@ class CreateEventController extends Notifier<CreateEventState> {
       state = state.copyWith(title: value, clearError: true);
 
   void setDate(DateTime value) => state = state.copyWith(date: value);
+
+  /// Backs out of a committed date — see
+  /// `ProfileFormController.clearDateOfBirth` for why the manual-entry field
+  /// needs this.
+  void clearDate() => state = state.copyWith(clearDate: true);
 
   void setTime(TimeOfDayValue value) => state = state.copyWith(time: value);
 

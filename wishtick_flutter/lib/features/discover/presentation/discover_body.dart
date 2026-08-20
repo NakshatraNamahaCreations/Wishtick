@@ -11,7 +11,8 @@ import '../../wishlist/presentation/product_detail_screen.dart';
 import '../domain/discover_feed.dart';
 import 'discover_controller.dart';
 import 'explore_products_screen.dart';
-import 'widgets/discover_product_card.dart';
+import 'widgets/discover_grid_shelf.dart';
+import 'widgets/discover_person_shelf.dart';
 
 /// Figma `280:131` — the Discover segment of the wishlist tab.
 ///
@@ -84,20 +85,30 @@ class _DiscoverBodyState extends ConsumerState<DiscoverBody> {
             );
     }
 
+    // No horizontal padding here — the price-band shelf below breaks out to a
+    // full-bleed white section (`280:131`), so every *other* child carries
+    // its own horizontal inset instead of the list imposing one uniformly.
     return RefreshIndicator(
       onRefresh: () => ref.read(discoverProvider.notifier).refresh(),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.lg,
-          AppSpacing.lg,
-          AppSpacing.huge,
-        ),
+        padding: const EdgeInsets.only(bottom: AppSpacing.huge),
         children: [
-          _SearchField(onTap: () => unawaited(_openSearch())),
-          const SizedBox(height: AppSpacing.lg),
-          const _CuratedBanner(),
-          const SizedBox(height: AppSpacing.xl),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SearchField(onTap: () => unawaited(_openSearch())),
+                const SizedBox(height: AppSpacing.lg),
+                const _CuratedBanner(),
+              ],
+            ),
+          ),
           if (feed.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: AppSpacing.huge),
@@ -111,15 +122,123 @@ class _DiscoverBodyState extends ConsumerState<DiscoverBody> {
               ),
             )
           else
-            for (final section in feed.sections) ...[
-              _Shelf(
-                section: section,
-                onExplore: () => unawaited(_openShelf(section)),
-                onProductTap: (p) => unawaited(_openProduct(p)),
+            for (final section in feed.sections)
+              _SectionGap(
+                kind: section.kind,
+                child: _Section(
+                  section: section,
+                  onExplore: () => unawaited(_openShelf(section)),
+                  onProductTap: (p) => unawaited(_openProduct(p)),
+                ),
               ),
-              const SizedBox(height: AppSpacing.xl),
-            ],
         ],
+      ),
+    );
+  }
+}
+
+/// Top margin above a shelf.
+///
+/// A plain [SizedBox] everywhere except above the price-band shelf: that one
+/// is a full-bleed white section (`280:131`), so its own gap has to be
+/// *inside* the white fill rather than beige page showing through above it.
+class _SectionGap extends StatelessWidget {
+  const _SectionGap({required this.kind, required this.child});
+
+  final DiscoverSectionKind kind;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (kind == DiscoverSectionKind.priceBand) {
+      return Column(
+        children: [
+          const SizedBox(height: AppSpacing.xl),
+          child,
+        ],
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.xl),
+      child: child,
+    );
+  }
+}
+
+/// One shelf, dispatched by [DiscoverSectionKind].
+class _Section extends StatelessWidget {
+  const _Section({
+    required this.section,
+    required this.onExplore,
+    required this.onProductTap,
+  });
+
+  final DiscoverSection section;
+  final VoidCallback onExplore;
+  final ValueChanged<NormalizedProduct> onProductTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final person = section.person;
+
+    final heading = Text(
+      // The 🔥 is a client-side flourish, not part of the server's title —
+      // it is not text that would survive translation or a copy change.
+      section.kind == DiscoverSectionKind.premium
+          ? '${section.title} 🔥'
+          : section.title,
+      style: context.text.titleMedium?.copyWith(
+        color: colors.textPrimary,
+        fontWeight: FontWeight.w700,
+        // Sampled off the export: "Gifts Under ₹2000" alone is italic, unlike
+        // every other Discover heading.
+        fontStyle: section.kind == DiscoverSectionKind.priceBand
+            ? FontStyle.italic
+            : FontStyle.normal,
+      ),
+    );
+
+    final body = person != null
+        ? DiscoverPersonShelf(
+            person: person,
+            items: section.items,
+            onExplore: onExplore,
+            onProductTap: onProductTap,
+          )
+        : DiscoverGridShelf(
+            items: section.items,
+            onProductTap: onProductTap,
+            onSave: onProductTap,
+            onExplore: onExplore,
+          );
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        heading,
+        const SizedBox(height: AppSpacing.md),
+        body,
+      ],
+    );
+
+    if (section.kind != DiscoverSectionKind.priceBand) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: content,
+      );
+    }
+
+    // Full-bleed white, breaking past the page's own horizontal margin —
+    // the one section on this screen that is not on the beige page colour.
+    return ColoredBox(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.xl,
+        ),
+        child: content,
       ),
     );
   }
@@ -170,108 +289,78 @@ class _SearchField extends StatelessWidget {
 class _CuratedBanner extends StatelessWidget {
   const _CuratedBanner();
 
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        gradient: context.gradients.celebration,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'CURATED GIFTS\nFOR EVERY OCCASION',
-            style: context.text.titleMedium?.copyWith(
-              color: colors.textOnDark,
-              fontWeight: FontWeight.w700,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            "From birthdays to milestones, we've got you covered",
-            style: context.text.bodySmall?.copyWith(
-              color: colors.textOnDark.withValues(alpha: 0.85),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+  /// Tall enough to clear the gift-box photo even when the text column's own
+  /// content would otherwise be shorter (the photo is [Positioned], so it
+  /// does not contribute to the [Stack]'s intrinsic height on its own).
+  static const _minHeight = 124.0;
 
-/// One shelf: a heading, a horizontal run of products, and "Explore More".
-class _Shelf extends StatelessWidget {
-  const _Shelf({
-    required this.section,
-    required this.onExplore,
-    required this.onProductTap,
-  });
-
-  final DiscoverSection section;
-  final VoidCallback onExplore;
-  final ValueChanged<NormalizedProduct> onProductTap;
-
-  static const _cardWidth = 150.0;
-  static const _railHeight = 290.0;
+  /// Reserves room so the text column never runs under the photo.
+  static const _imageReserve = 110.0;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          section.title,
-          style: context.text.titleMedium?.copyWith(
-            color: colors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        if (section.subtitle != null) ...[
-          const SizedBox(height: AppSpacing.xxs),
-          Text(
-            section.subtitle!,
-            style: context.text.bodySmall?.copyWith(
-              color: colors.textSecondary,
+    return ClipRRect(
+      // Sampled off the export: a modest ~8px radius, not the pill/lg radius
+      // used elsewhere for large cards.
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(minHeight: _minHeight),
+        decoration: BoxDecoration(gradient: context.gradients.curatedBanner),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                _imageReserve,
+                AppSpacing.lg,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text.rich(
+                    TextSpan(
+                      style: context.text.titleMedium?.copyWith(
+                        color: colors.textOnDark,
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
+                      ),
+                      children: const [
+                        TextSpan(text: 'CURATED GIFTS\nFOR EVERY '),
+                        // Sampled off the export: "OCCASION" alone is italic.
+                        TextSpan(
+                          text: 'OCCASION',
+                          style: TextStyle(fontStyle: FontStyle.italic),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    "From birthdays to milestones, we've got you covered",
+                    style: context.text.bodySmall?.copyWith(
+                      color: colors.textOnDark.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-        const SizedBox(height: AppSpacing.md),
-        SizedBox(
-          height: _railHeight,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: section.items.length,
-            separatorBuilder: (context, index) =>
-                const SizedBox(width: AppSpacing.md),
-            itemBuilder: (context, index) {
-              final product = section.items[index];
-              return SizedBox(
-                width: _cardWidth,
-                child: DiscoverProductCard(
-                  product: product,
-                  onTap: () => onProductTap(product),
-                  onSave: () => onProductTap(product),
-                ),
-              );
-            },
-          ),
+            Positioned(
+              right: AppSpacing.md,
+              bottom: 0,
+              child: Image.asset(
+                'assets/images/gift_box.png',
+                width: 95,
+                height: 102,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: AppSpacing.md),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: onExplore,
-            child: const Text('Explore More'),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

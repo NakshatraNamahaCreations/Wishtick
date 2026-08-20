@@ -141,6 +141,7 @@ class CreateMemoryState {
     String? error,
     bool? busy,
     bool clearError = false,
+    bool clearUnlockDate = false,
   }) => CreateMemoryState(
     title: title ?? this.title,
     personName: personName ?? this.personName,
@@ -154,7 +155,7 @@ class CreateMemoryState {
     includeYear: includeYear ?? this.includeYear,
     coverMediaId: coverMediaId ?? this.coverMediaId,
     coverLocalPath: coverLocalPath ?? this.coverLocalPath,
-    unlockDate: unlockDate ?? this.unlockDate,
+    unlockDate: clearUnlockDate ? null : (unlockDate ?? this.unlockDate),
     unlockTime: unlockTime ?? this.unlockTime,
     created: created ?? this.created,
     error: clearError ? null : (error ?? this.error),
@@ -195,6 +196,11 @@ class CreateMemoryController extends Notifier<CreateMemoryState> {
 
   void setUnlockDate(DateTime value) =>
       state = state.copyWith(unlockDate: value);
+
+  /// Backs out of a committed date — see
+  /// `ProfileFormController.clearDateOfBirth` for why the manual-entry field
+  /// needs this.
+  void clearUnlockDate() => state = state.copyWith(clearUnlockDate: true);
 
   void setUnlockTime(MemoryTimeOfDay value) =>
       state = state.copyWith(unlockTime: value);
