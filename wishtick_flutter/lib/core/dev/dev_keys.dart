@@ -12,6 +12,9 @@ abstract final class DevKeys {
   static const wishlists = 'wishtick.dev.wishlists';
   static const wishlistItems = 'wishtick.dev.wishlist_items';
 
+  /// Who each wishlist has been shared with, one row per participant.
+  static const wishlistParticipants = 'wishtick.dev.wishlist_participants';
+
   /// Versioned: bumping it re-seeds an install that predates a change to the
   /// seed data, which is the only way a device already carrying dev state ever
   /// sees a newly added fixture.

@@ -16,6 +16,36 @@ enum WishlistVisibility {
       .firstWhere((v) => v.wireValue == value, orElse: () => private);
 }
 
+/// What each visibility means to a person, and — the part that is easy to get
+/// wrong — whether a share link actually opens the list.
+///
+/// Mirrors the backend's access matrix (`AccessPolicyService`): a link holder
+/// is granted **nothing** on a `private` or `event_only` list, so handing
+/// someone that link gives them a page they will be refused. Only
+/// participants, and event invitees for `event_only`, get in.
+extension WishlistVisibilityMeaning on WishlistVisibility {
+  String get label => switch (this) {
+    WishlistVisibility.public => 'Public',
+    WishlistVisibility.private => 'Private',
+    WishlistVisibility.eventOnly => 'Event only',
+    WishlistVisibility.inviteOnly => 'Invite only',
+  };
+
+  String get summary => switch (this) {
+    WishlistVisibility.public => 'Anyone with the link can view it.',
+    WishlistVisibility.private => 'Only people you invite can view it.',
+    WishlistVisibility.eventOnly => 'Only people invited to the event can '
+        'view it.',
+    WishlistVisibility.inviteOnly => 'Unlisted — anyone you send the link to '
+        'can view it.',
+  };
+
+  /// Whether sending someone the share link is enough to let them in.
+  bool get linkGrantsAccess =>
+      this == WishlistVisibility.public ||
+      this == WishlistVisibility.inviteOnly;
+}
+
 /// What the *current* caller may do with this wishlist — the backend always
 /// computes and sends this, so the app renders permissions from here, never
 /// by re-deriving them from `role`.

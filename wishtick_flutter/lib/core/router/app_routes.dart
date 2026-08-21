@@ -33,6 +33,10 @@ abstract final class AppRoutes {
   static const wishlistCreate = '/wishlist/create';
   static String wishlistDetail(String id) => '/wishlist/$id';
 
+  /// Who can open a wishlist, and the only place to invite anyone — a private
+  /// list's share link admits nobody. Takes the wishlist via `extra`.
+  static String wishlistAccess(String id) => '/wishlist/$id/access';
+
   /// Root-level — reached from wherever a product is found (search, a
   /// resolved link), not tied to any one wishlist. Takes the product via
   /// `extra` (`NormalizedProduct` or `ResolvedUrlProduct`).

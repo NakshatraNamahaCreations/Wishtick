@@ -14,6 +14,7 @@ import '../../features/wishlist/domain/product.dart';
 import '../../features/wishlist/domain/public_wishlist.dart';
 import '../../features/wishlist/domain/wishlist.dart';
 import '../../features/wishlist/domain/wishlist_item.dart';
+import '../../features/wishlist/domain/wishlist_participant.dart';
 import '../media/media_repository.dart';
 import '../network/token_storage.dart';
 import 'dev_keys.dart';
@@ -623,6 +624,82 @@ class DevWishlistRepository implements WishlistRepository {
       hasPasscode: clearPasscode ? false : passcode != null,
       expiresAt: clearExpiry ? null : expiresAt,
     );
+  }
+
+  // ── Participants ──────────────────────────────────────────────────────────
+
+  List<Map<String, dynamic>> _readParticipants() =>
+      (jsonDecode(_prefs.getString(DevKeys.wishlistParticipants) ?? '[]')
+              as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
+  Future<void> _writeParticipants(List<Map<String, dynamic>> rows) =>
+      _prefs.setString(DevKeys.wishlistParticipants, jsonEncode(rows));
+
+  @override
+  Future<List<WishlistParticipant>> listParticipants(String wishlistId) async {
+    await _ready();
+    await Future<void>.delayed(_latency);
+    return _readParticipants()
+        .where((r) => r['wishlistId'] == wishlistId)
+        .map(WishlistParticipant.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<WishlistParticipant> addParticipant(
+    String wishlistId, {
+    String? userId,
+    String? inviteEmail,
+    ParticipantRole role = ParticipantRole.viewer,
+  }) async {
+    await _ready();
+    await Future<void>.delayed(_latency);
+    if (userId == null && inviteEmail == null) {
+      throw StateError('Provide either a userId or an inviteEmail');
+    }
+
+    final rows = _readParticipants();
+    final duplicate = rows.any(
+      (r) =>
+          r['wishlistId'] == wishlistId &&
+          (userId != null ? r['userId'] == userId : r['inviteEmail'] == inviteEmail),
+    );
+    // Same 409 the real endpoint answers with, so the screen's duplicate
+    // handling is exercised in dev rather than only in production.
+    if (duplicate) {
+      throw StateError('This person already has access to the wishlist');
+    }
+
+    final row = <String, dynamic>{
+      'id': 'p_${DateTime.now().microsecondsSinceEpoch}',
+      'wishlistId': wishlistId,
+      'userId': userId,
+      'name': null,
+      'inviteEmail': inviteEmail,
+      'role': role.wireValue,
+      // An email invite has nobody behind it yet; a user id is auto-accepted,
+      // exactly as the backend decides it.
+      'state': userId != null ? 'accepted' : 'invited',
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    await _writeParticipants([...rows, row]);
+    return WishlistParticipant.fromJson(row);
+  }
+
+  @override
+  Future<void> revokeParticipant(
+    String wishlistId,
+    String participantId,
+  ) async {
+    await _ready();
+    await Future<void>.delayed(_latency);
+    final rows = _readParticipants()
+      ..removeWhere(
+        (r) => r['wishlistId'] == wishlistId && r['id'] == participantId,
+      );
+    await _writeParticipants(rows);
   }
 
   @override

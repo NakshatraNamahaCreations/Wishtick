@@ -4,6 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../domain/public_wishlist.dart';
 import '../domain/wishlist.dart';
 import '../domain/wishlist_item.dart';
+import '../domain/wishlist_participant.dart';
 
 /// Talks to the backend's `wishlists` module — lists, items, reorder, and the
 /// owner's share link.
@@ -120,6 +121,53 @@ class WishlistRepository {
     );
     return PublicWishlist.fromJson(json);
   }
+
+  // ── Participants ────────────────────────────────────────────────────────
+  //
+  // Who may open a wishlist that its share link does not admit. A private list
+  // is *only* reachable this way — the access policy grants a link holder
+  // nothing on one — so this is the invite mechanism, not an extra on top of
+  // sharing.
+
+  /// The guest list. Owner-only: the server refuses anyone else, because who
+  /// was invited to a party is itself a thing worth keeping private.
+  Future<List<WishlistParticipant>> listParticipants(String wishlistId) async {
+    final json = await _api.get<List<dynamic>>(
+      '/wishlists/$wishlistId/participants',
+    );
+    return json
+        .map((e) => WishlistParticipant.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Grants access, by [userId] for someone already on Wishtick or by
+  /// [inviteEmail] for someone who may have no account yet — the backend links
+  /// a pending email invite to their account when they sign up.
+  ///
+  /// Exactly one of the two is required; the server answers 400
+  /// `IDENTIFIER_REQUIRED` otherwise, 409 `PARTICIPANT_ALREADY_EXISTS` for a
+  /// duplicate and 409 `CANNOT_INVITE_OWNER` for yourself.
+  Future<WishlistParticipant> addParticipant(
+    String wishlistId, {
+    String? userId,
+    String? inviteEmail,
+    ParticipantRole role = ParticipantRole.viewer,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/wishlists/$wishlistId/participants',
+      body: {
+        'userId': ?userId,
+        'inviteEmail': ?inviteEmail,
+        'role': role.wireValue,
+      },
+    );
+    return WishlistParticipant.fromJson(json);
+  }
+
+  /// Removes someone's access. Takes effect on their very next request — the
+  /// access policy caches no decision.
+  Future<void> revokeParticipant(String wishlistId, String participantId) =>
+      _api.delete<void>('/wishlists/$wishlistId/participants/$participantId');
 
   // ── Items ───────────────────────────────────────────────────────────────
 

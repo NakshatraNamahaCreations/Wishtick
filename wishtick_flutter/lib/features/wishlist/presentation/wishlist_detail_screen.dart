@@ -129,7 +129,7 @@ class _WishlistDetailScreenState extends ConsumerState<WishlistDetailScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    '${_visibilityLabel(wishlist)} wishlist',
+                    '${wishlist.visibility.label} wishlist',
                     style: context.text.bodySmall?.copyWith(
                       color: colors.textSecondary,
                     ),
@@ -236,6 +236,19 @@ class _WishlistDetailScreenState extends ConsumerState<WishlistDetailScreen> {
                                 ),
                               ],
                             ),
+                            const SizedBox(height: AppSpacing.sm),
+                            // Its own row rather than a fourth pill: this is
+                            // the only way to let anyone into a private list,
+                            // and it has a state worth reading — "Private,
+                            // link won't work" is the answer to the question
+                            // people actually arrive with.
+                            _AccessRow(
+                              visibility: loaded.visibility,
+                              onTap: () => context.push(
+                                AppRoutes.wishlistAccess(loaded.id),
+                                extra: loaded,
+                              ),
+                            ),
                           ],
                           const SizedBox(height: AppSpacing.xl),
                           Row(
@@ -330,17 +343,78 @@ class _WishlistDetailScreenState extends ConsumerState<WishlistDetailScreen> {
     );
   }
 
-  static String _visibilityLabel(Wishlist wishlist) =>
-      switch (wishlist.visibility) {
-        WishlistVisibility.public => 'Public',
-        WishlistVisibility.private => 'Private',
-        WishlistVisibility.eventOnly => 'Event',
-        WishlistVisibility.inviteOnly => 'Invite only',
-      };
 }
 
 /// A compact icon+label outlined pill — plain [OutlinedButton.icon] wraps to
 /// two lines in a three-across row, so this trims padding and forces one line.
+/// "Private · Only people you invite can view it" → the access screen.
+///
+/// Owner-only, and deliberately wordy: the visibility setting is the single
+/// most misread thing about a wishlist, and this row is where someone lands
+/// when they are trying to work out why a friend cannot open their link.
+class _AccessRow extends StatelessWidget {
+  const _AccessRow({required this.visibility, required this.onTap});
+
+  final WishlistVisibility visibility;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Material(
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            children: [
+              Icon(
+                visibility.linkGrantsAccess
+                    ? Icons.link
+                    : Icons.lock_outline,
+                size: AppSizes.iconMd,
+                color: colors.primary,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      visibility.label,
+                      style: context.text.titleSmall?.copyWith(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      visibility.summary,
+                      style: context.text.bodySmall?.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: AppSizes.iconMd,
+                color: colors.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.icon,

@@ -8,6 +8,7 @@ import {
   WISHLIST_PARTICIPANT_REVOKED,
   type WishlistParticipantRevokedEvent,
 } from 'src/common/events/domain-events';
+import type { UserDocument } from 'src/modules/users/schemas/user.schema';
 import { UsersService } from 'src/modules/users/users.service';
 import { AccessPolicyService } from './access/access-policy.service';
 import type { AccessContext } from './access/access.types';
@@ -22,6 +23,15 @@ import { ParticipantRole, ParticipantState } from './wishlist.types';
 export interface ParticipantView {
   id: string;
   userId: string | null;
+  /**
+   * The participant's display name, when they have an account.
+   *
+   * Hydrated here rather than left to the caller: without it the guest list is
+   * a column of ObjectIds, and every client would have to fan out to /users to
+   * render one row. Null for an email invite that has not been claimed yet —
+   * there is no account to take a name from.
+   */
+  name: string | null;
   inviteEmail: string | null;
   role: ParticipantRole;
   state: ParticipantState;
@@ -52,7 +62,15 @@ export class ParticipantsService {
       .sort({ createdAt: 1 })
       .exec();
 
-    return rows.map((row) => ParticipantsService.toView(row));
+    // One batched lookup for the whole list rather than one per row.
+    const users = await this.users.findManyByIds(
+      rows.map((row) => row.userId).filter((id): id is Types.ObjectId => id != null),
+    );
+    const byId = new Map(users.map((user) => [user._id.toString(), user]));
+
+    return rows.map((row) =>
+      ParticipantsService.toView(row, row.userId ? byId.get(row.userId.toString()) : undefined),
+    );
   }
 
   async add(
@@ -75,9 +93,14 @@ export class ParticipantsService {
     // policy can match on userId instead of waiting for a signup that will
     // never come.
     let userId = dto.userId ? new Types.ObjectId(dto.userId) : null;
+    // Kept so the returned view can carry a name without a second lookup.
+    let user: UserDocument | undefined;
     if (!userId && dto.inviteEmail) {
       const existing = await this.users.findByEmail(dto.inviteEmail);
-      if (existing) userId = existing._id;
+      if (existing) {
+        userId = existing._id;
+        user = existing;
+      }
     }
 
     if (userId && userId.equals(wishlist.ownerId)) {
@@ -91,7 +114,7 @@ export class ParticipantsService {
     if (dto.userId) {
       // Verify the account exists; otherwise a typo silently creates a
       // participant row that can never match anyone.
-      await this.users.findByIdOrFail(dto.userId);
+      user = await this.users.findByIdOrFail(dto.userId);
     }
 
     const existing = await this.model
@@ -117,7 +140,7 @@ export class ParticipantsService {
       existing.state = ParticipantState.ACCEPTED;
       existing.acceptedAt = new Date();
       await existing.save();
-      return ParticipantsService.toView(existing);
+      return ParticipantsService.toView(existing, user);
     }
 
     const participant = await this.model.create({
@@ -133,7 +156,7 @@ export class ParticipantsService {
       invitedBy: new Types.ObjectId(ctx.userId!),
     });
 
-    return ParticipantsService.toView(participant);
+    return ParticipantsService.toView(participant, user);
   }
 
   /**
@@ -194,10 +217,11 @@ export class ParticipantsService {
     return result.modifiedCount;
   }
 
-  private static toView(p: WishlistParticipantDocument): ParticipantView {
+  private static toView(p: WishlistParticipantDocument, user?: UserDocument): ParticipantView {
     return {
       id: p._id.toString(),
       userId: p.userId?.toString() ?? null,
+      name: user?.name?.trim() || null,
       inviteEmail: p.inviteEmail,
       role: p.role,
       state: p.state,

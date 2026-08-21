@@ -7,6 +7,7 @@ import 'package:wishtick_flutter/features/wishlist/domain/product.dart';
 import 'package:wishtick_flutter/features/wishlist/domain/public_wishlist.dart';
 import 'package:wishtick_flutter/features/wishlist/domain/wishlist.dart';
 import 'package:wishtick_flutter/features/wishlist/domain/wishlist_item.dart';
+import 'package:wishtick_flutter/features/wishlist/domain/wishlist_participant.dart';
 
 Wishlist buildWishlist({
   String id = 'wl_1',
@@ -16,6 +17,15 @@ Wishlist buildWishlist({
   String? coverUrl,
   int itemCount = 0,
   int fulfilledCount = 0,
+  bool chatEnabled = true,
+  // Explicit null means the list has never been shared, so the share screen
+  // has to mint a slug — which is the case worth distinguishing.
+  ShareInfo? share = const ShareInfo(
+    slug: 'share-slug',
+    url: 'https://wishtick.dev/w/share-slug',
+    hasPasscode: false,
+    expiresAt: null,
+  ),
   AccessDecision access = const AccessDecision(
     canView: true,
     canComment: true,
@@ -32,7 +42,7 @@ Wishlist buildWishlist({
     visibility: visibility,
     coverUrl: coverUrl,
     occasionLabel: null,
-    chatEnabled: true,
+    chatEnabled: chatEnabled,
     eventId: null,
     itemCount: itemCount,
     fulfilledCount: fulfilledCount,
@@ -40,12 +50,7 @@ Wishlist buildWishlist({
     createdAt: DateTime(2026, 6, 1),
     updatedAt: DateTime(2026, 6, 1),
     access: access,
-    share: const ShareInfo(
-      slug: 'share-slug',
-      url: 'https://wishtick.dev/w/share-slug',
-      hasPasscode: false,
-      expiresAt: null,
-    ),
+    share: share,
   );
 }
 
@@ -318,6 +323,54 @@ class FakeWishlistRepository implements WishlistRepository {
       hasPasscode: clearPasscode ? false : passcode != null,
       expiresAt: clearExpiry ? null : expiresAt,
     );
+  }
+
+  // ── Participants ──────────────────────────────────────────────────────────
+
+  /// The guest list `listParticipants` returns; empty unless a test sets it.
+  final List<WishlistParticipant> participants = [];
+
+  final addParticipantCalls = <({String? userId, String? email})>[];
+  final revokeParticipantCalls = <String>[];
+
+  @override
+  Future<List<WishlistParticipant>> listParticipants(String wishlistId) async {
+    _throwIfFailing();
+    return List.of(participants);
+  }
+
+  @override
+  Future<WishlistParticipant> addParticipant(
+    String wishlistId, {
+    String? userId,
+    String? inviteEmail,
+    ParticipantRole role = ParticipantRole.viewer,
+  }) async {
+    addParticipantCalls.add((userId: userId, email: inviteEmail));
+    _throwIfFailing();
+    final added = WishlistParticipant(
+      id: 'p_${participants.length + 1}',
+      userId: userId,
+      name: null,
+      inviteEmail: inviteEmail,
+      role: role,
+      state: userId == null
+          ? ParticipantState.invited
+          : ParticipantState.accepted,
+      createdAt: DateTime(2026, 6, 1),
+    );
+    participants.add(added);
+    return added;
+  }
+
+  @override
+  Future<void> revokeParticipant(
+    String wishlistId,
+    String participantId,
+  ) async {
+    revokeParticipantCalls.add(participantId);
+    _throwIfFailing();
+    participants.removeWhere((p) => p.id == participantId);
   }
 
   @override

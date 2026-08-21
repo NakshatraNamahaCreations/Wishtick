@@ -191,8 +191,10 @@ class HomeEventCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.passthrough,
           children: [
-            if (event.coverUrl != null)
+            if (event.coverUrl != null) ...[
               Positioned.fill(child: WishtickImage(url: event.coverUrl)),
+              const Positioned.fill(child: _CoverScrim()),
+            ],
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Column(
@@ -273,8 +275,10 @@ class HomeWishlistCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.passthrough,
           children: [
-            if (wishlist.coverUrl != null)
+            if (wishlist.coverUrl != null) ...[
               Positioned.fill(child: WishtickImage(url: wishlist.coverUrl)),
+              const Positioned.fill(child: _CoverScrim()),
+            ],
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Column(
@@ -330,6 +334,34 @@ class HomeWishlistCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The wash between a cover photo and the white copy laid over it.
+///
+/// Without it the title reads only against whatever the photo happens to be:
+/// a bright sky, a pale wall or a white product shot leaves white-on-white,
+/// which is exactly what a user-supplied cover can be. Darkest at the top,
+/// where the title and its subtitle sit, lifting toward the bottom so the
+/// picture is still a picture.
+///
+/// Uses `colors.overlay` — the app's black scrim token — rather than a literal
+/// black, so it follows the theme the way the sheet and dialog scrims do.
+class _CoverScrim extends StatelessWidget {
+  const _CoverScrim();
+
+  @override
+  Widget build(BuildContext context) {
+    final scrim = context.colors.overlay;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [scrim, scrim.withValues(alpha: 0.12)],
         ),
       ),
     );

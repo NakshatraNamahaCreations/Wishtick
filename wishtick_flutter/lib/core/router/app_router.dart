@@ -66,6 +66,7 @@ import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/wishlist/domain/product.dart';
 import '../../features/wishlist/domain/wishlist.dart';
 import '../../features/wishlist/presentation/create_wishlist_screen.dart';
+import '../../features/wishlist/presentation/manage_access_screen.dart';
 import '../../features/wishlist/presentation/product_detail_screen.dart';
 import '../../features/wishlist/presentation/public_wishlist_screen.dart';
 import '../../features/wishlist/presentation/wishlist_detail_screen.dart';
@@ -596,6 +597,16 @@ final routerProvider = Provider<GoRouter>((ref) {
                         parentNavigatorKey: _rootNavigatorKey,
                         builder: (context, state) => CreateWishlistScreen(
                           editing: state.extra as Wishlist?,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'access',
+                        parentNavigatorKey: _rootNavigatorKey,
+                        builder: (context, state) => ManageAccessScreen(
+                          // Reached only from the wishlist itself, which
+                          // already has the loaded list — passing it avoids a
+                          // second fetch of what the caller is looking at.
+                          wishlist: state.extra! as Wishlist,
                         ),
                       ),
                       GoRoute(
