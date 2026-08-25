@@ -664,7 +664,9 @@ class DevWishlistRepository implements WishlistRepository {
     final duplicate = rows.any(
       (r) =>
           r['wishlistId'] == wishlistId &&
-          (userId != null ? r['userId'] == userId : r['inviteEmail'] == inviteEmail),
+          (userId != null
+              ? r['userId'] == userId
+              : r['inviteEmail'] == inviteEmail),
     );
     // Same 409 the real endpoint answers with, so the screen's duplicate
     // handling is exercised in dev rather than only in production.
@@ -1195,6 +1197,20 @@ class DevProductRepository implements ProductRepository {
       inStock: true,
     ),
   ];
+
+  @override
+  Future<NormalizedProduct> details({
+    required String provider,
+    required String externalId,
+  }) async {
+    await Future<void>.delayed(_latency);
+    // Dev mode has no second upstream call to make, so the catalogue row is
+    // already the whole record — the screen simply re-renders what it has.
+    return catalog.firstWhere(
+      (p) => p.externalId == externalId,
+      orElse: () => catalog.first,
+    );
+  }
 
   @override
   Future<ProductSearchResult> search({

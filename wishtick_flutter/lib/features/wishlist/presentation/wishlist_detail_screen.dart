@@ -342,7 +342,6 @@ class _WishlistDetailScreenState extends ConsumerState<WishlistDetailScreen> {
       ),
     );
   }
-
 }
 
 /// A compact icon+label outlined pill — plain [OutlinedButton.icon] wraps to
@@ -373,9 +372,7 @@ class _AccessRow extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                visibility.linkGrantsAccess
-                    ? Icons.link
-                    : Icons.lock_outline,
+                visibility.linkGrantsAccess ? Icons.link : Icons.lock_outline,
                 size: AppSizes.iconMd,
                 color: colors.primary,
               ),

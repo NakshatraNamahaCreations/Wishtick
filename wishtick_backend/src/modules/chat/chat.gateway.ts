@@ -18,6 +18,7 @@ import type { Namespace, Socket } from 'socket.io';
 import { WsExceptionsFilter } from 'src/common/filters/ws-exceptions.filter';
 import type { AuthenticatedUser } from 'src/common/types/authenticated-user';
 import { SocketAuthService } from 'src/modules/auth/services/socket-auth.service';
+import { PresenceService } from 'src/modules/wishmates/presence.service';
 import { ChatService } from './chat.service';
 import {
   CHAT_BROADCAST,
@@ -59,6 +60,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   constructor(
     private readonly socketAuth: SocketAuthService,
     private readonly chat: ChatService,
+    private readonly presence: PresenceService,
   ) {}
 
   /**
@@ -90,12 +92,15 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
     // Own room: lets a broadcast exclude this user and a revocation evict them.
     await client.join(userRoom(user.id));
+    await this.presence.connected(user.id);
     this.logger.debug(`Socket ${client.id} authenticated as ${user.id}`);
   }
 
-  handleDisconnect(client: AuthedSocket): void {
+  async handleDisconnect(client: AuthedSocket): Promise<void> {
     const user = client.data.user;
-    if (user) this.logger.debug(`Socket ${client.id} (${user.id}) disconnected`);
+    if (!user) return;
+    this.logger.debug(`Socket ${client.id} (${user.id}) disconnected`);
+    await this.presence.disconnected(user.id);
   }
 
   @SubscribeMessage(WS_EVENT.JOIN)

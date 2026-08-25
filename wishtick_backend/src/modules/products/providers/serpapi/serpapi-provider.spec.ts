@@ -147,10 +147,10 @@ describe('SerpApiProductProvider', () => {
       expect(shoppingFn).toHaveBeenCalledTimes(1);
     });
 
-    it('asks for nothing when there is neither a keyword, a shelf, nor a price', async () => {
+    it('asks for nothing when there is no keyword, category or price at all', async () => {
       const { provider, shoppingFn } = build();
 
-      const result = await provider.search({ ...query, category: 'not-a-shelf' });
+      const result = await provider.search(query);
 
       expect(result.items).toEqual([]);
       expect(shoppingFn).not.toHaveBeenCalled();
@@ -181,6 +181,42 @@ describe('SerpApiProductProvider', () => {
       expect(shoppingFn).toHaveBeenCalledWith(
         expect.objectContaining({ minPriceMinor: 150_000, maxPriceMinor: 999_900 }),
       );
+    });
+
+    it('every category the curation asks for produces a real query', async () => {
+      // The five that had no entry here returned null, which Discover renders
+      // as an empty shelf and then drops — five of thirteen occasion tiles
+      // led to a blank grid.
+      for (const category of ['food_drink', 'experiences', 'handmade', 'kitchen', 'stationery']) {
+        const { provider, shoppingFn } = build({ shopping_results: [] });
+        await provider.search({ ...query, category });
+        expect(shoppingFn).toHaveBeenCalledTimes(1);
+        expect((shoppingFn.mock.calls[0][0] as { q: string }).q).not.toBe('');
+      }
+    });
+
+    it('an unmapped category still searches for something, never nothing', async () => {
+      const { provider, shoppingFn } = build({ shopping_results: [] });
+
+      await provider.search({ ...query, category: 'garden_tools' });
+
+      // Derived from the key rather than dropped, so adding a taxonomy term
+      // cannot silently delete a shelf.
+      expect((shoppingFn.mock.calls[0][0] as { q: string }).q).toBe('garden tools gift');
+    });
+
+    it('a search row carries no specs or sellers — those cost a second call', async () => {
+      const { provider } = build({
+        shopping_results: [
+          { product_id: 'p9', title: 'Thing', extracted_price: 100, source: 'Amazon.in' },
+        ],
+      });
+
+      const result = await provider.search({ ...query, q: 'thing' });
+
+      expect(result.items[0].features).toEqual([]);
+      expect(result.items[0].offers).toEqual([]);
+      expect(result.items[0].brand).toBeNull();
     });
   });
 
@@ -216,6 +252,74 @@ describe('SerpApiProductProvider', () => {
       expect(product!.productUrl).toBe('https://better.example/p');
       expect(product!.amountMinor).toBe(199_900);
       expect(product!.affiliateMeta.serpapi).toMatchObject({ merchantLinkResolved: true });
+    });
+
+    it('reads the spec list Google files under about_the_product', async () => {
+      // `description` is empty on every row observed; mapping only that left
+      // the detail screen with nothing the search had not already shown.
+      const { provider } = build(undefined, {
+        product_results: {
+          title: 'Zebronics Thunder NEO',
+          brand: 'Zebronics',
+          stores: [{ name: 'Amazon.in', link: 'https://a.example/p', extracted_total: 699 }],
+          about_the_product: {
+            features: [
+              { title: 'Noise Cancelling', value: 'Yes' },
+              { title: 'Form', value: 'Over-ear' },
+              // Half-filled rows are dropped rather than rendered as a blank
+              // line in the spec table.
+              { title: 'Colour' },
+              { value: 'orphan' },
+            ],
+          },
+        },
+      });
+
+      const product = await provider.getDetailsByRef('p1', ref());
+
+      expect(product!.brand).toBe('Zebronics');
+      expect(product!.features).toEqual([
+        { label: 'Noise Cancelling', value: 'Yes' },
+        { label: 'Form', value: 'Over-ear' },
+      ]);
+    });
+
+    it('lists every seller cheapest-first, and agrees with productUrl', async () => {
+      const { provider } = build(undefined, {
+        product_results: {
+          title: 'Headphone',
+          stores: [
+            { name: 'Flipkart', link: 'https://f.example/p', extracted_total: 999 },
+            { name: 'Amazon.in', link: 'https://a.example/p', extracted_total: 699 },
+            { name: 'Zepto', link: 'https://z.example/p', extracted_total: 999 },
+          ],
+        },
+      });
+
+      const product = await provider.getDetailsByRef('p1', ref());
+
+      expect(product!.offers.map((o) => o.merchant)).toEqual(['Amazon.in', 'Flipkart', 'Zepto']);
+      expect(product!.offers[0].amountMinor).toBe(69_900);
+      // A buy button pointing anywhere but the top of the page's own price
+      // list would be worse than showing no list.
+      expect(product!.productUrl).toBe(product!.offers[0].url);
+    });
+
+    it('puts sellers with no price last, so one cannot hide the cheapest', async () => {
+      const { provider } = build(undefined, {
+        product_results: {
+          title: 'Headphone',
+          stores: [
+            { name: 'NoPrice', link: 'https://n.example/p' },
+            { name: 'Amazon.in', link: 'https://a.example/p', extracted_total: 699 },
+          ],
+        },
+      });
+
+      const product = await provider.getDetailsByRef('p1', ref());
+
+      expect(product!.offers.map((o) => o.merchant)).toEqual(['Amazon.in', 'NoPrice']);
+      expect(product!.merchant).toBe('Amazon.in');
     });
 
     it('ignores stores with no link', async () => {

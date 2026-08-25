@@ -2,7 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { createHash } from 'node:crypto';
 import { AppException } from 'src/common/errors/app.exception';
+import { WishmatesService } from 'src/modules/wishmates/wishmates.service';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import { CONTENT_FLAGGED, type ContentFlaggedEvent } from 'src/common/events/domain-events';
 import { CacheService } from 'src/infra/redis/cache.service';
@@ -23,7 +25,15 @@ import {
   type ChatBroadcast,
   type ChatForceLeave,
 } from './chat.types';
-import { toChatView, toMessageView, type ChatView, type MessageView } from './chat.views';
+import type { PublicIdentity } from 'src/modules/wishmates/wishmates.views';
+import {
+  toChatView,
+  toMessagePreviewView,
+  toMessageView,
+  type ChatView,
+  type MessagePreviewView,
+  type MessageView,
+} from './chat.views';
 import type { EditMessageDto, PostMessageDto } from './dto/chat.dto';
 import { Chat, type ChatDocument } from './schemas/chat.schema';
 import { Message, type MessageDocument } from './schemas/message.schema';
@@ -38,8 +48,11 @@ const FLAGGED_WORDS = ['badword'];
 
 interface AuthorizedChat {
   chat: ChatDocument;
-  /** The wishlist owner / group-gift recipient — the person a surprise is kept from. */
-  ownerId: string;
+  /**
+   * The wishlist owner / group-gift recipient — the person a surprise is kept
+   * from. Null for a direct chat, which has no owner and nothing to mask.
+   */
+  ownerId: string | null;
 }
 
 @Injectable()
@@ -57,9 +70,44 @@ export class ChatService {
     private readonly access: AccessPolicyService,
     private readonly cache: CacheService,
     private readonly emitter: EventEmitter2,
+    private readonly wishmates: WishmatesService,
   ) {}
 
   // ── Provisioning ────────────────────────────────────────────────────────────
+
+  /**
+   * The one-to-one thread between two WishMates, created on first open.
+   *
+   * Gated on an accepted link rather than on knowing someone's id: a direct
+   * message is the one channel that reaches a person with no wishlist, event
+   * or gift between you, so connection *is* the permission. Without this a
+   * guessed user id would open a channel to a stranger.
+   */
+  async openDirect(viewerId: string, otherId: string): Promise<ChatDocument> {
+    if (viewerId === otherId) {
+      throw new AppException(ErrorCode.CHAT_NOT_FOUND, 'Chat not found', 404);
+    }
+    if (!(await this.wishmates.areWishmates(viewerId, otherId))) {
+      throw new AppException(ErrorCode.NOT_WISHMATES, 'You can only message your WishMates.', 403);
+    }
+    return this.getOrCreate(ChatType.DIRECT, ChatService.directRefId(viewerId, otherId), [
+      new Types.ObjectId(viewerId),
+      new Types.ObjectId(otherId),
+    ]);
+  }
+
+  /**
+   * A stable id for a pair, in either order.
+   *
+   * Sorted before hashing so (a,b) and (b,a) land on the same row — otherwise
+   * each side would open its own thread and neither would see the other's
+   * messages. Truncated to 24 hex characters because that is what an ObjectId
+   * is; this is an addressing scheme, not a security boundary.
+   */
+  static directRefId(a: string, b: string): Types.ObjectId {
+    const pair = [a, b].sort().join(':');
+    return new Types.ObjectId(createHash('sha256').update(pair).digest('hex').slice(0, 24));
+  }
 
   /** Get-or-create a chat for a (type, refId). The unique index makes it safe. */
   async getOrCreate(
@@ -96,13 +144,13 @@ export class ChatService {
       new Types.ObjectId(userId),
     ]);
     await this.addParticipant(chat._id, userId);
-    return toChatView(chat, await this.unreadCount(chat._id, userId));
+    return this.decorate(chat, userId);
   }
 
   /** A single chat's view (with the caller's unread count), authorization applied. */
   async getChat(chatId: string, userId: string): Promise<ChatView> {
     const { chat } = await this.authorize(chatId, userId);
-    return toChatView(chat, await this.unreadCount(chat._id, userId));
+    return this.decorate(chat, userId);
   }
 
   /** Provisions the group-gift chat and posts the opening system note. */
@@ -133,6 +181,28 @@ export class ChatService {
     opts: { forPost?: boolean } = {},
   ): Promise<AuthorizedChat> {
     const chat = await this.loadChat(chatId);
+
+    if (chat.type === ChatType.DIRECT) {
+      const isParticipant = chat.participantIds.some((id) => id.toString() === userId);
+      if (!isParticipant) throw new AppException(ErrorCode.CHAT_NOT_FOUND, 'Chat not found', 404);
+
+      // History survives an unfriending — deleting a conversation because a
+      // link was removed destroys something both people wrote. Posting does
+      // not: reaching someone requires a live connection, and removing one is
+      // the clearest way of saying you no longer want to be reached.
+      if (opts.forPost) {
+        const other = chat.participantIds.find((id) => id.toString() !== userId);
+        if (other && !(await this.wishmates.areWishmates(userId, other.toString()))) {
+          throw new AppException(
+            ErrorCode.NOT_WISHMATES,
+            'You can only message your WishMates.',
+            403,
+          );
+        }
+      }
+      // A direct chat has no owner; nothing in it is a surprise to mask.
+      return { chat, ownerId: null };
+    }
 
     if (chat.type === ChatType.WISHLIST) {
       const wishlist = await this.wishlists.findOrFail(chat.refId.toString());
@@ -187,7 +257,9 @@ export class ChatService {
     // Anti-spoiler: a surprise-flagged message in a wishlist chat is hidden from
     // the owner (never from the sender themselves).
     const hideFromUserIds: Types.ObjectId[] = [];
-    if (dto.surprise && chat.type === ChatType.WISHLIST && ownerId !== userId) {
+    // `ownerId` is non-null for a wishlist chat, which the type guard above
+    // already narrows to — the check keeps that true for the compiler too.
+    if (dto.surprise && chat.type === ChatType.WISHLIST && ownerId && ownerId !== userId) {
       hideFromUserIds.push(new Types.ObjectId(ownerId));
     }
 
@@ -396,9 +468,112 @@ export class ChatService {
     const filter: Record<string, unknown> = { participantIds: new Types.ObjectId(userId) };
     if (type) filter.type = type;
     const chats = await this.chatModel.find(filter).sort({ lastMessageAt: -1 }).limit(200).exec();
+    if (chats.length === 0) return [];
+
+    // Both decorations are batched across the whole page: the chat list is the
+    // one screen that asks for every thread at once, and a per-row lookup would
+    // make it two hundred round trips for two hundred names.
+    const [previews, counterparts] = await Promise.all([
+      this.lastMessagesOf(chats, userId),
+      this.counterpartsOf(chats, userId),
+    ]);
+
     return Promise.all(
-      chats.map(async (chat) => toChatView(chat, await this.unreadCount(chat._id, userId))),
+      chats.map(async (chat) =>
+        toChatView(chat, await this.unreadCount(chat._id, userId), {
+          counterpart: counterparts.get(chat._id.toString()) ?? null,
+          lastMessage: previews.get(chat._id.toString()) ?? null,
+        }),
+      ),
     );
+  }
+
+  /** One chat's full view. The single-row path; [listChats] batches instead. */
+  private async decorate(chat: ChatDocument, userId: string): Promise<ChatView> {
+    const [unread, previews, counterparts] = await Promise.all([
+      this.unreadCount(chat._id, userId),
+      this.lastMessagesOf([chat], userId),
+      this.counterpartsOf([chat], userId),
+    ]);
+    return toChatView(chat, unread, {
+      counterpart: counterparts.get(chat._id.toString()) ?? null,
+      lastMessage: previews.get(chat._id.toString()) ?? null,
+    });
+  }
+
+  /**
+   * The newest visible message per chat, in one round trip.
+   *
+   * Carries the same `hideFromUserIds` exclusion the read path uses: a surprise
+   * message the recipient cannot open in the thread must not reach them as a
+   * preview either, which would be a worse leak — the spoiler would arrive
+   * unprompted, on a list screen, instead of being merely absent.
+   */
+  private async lastMessagesOf(
+    chats: ChatDocument[],
+    userId: string,
+  ): Promise<Map<string, MessagePreviewView>> {
+    const rows = await this.messageModel
+      .aggregate<{ _id: Types.ObjectId; doc: MessageDocument }>([
+        {
+          $match: {
+            chatId: { $in: chats.map((c) => c._id) },
+            hideFromUserIds: { $ne: new Types.ObjectId(userId) },
+          },
+        },
+        // `_id` descending is newest-first: an ObjectId leads with its
+        // timestamp, which is what the history cursor already relies on.
+        { $sort: { _id: -1 } },
+        { $group: { _id: '$chatId', doc: { $first: '$$ROOT' } } },
+      ])
+      .exec();
+
+    return new Map(
+      rows.map((row) => [
+        row._id.toString(),
+        toMessagePreviewView(this.messageModel.hydrate(row.doc)),
+      ]),
+    );
+  }
+
+  /**
+   * The other participant of each DIRECT chat, in one round trip. Non-direct
+   * chats are skipped — a wishlist thread's subject is the wishlist.
+   */
+  private async counterpartsOf(
+    chats: ChatDocument[],
+    userId: string,
+  ): Promise<Map<string, PublicIdentity>> {
+    const wanted = new Map<string, string>();
+    for (const chat of chats) {
+      if (chat.type !== ChatType.DIRECT) continue;
+      const other = chat.participantIds.find((id) => id.toString() !== userId);
+      if (other) wanted.set(chat._id.toString(), other.toString());
+    }
+    if (wanted.size === 0) return new Map();
+
+    const identities = await this.wishmates.identitiesOf([...new Set(wanted.values())]);
+    const byUser = new Map(identities.map((i) => [i.userId, i]));
+
+    const result = new Map<string, PublicIdentity>();
+    for (const [chatId, otherId] of wanted) {
+      // An account that signed up and filled nothing in has no profile row, and
+      // still has real conversations. The row is drawn from its id with the
+      // names left empty rather than dropped — a chat list with an unnamed row
+      // is recoverable; one with a row belonging to nobody is not.
+      result.set(
+        chatId,
+        byUser.get(otherId) ?? {
+          userId: otherId,
+          username: null,
+          displayName: null,
+          photoUrl: null,
+          online: false,
+          lastSeenAt: null,
+        },
+      );
+    }
+    return result;
   }
 
   /**
@@ -411,6 +586,7 @@ export class ChatService {
     const result: Record<ChatType, { count: number; badge: number }> = {
       [ChatType.WISHLIST]: { count: 0, badge: 0 },
       [ChatType.GROUP_GIFT]: { count: 0, badge: 0 },
+      [ChatType.DIRECT]: { count: 0, badge: 0 },
     };
     const chats = await this.chatModel.find({ participantIds: new Types.ObjectId(userId) }).exec();
     for (const chat of chats) {

@@ -441,9 +441,7 @@ class _PendingChip extends StatelessWidget {
       ),
       child: Text(
         'Invited',
-        style: context.text.labelSmall?.copyWith(
-          color: colors.onWarningSubtle,
-        ),
+        style: context.text.labelSmall?.copyWith(color: colors.onWarningSubtle),
       ),
     );
   }

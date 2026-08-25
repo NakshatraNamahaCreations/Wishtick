@@ -13,6 +13,7 @@ import 'package:wishtick_flutter/features/profile/domain/me.dart';
 Me buildMe({
   String id = 'u_1',
   String? displayName = 'Ananya',
+  String? username = 'ananya',
   String? email = 'ananya@example.com',
   String? avatarKey = 'avatar_01',
   String? photoUrl,
@@ -25,6 +26,7 @@ Me buildMe({
   emailVerified: true,
   phoneVerified: false,
   displayName: displayName,
+  username: username,
   photoUrl: photoUrl,
   avatarKey: avatarKey,
   gender: gender,

@@ -11,6 +11,7 @@ import '../../../core/widgets/wishtick_error_text.dart';
 import '../../discover/presentation/explore_products_screen.dart';
 import '../../group_gift/domain/group_gift.dart';
 import '../../notifications/presentation/notification_providers.dart';
+import '../../wishmates/presentation/handle_gate.dart';
 import '../domain/wishtick_event.dart';
 import 'home_controller.dart';
 import 'widgets/carousel_dots.dart';
@@ -76,6 +77,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // walk found the dead tap.
             onNotificationsTap: () =>
                 unawaited(context.push(AppRoutes.notifications)),
+            // Both go through the handle gate: an account with no @handle
+            // cannot be found by anyone, so these screens would open empty
+            // with nothing to explain why.
+            onWishmatesTap: () =>
+                unawaited(openWithHandle(context, ref, AppRoutes.wishmates)),
+            onWishLinksTap: () =>
+                unawaited(openWithHandle(context, ref, AppRoutes.wishlinks)),
             unreadCount: ref.watch(unreadCountProvider),
           ),
           if (state.error != null)

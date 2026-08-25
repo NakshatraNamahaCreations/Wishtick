@@ -35,9 +35,14 @@ class ChooseWishlistSheet extends StatelessWidget {
           AppSpacing.lg,
           AppSpacing.lg,
         ),
+        // A modal sheet constrains its child's width *loosely*, so a
+        // min-sized Column shrinks to its widest child. With a list of
+        // wishlists the ListView fills the width and hides that; with none,
+        // the sheet collapsed to the width of "Choose a wishlist". Stretching
+        // pins it open in both cases.
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               'Choose a wishlist',

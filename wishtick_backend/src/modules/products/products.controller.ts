@@ -34,7 +34,7 @@ export class ProductsController {
   @ApiOperation({
     summary: 'Search the product catalogue',
     description:
-      'Cached 15 min. `freshness` is live | cached | stale — `stale` means the provider is down ' +
+      'Cached 6h. `freshness` is live | cached | stale — `stale` means the provider is down ' +
       'and these are last-known results rather than an error.',
   })
   @ApiResponseDoc({ status: 503, description: 'PRODUCT_SEARCH_UNAVAILABLE — down with no cache' })

@@ -60,11 +60,24 @@ export class ProductsService {
    * price is a much smaller problem than a search page that does not load — and
    * the price is re-checked at import anyway.
    */
-  async search(query: ProductSearchQuery): Promise<SearchResponse> {
+  async search(
+    query: ProductSearchQuery,
+    opts: { refresh?: boolean } = {},
+  ): Promise<SearchResponse> {
     const key = ProductsService.searchKey(query);
     const cached = await this.cache.get<CacheEnvelope<ProductSearchResult>>(key);
 
-    if (cached && Date.now() - cached.cachedAt < this.cfg.cacheTtlSeconds * 1_000) {
+    // `refresh` is what makes the prewarm a *re*-warm. Without it the prewarm
+    // took this early return on every shelf it had already cached, so it could
+    // only ever fill cold entries — never renew one before it expired, and
+    // never correct one whose answer had since changed. Both showed up for
+    // real: five shelves kept serving an empty result for hours after the bug
+    // that emptied them was fixed.
+    if (
+      !opts.refresh &&
+      cached &&
+      Date.now() - cached.cachedAt < this.cfg.cacheTtlSeconds * 1_000
+    ) {
       return { ...cached.data, freshness: ResultFreshness.CACHED };
     }
 
@@ -156,11 +169,27 @@ export class ProductsService {
       );
     }
 
+    // The snapshot is read first, not as a fallback: providers whose id is not
+    // enough on its own (SerpApi, whose engine is keyed by a per-search token)
+    // need what we captured at search time to look anything up at all. Without
+    // this the whole endpoint answered 404 for the only provider we ship.
+    const snapshot = await this.model.findOne({ provider: providerName, externalId }).exec();
+
     try {
       const product = await this.guard.run(this.provider.name, 'details', () =>
-        this.provider.getDetails(externalId),
+        this.provider.getDetailsByRef && snapshot
+          ? this.provider.getDetailsByRef(externalId, snapshot.affiliateMeta)
+          : this.provider.getDetails(externalId),
       );
       if (!product) {
+        // The provider cannot answer for this id. A snapshot we already hold
+        // is a better answer than a 404 — it is what search just showed.
+        if (snapshot) {
+          return {
+            product: ProductsService.toNormalized(snapshot),
+            freshness: ResultFreshness.CACHED,
+          };
+        }
         throw new AppException(ErrorCode.PRODUCT_NOT_FOUND, 'Product not found', 404);
       }
       await this.upsertMany([product]);
@@ -168,7 +197,6 @@ export class ProductsService {
     } catch (err) {
       if (!(err instanceof ProviderUnavailableError)) throw err;
 
-      const snapshot = await this.model.findOne({ provider: providerName, externalId }).exec();
       if (snapshot) {
         this.logger.warn(`${providerName} unavailable; serving stored snapshot for ${externalId}`);
         return {
@@ -213,6 +241,15 @@ export class ProductsService {
               merchant: p.merchant,
               category: p.category,
               inStock: p.inStock,
+              rating: p.rating,
+              reviewCount: p.reviewCount,
+              deliveryNote: p.deliveryNote,
+              brand: p.brand,
+              // Only ever written by the detail lookup. A search result
+              // reports neither, and letting its empty arrays through would
+              // erase specs a previous detail call had already paid for.
+              ...(p.features.length > 0 ? { features: p.features } : {}),
+              ...(p.offers.length > 0 ? { offers: p.offers } : {}),
               affiliateMeta: p.affiliateMeta,
               lastSyncedAt: now,
               // A monetized link is written by the affiliate network, not by
@@ -280,6 +317,12 @@ export class ProductsService {
       merchant: doc.merchant,
       category: doc.category,
       inStock: doc.inStock,
+      rating: doc.rating ?? null,
+      reviewCount: doc.reviewCount ?? null,
+      deliveryNote: doc.deliveryNote ?? null,
+      brand: doc.brand ?? null,
+      features: doc.features ?? [],
+      offers: doc.offers ?? [],
       affiliateMeta: doc.affiliateMeta,
     };
   }

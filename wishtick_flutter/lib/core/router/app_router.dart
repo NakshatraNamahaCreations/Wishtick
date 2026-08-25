@@ -7,6 +7,8 @@ import '../../features/auth/presentation/mobile_number_screen.dart';
 import '../../features/auth/presentation/otp_screen.dart';
 import '../../features/auth/presentation/session_controller.dart';
 import '../../features/auth/presentation/welcome_screen.dart';
+import '../../features/chat/presentation/chat_list_screen.dart';
+import '../../features/chat/presentation/direct_chat_screen.dart';
 import '../../features/chat/presentation/group_chat_screen.dart';
 import '../../features/events/presentation/create_event_details_screen.dart';
 import '../../features/events/presentation/create_event_screen.dart';
@@ -72,6 +74,11 @@ import '../../features/wishlist/presentation/public_wishlist_screen.dart';
 import '../../features/wishlist/presentation/wishlist_detail_screen.dart';
 import '../../features/wishlist/presentation/wishlist_item_detail_screen.dart';
 import '../../features/wishlist/presentation/wishlist_tab_screen.dart';
+import '../../features/wishmates/presentation/people_search_screen.dart';
+import '../../features/wishmates/presentation/person_profile_screen.dart';
+import '../../features/wishmates/presentation/username_claim_screen.dart';
+import '../../features/wishmates/presentation/wishlinks_screen.dart';
+import '../../features/wishmates/presentation/wishmates_list_screen.dart';
 import '../legal/legal_document_screen.dart';
 import '../legal/privacy_document.dart';
 import '../legal/terms_document.dart';
@@ -257,6 +264,54 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) =>
             const LegalDocumentScreen(document: PrivacyDocument.document),
+      ),
+
+      // ── WishMates (Sprint 11) ─────────────────────────────────────────────
+      //
+      // All on the root navigator: they are pushed over the tab shell from
+      // Home's header and from each other, and none of them belongs to a tab.
+      GoRoute(
+        path: AppRoutes.usernameClaim,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const UsernameClaimScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.wishmates,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const WishmatesListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.wishlinks,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => WishLinksScreen(
+          // `?tab=sent` so the Sent tab is linkable; Received is the default
+          // because that is the one with something waiting on you.
+          initialTab: state.uri.queryParameters['tab'] == 'sent' ? 1 : 0,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.peopleSearch,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const PeopleSearchScreen(),
+      ),
+      GoRoute(
+        // Nested under the search route so `/people/:id` cannot be mistaken
+        // for a query on `/people`.
+        path: '/people/:userId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            PersonProfileScreen(userId: state.pathParameters['userId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.chats,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const ChatListScreen(),
+      ),
+      GoRoute(
+        path: '/chats/direct/:userId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            DirectChatScreen(userId: state.pathParameters['userId']!),
       ),
 
       // ── Notifications (Sprint 9) ──────────────────────────────────────────

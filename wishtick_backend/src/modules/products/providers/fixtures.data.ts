@@ -24,6 +24,15 @@ const p = (
   merchant,
   category,
   inStock: true,
+  // Null by default so the fixture catalogue mirrors the real one, where most
+  // rows carry none of these — a fixture that always had a rating would hide
+  // every "hide it when absent" bug the UI can have.
+  rating: null,
+  reviewCount: null,
+  deliveryNote: null,
+  brand: null,
+  features: [],
+  offers: [],
   affiliateMeta: { commissionPct: 4 },
   ...extra,
 });

@@ -408,11 +408,35 @@ class FakeWishlistRepository implements WishlistRepository {
 class FakeProductRepository implements ProductRepository {
   ApiException? searchFailure;
   ApiException? resolveFailure;
+  ApiException? detailsFailure;
   ProductSearchResult? searchResult;
   ResolvedUrlProduct? resolveResult;
 
+  /// What the detail lookup returns. Null leaves it unanswered, which is the
+  /// "provider gave us nothing extra" case.
+  NormalizedProduct? detailsResult;
+
   int searchCalls = 0;
   final resolveCalls = <String>[];
+  final detailsCalls = <String>[];
+
+  @override
+  Future<NormalizedProduct> details({
+    required String provider,
+    required String externalId,
+  }) async {
+    detailsCalls.add('$provider/$externalId');
+    final failure = detailsFailure;
+    if (failure != null) throw failure;
+    final result = detailsResult;
+    if (result == null) {
+      throw const ApiException(
+        code: ApiException.codeUnknown,
+        message: 'no details stubbed',
+      );
+    }
+    return result;
+  }
 
   @override
   Future<ProductSearchResult> search({

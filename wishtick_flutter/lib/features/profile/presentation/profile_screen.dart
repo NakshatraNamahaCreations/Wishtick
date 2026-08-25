@@ -100,6 +100,20 @@ class ProfileScreen extends ConsumerWidget {
                     label: 'Edit Profile',
                     onTap: () => context.push<void>(AppRoutes.editProfile),
                   ),
+                  // The chat list's only entry point. A 1:1 thread is opened
+                  // from the person it is with (`4177:267`'s Message button),
+                  // but the *list* of them has to hang off something, and no
+                  // frame in the WishMates set says what.
+                  _Row(
+                    icon: Icons.chat_bubble_outline,
+                    label: 'Messages',
+                    onTap: () => context.push<void>(AppRoutes.chats),
+                  ),
+                  _Row(
+                    icon: Icons.people_outline,
+                    label: 'WishMates',
+                    onTap: () => context.push<void>(AppRoutes.wishmates),
+                  ),
                   _Row(
                     icon: Icons.favorite_border,
                     iconColor: colors.accent,

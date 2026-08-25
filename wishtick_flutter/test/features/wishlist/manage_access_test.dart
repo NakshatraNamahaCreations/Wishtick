@@ -64,7 +64,9 @@ void main() {
         ),
       );
 
-      final controller = t.container.read(manageAccessProvider('wl_1').notifier);
+      final controller = t.container.read(
+        manageAccessProvider('wl_1').notifier,
+      );
       await controller.ensureLoaded();
       await controller.ensureLoaded();
 
@@ -76,7 +78,9 @@ void main() {
 
     test('inviteByEmail normalises the address and appends the row', () async {
       final t = build();
-      final controller = t.container.read(manageAccessProvider('wl_1').notifier);
+      final controller = t.container.read(
+        manageAccessProvider('wl_1').notifier,
+      );
       await controller.ensureLoaded();
 
       final ok = await controller.inviteByEmail('  Friend@Example.COM ');
@@ -90,27 +94,34 @@ void main() {
       expect(state.error, isNull);
     });
 
-    test('a refused invite keeps the server\'s reason and clears busy', () async {
-      final t = build();
-      final controller = t.container.read(manageAccessProvider('wl_1').notifier);
-      await controller.ensureLoaded();
-      t.repo.failure = const ApiException(
-        code: 'PARTICIPANT_ALREADY_EXISTS',
-        message: 'This person already has access to the wishlist',
-        statusCode: 409,
-      );
+    test(
+      'a refused invite keeps the server\'s reason and clears busy',
+      () async {
+        final t = build();
+        final controller = t.container.read(
+          manageAccessProvider('wl_1').notifier,
+        );
+        await controller.ensureLoaded();
+        t.repo.failure = const ApiException(
+          code: 'PARTICIPANT_ALREADY_EXISTS',
+          message: 'This person already has access to the wishlist',
+          statusCode: 409,
+        );
 
-      final ok = await controller.inviteByEmail('friend@example.com');
+        final ok = await controller.inviteByEmail('friend@example.com');
 
-      expect(ok, isFalse);
-      final state = t.container.read(manageAccessProvider('wl_1'));
-      expect(state.error, 'This person already has access to the wishlist');
-      expect(state.busy, isFalse);
-    });
+        expect(ok, isFalse);
+        final state = t.container.read(manageAccessProvider('wl_1'));
+        expect(state.error, 'This person already has access to the wishlist');
+        expect(state.busy, isFalse);
+      },
+    );
 
     test('revoke drops the row without a refetch', () async {
       final t = build();
-      final controller = t.container.read(manageAccessProvider('wl_1').notifier);
+      final controller = t.container.read(
+        manageAccessProvider('wl_1').notifier,
+      );
       await controller.ensureLoaded();
       await controller.inviteByEmail('friend@example.com');
       final id = t.container

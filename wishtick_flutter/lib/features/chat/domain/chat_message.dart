@@ -1,8 +1,14 @@
 import 'package:flutter/foundation.dart';
 
+import '../../wishmates/domain/wishmate.dart';
+
 enum ChatType {
   wishlist('wishlist'),
-  groupGift('group_gift');
+  groupGift('group_gift'),
+
+  /// A 1:1 thread between two WishMates (`4177:179`, `4177:6`). Gated on an
+  /// accepted link — the connection *is* the permission to message.
+  direct('direct');
 
   const ChatType(this.wireValue);
 
@@ -179,6 +185,53 @@ class ChatMessage {
   );
 }
 
+/// The newest message in a thread, as a chat-list row draws it (`4177:179`).
+///
+/// A trimmed [ChatMessage]: a list of threads should not carry a reaction
+/// array and an attachment manifest per row to render one line of grey text.
+/// The body arrives already truncated, and already stripped for a deleted or
+/// hidden message — the same masking the thread itself applies.
+@immutable
+class MessagePreview {
+  const MessagePreview({
+    required this.id,
+    required this.senderId,
+    required this.kind,
+    required this.body,
+    required this.hasAttachments,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String? senderId;
+  final MessageKind kind;
+
+  /// Empty for a deleted message, and for one that is only attachments.
+  final String body;
+
+  final bool hasAttachments;
+  final DateTime createdAt;
+
+  bool sentBy(String? userId) => userId != null && senderId == userId;
+
+  /// What a row shows when there is nothing to quote — a deleted message, or
+  /// one that was only a photo.
+  String previewText() {
+    if (body.isNotEmpty) return body;
+    if (hasAttachments) return 'Sent an attachment';
+    return 'Sent a message';
+  }
+
+  factory MessagePreview.fromJson(Map<String, dynamic> json) => MessagePreview(
+    id: json['id'] as String,
+    senderId: json['senderId'] as String?,
+    kind: MessageKind.fromWire(json['kind'] as String?),
+    body: json['body'] as String? ?? '',
+    hasAttachments: json['hasAttachments'] as bool? ?? false,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+  );
+}
+
 @immutable
 class Chat {
   const Chat({
@@ -189,6 +242,8 @@ class Chat {
     required this.whoCanPost,
     required this.participantCount,
     this.lastMessageAt,
+    this.counterpart,
+    this.lastMessage,
   });
 
   final String id;
@@ -205,6 +260,19 @@ class Chat {
 
   final int participantCount;
 
+  /// The person on the other side of a DIRECT thread; null for every other
+  /// type, whose subject is a wishlist or a group gift instead.
+  ///
+  /// A direct chat's [refId] is a one-way hash of the pair, so it addresses the
+  /// thread but names nobody — without this the chat list could not draw a
+  /// single row.
+  final PersonIdentity? counterpart;
+
+  /// The newest message the caller is allowed to see, or null for a thread
+  /// nobody has written in yet — which is a real state, because the row exists
+  /// from the moment the thread is opened.
+  final MessagePreview? lastMessage;
+
   bool get canPost => whoCanPost == 'participants';
 
   factory Chat.fromJson(Map<String, dynamic> json) => Chat(
@@ -217,6 +285,12 @@ class Chat {
     unreadCount: json['unreadCount'] as int? ?? 0,
     whoCanPost: json['whoCanPost'] as String? ?? 'participants',
     participantCount: json['participantCount'] as int? ?? 0,
+    counterpart: json['counterpart'] == null
+        ? null
+        : PersonIdentity.fromJson(json['counterpart'] as Map<String, dynamic>),
+    lastMessage: json['lastMessage'] == null
+        ? null
+        : MessagePreview.fromJson(json['lastMessage'] as Map<String, dynamic>),
   );
 }
 

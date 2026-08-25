@@ -40,7 +40,11 @@ class CircleBackButton extends StatelessWidget {
 
 /// A transparent app bar carrying [CircleBackButton], and optionally a centred
 /// title — the two arrangements the Sprint 7 frames use.
-AppBar circleBackAppBar(BuildContext context, {String? title}) => AppBar(
+AppBar circleBackAppBar(
+  BuildContext context, {
+  String? title,
+  List<Widget>? actions,
+}) => AppBar(
   // The page colour rather than transparent: an app bar with no colour of its
   // own leaves the status-bar strip showing whatever is behind the route,
   // which on a route pushed over a translucent one is the dimming scrim.
@@ -62,4 +66,5 @@ AppBar circleBackAppBar(BuildContext context, {String? title}) => AppBar(
     padding: EdgeInsets.only(left: AppSpacing.lg),
     child: Align(child: CircleBackButton()),
   ),
+  actions: actions,
 );

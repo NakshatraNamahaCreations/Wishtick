@@ -41,6 +41,7 @@ import { ProfileModule } from './modules/profile/profile.module';
 import { TaxonomyModule } from './modules/taxonomy/taxonomy.module';
 import { UsersModule } from './modules/users/users.module';
 import { WishlistsModule } from './modules/wishlists/wishlists.module';
+import { WishmatesModule } from './modules/wishmates/wishmates.module';
 
 @Module({
   imports: [
@@ -120,6 +121,7 @@ import { WishlistsModule } from './modules/wishlists/wishlists.module';
     ProfileModule,
     OnboardingModule,
     WishlistsModule,
+    WishmatesModule,
     EventsModule,
     ProductsModule,
     GiftingModule,

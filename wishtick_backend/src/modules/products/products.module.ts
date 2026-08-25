@@ -17,6 +17,7 @@ import { ProductImportController } from './product-import.controller';
 import { ProductImportService } from './product-import.service';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
+import { SearchPrewarmService } from './search-prewarm.service';
 import { FixtureProductProvider } from './providers/fixture-provider';
 import { PRODUCT_PROVIDER, type IProductProvider } from './providers/product-provider.port';
 import { ProviderGuard } from './providers/provider-guard.service';
@@ -66,6 +67,7 @@ const logger = new Logger('ProductsModule');
     CuelinksClient,
     MonetizationService,
     ConversionSyncService,
+    SearchPrewarmService,
     {
       provide: PRODUCT_PROVIDER,
       inject: [ConfigService, FixtureProductProvider, SerpApiProductProvider],

@@ -1,21 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Debug builds only.
+  Debug builds only. `android/app/src/main/AndroidManifest.xml` sets no
+  `networkSecurityConfig`, so release and profile builds keep the platform
+  default — cleartext denied from API 28 — and nothing here can weaken them.
 
   Android blocks cleartext HTTP by default from API 28. Dart's own HTTP stack
-  (`dart:io`, and so Dio and Image.network) does not go through this policy, so
-  the API and remote images work over http://localhost:3000 without it — but
+  (`dart:io`, and so Dio, the Socket.IO client and Image.network) does not go
+  through this policy, so the API works over plain HTTP without it — but
   ExoPlayer, which backs just_audio and video_player, is native and does. A
   voice note or a video served by the local dev backend simply fails to open.
 
-  Scoped to the two hosts a dev backend is ever reached on: `localhost` via
-  `adb reverse`, and `10.0.2.2` from an emulator. Everything else, in debug and
-  in release alike, still requires TLS.
+  This used to name the three hosts a dev backend was ever reached on
+  (`localhost` via `adb reverse`, `127.0.0.1`, `10.0.2.2` from an emulator).
+  Running the app over Wi-Fi instead of USB means reaching the dev machine at
+  its LAN address, which is handed out by DHCP and differs per developer and
+  per network — and `<domain>` matches literal hosts, with no CIDR form to
+  express "the local subnet". Listing an address that changes under you is a
+  worse failure than permitting cleartext in a build that is never shipped.
 -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">10.0.2.2</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

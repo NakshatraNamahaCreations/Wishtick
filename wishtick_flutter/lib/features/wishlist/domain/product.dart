@@ -15,6 +15,45 @@ enum ResultFreshness {
       .firstWhere((v) => v.wireValue == value, orElse: () => live);
 }
 
+/// One spec line — "Noise Cancelling: Yes".
+///
+/// Opaque label/value pairs rather than a typed model: every category has
+/// different attributes, so a schema would either lose most of them or become
+/// a taxonomy nobody maintains.
+@immutable
+class ProductFeature {
+  const ProductFeature({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  factory ProductFeature.fromJson(Map<String, dynamic> json) => ProductFeature(
+    label: json['label'] as String? ?? '',
+    value: json['value'] as String? ?? '',
+  );
+}
+
+/// One seller's price. The catalogue often sees several for the same product,
+/// and choosing where to buy is the point of showing them.
+@immutable
+class ProductOffer {
+  const ProductOffer({
+    required this.merchant,
+    required this.amountMinor,
+    required this.url,
+  });
+
+  final String? merchant;
+  final int? amountMinor;
+  final String? url;
+
+  factory ProductOffer.fromJson(Map<String, dynamic> json) => ProductOffer(
+    merchant: json['merchant'] as String?,
+    amountMinor: (json['amountMinor'] as num?)?.toInt(),
+    url: json['url'] as String?,
+  );
+}
+
 /// One product from search, a provider lookup, or (partially) a resolved URL
 /// (`NormalizedProduct`). Identity is `(provider, externalId)`.
 @immutable
@@ -33,6 +72,12 @@ class NormalizedProduct {
     required this.merchant,
     required this.category,
     required this.inStock,
+    this.rating,
+    this.reviewCount,
+    this.deliveryNote,
+    this.brand,
+    this.features = const [],
+    this.offers = const [],
   });
 
   final String provider;
@@ -52,6 +97,33 @@ class NormalizedProduct {
   final String? merchant;
   final String? category;
   final bool inStock;
+
+  /// The provider's star rating, 0–5. Sparse — most catalogue rows carry none,
+  /// so anything rendering it must hide rather than show an empty star row.
+  final double? rating;
+
+  /// How many reviews [rating] averages over. Null whenever [rating] is.
+  final int? reviewCount;
+
+  /// The provider's own delivery promise, verbatim. Theirs, not ours.
+  final String? deliveryNote;
+
+  /// The manufacturer, when the provider names one.
+  final String? brand;
+
+  /// Spec lines. Always empty from a search — only the detail lookup carries
+  /// them, which is what makes opening a product worth the extra call.
+  final List<ProductFeature> features;
+
+  /// Every seller the provider found, cheapest first. Empty from a search.
+  final List<ProductOffer> offers;
+
+  /// Only worth drawing when there is a rating *and* something it averages.
+  bool get hasRating => rating != null;
+
+  /// True once a detail lookup has filled in what a search cannot.
+  bool get isEnriched =>
+      features.isNotEmpty || offers.isNotEmpty || imageUrls.length > 1;
 
   double? get amount => amountMinor == null ? null : amountMinor! / 100;
   String? get coverImageUrl => imageUrls.isEmpty ? null : imageUrls.first;
@@ -79,6 +151,18 @@ class NormalizedProduct {
         merchant: json['merchant'] as String?,
         category: json['category'] as String?,
         inStock: json['inStock'] as bool? ?? true,
+        // num, not int/double: JSON gives 4 for a whole-number rating and 4.3
+        // otherwise, and `as double` throws on the former.
+        rating: (json['rating'] as num?)?.toDouble(),
+        reviewCount: (json['reviewCount'] as num?)?.toInt(),
+        deliveryNote: json['deliveryNote'] as String?,
+        brand: json['brand'] as String?,
+        features: (json['features'] as List<dynamic>? ?? const [])
+            .map((e) => ProductFeature.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        offers: (json['offers'] as List<dynamic>? ?? const [])
+            .map((e) => ProductOffer.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../core/widgets/curved_bottom_clipper.dart';
 import '../../../core/widgets/sparkle_icon.dart';
 import 'create_event_controller.dart';
 import 'widgets/relation_picker_sheet.dart';
@@ -229,7 +230,7 @@ class _CurvedHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return ClipPath(
-      clipper: _CurvedBottomClipper(),
+      clipper: const CurvedBottomClipper(),
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
@@ -267,27 +268,6 @@ class _CurvedHeader extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The concave sweep along the header's foot, as `257:733` draws it.
-class _CurvedBottomClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    const dip = 28.0;
-    return Path()
-      ..lineTo(0, size.height - dip)
-      ..quadraticBezierTo(
-        size.width / 2,
-        size.height + dip,
-        size.width,
-        size.height - dip,
-      )
-      ..lineTo(size.width, 0)
-      ..close();
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
 /// Looks like a dropdown, opens the picker sheet (`2252:423`).

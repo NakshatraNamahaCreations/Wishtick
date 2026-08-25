@@ -31,17 +31,60 @@ flutter run --dart-define=WISHTICK_API_BASE_URL=http://10.0.2.2:3000
 ```
 
 `10.0.2.2` is **the Android emulator's** route to the host machine — it does
-not resolve on a physical device. On a real phone pass your computer's LAN IP
-(`ipconfig` → IPv4 address), with the phone on the same Wi-Fi and the backend
-bound to `0.0.0.0` (it already is):
+not resolve on a physical device. On the iOS simulator use
+`http://localhost:3000`.
+
+#### On a physical device, over USB
+
+`adb reverse` forwards the phone's *own* `localhost:3000` to this machine, so
+the address never goes stale:
 
 ```bash
-flutter run --dart-define=WISHTICK_API_BASE_URL=http://192.168.1.10:3000
+adb reverse tcp:3000 tcp:3000
+flutter run --dart-define=WISHTICK_API_BASE_URL=http://localhost:3000
 ```
 
-On the iOS simulator use `http://localhost:3000`.
+#### On a physical device, over Wi-Fi (no cable)
 
-VS Code users: all three are preset in
+Pass this machine's LAN IP instead. The backend already binds `0.0.0.0`, so
+nothing changes server-side:
+
+```bash
+flutter run --dart-define=WISHTICK_API_BASE_URL=http://192.168.1.86:3000
+```
+
+Find the address on the adapter the phone's Wi-Fi is actually on:
+
+```powershell
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object PrefixOrigin -eq Dhcp
+```
+
+Two things catch people out:
+
+- **Ethernet and Wi-Fi are usually different subnets that do not route to each
+  other.** A machine plugged into Ethernet on `192.168.0.x` is *not* reachable
+  from a phone on Wi-Fi at `192.168.1.x`, however much they look like the same
+  building. Check the first three octets of both addresses match; if they do
+  not, put this machine on the same Wi-Fi as the phone.
+- **The address is DHCP** and changes with the lease, which is why it is a
+  prompt in `launch.json` rather than a stored value.
+
+To prove the cable is out of the loop, drop the tunnel first — otherwise a
+lingering `adb reverse` will mask a LAN that never worked:
+
+```bash
+adb reverse --remove-all
+```
+
+If Windows Firewall blocks the inbound connection (it may prompt the first
+time Node listens), allow TCP 3000 on the private profile only:
+
+```powershell
+New-NetFirewallRule -DisplayName "Wishtick dev API (TCP 3000)" -Direction Inbound `
+  -Action Allow -Protocol TCP -LocalPort 3000 -Profile Private -RemoteAddress LocalSubnet
+```
+
+VS Code users: all four are preset in
 [`.vscode/launch.json`](../.vscode/launch.json).
 
 The backend serves everything under `/api/v1` (global prefix + URI versioning),

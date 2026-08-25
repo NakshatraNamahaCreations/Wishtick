@@ -213,6 +213,39 @@ abstract final class AppRoutes {
   /// The confirmation after it goes (`2209:203`).
   static String thankYouSent(String noteId) => '/thank-you/$noteId/sent';
 
+  // WishMates — the social graph (Sprint 11).
+  //
+  // Root-level rather than under `/profile`: the frames are reached from
+  // Home's header, and a person's profile is a destination in its own right
+  // that chat, search and the request tabs all push to.
+
+  /// Claim an `@handle` (no frame — see `UsernameClaimScreen`). Everything
+  /// below it is unreachable until this has been done once.
+  static const usernameClaim = '/handle';
+
+  /// "WishMates" (`4177:138`).
+  static const wishmates = '/wishmates';
+
+  /// "WishLink" (`4177:77` / `4177:111`) — Received and Sent as two tabs of
+  /// one route, because they are the same pending rows seen from either end.
+  static const wishlinks = '/wishlinks';
+
+  /// People search (`4177:42`).
+  static const peopleSearch = '/people';
+
+  /// Somebody's profile (`4177:217` unconnected, `4177:267` connected). One
+  /// route: which one it draws is the relationship the server reports, not a
+  /// decision the caller makes.
+  static String person(String userId) => '/people/$userId';
+
+  /// The chat list (`4177:179`).
+  static const chats = '/chats';
+
+  /// A 1:1 thread (`4177:6`). Keyed by the *person*, not the chat: the caller
+  /// always knows who, and `POST /chats/direct/:userId` is idempotent, so the
+  /// screen resolves the thread itself rather than every caller doing it.
+  static String directChat(String userId) => '/chats/direct/$userId';
+
   // Settings
   static const appearance = '/profile/appearance';
 

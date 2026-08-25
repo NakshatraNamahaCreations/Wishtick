@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from 'src/modules/auth/auth.module';
 import { GroupGift, GroupGiftSchema } from 'src/modules/group-gifts/schemas/group-gift.schema';
 import { WishlistsModule } from 'src/modules/wishlists/wishlists.module';
+import { WishmatesModule } from 'src/modules/wishmates/wishmates.module';
 import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
@@ -26,6 +27,8 @@ import { ReadReceipt, ReadReceiptSchema } from './schemas/read-receipt.schema';
     AuthModule,
     // AccessPolicyService + WishlistsService for chat authorization.
     WishlistsModule,
+    // Direct chat is gated on an accepted link — see ChatService.openDirect.
+    WishmatesModule,
   ],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway, ChatSystemListener],

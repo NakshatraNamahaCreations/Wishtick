@@ -1,4 +1,31 @@
 /**
+ * One spec line — "Noise Cancelling: Yes".
+ *
+ * Kept as opaque label/value pairs rather than a typed spec model: every
+ * category has different attributes (a headphone has "Form", a candle does
+ * not), and inventing a schema for that would either lose most of them or
+ * turn into a taxonomy nobody maintains.
+ */
+export interface ProductFeature {
+  label: string;
+  value: string;
+}
+
+/**
+ * One seller's price for a product.
+ *
+ * The catalogue can see several — the same headphone at three merchants — and
+ * a buyer choosing where to go is the whole point of showing them. [url] is
+ * the merchant's real page, which is also what makes an affiliate wrap
+ * possible; a Google redirect cannot be monetized.
+ */
+export interface ProductOffer {
+  merchant: string | null;
+  amountMinor: number | null;
+  url: string | null;
+}
+
+/**
  * Provider-neutral product shape.
  *
  * Every adapter normalizes into this, so the rest of the app never learns which
@@ -31,6 +58,40 @@ export interface NormalizedProduct {
   /** Our gift-category taxonomy key, mapped from the provider's own category. */
   category: string | null;
   inStock: boolean;
+  /**
+   * The provider's star rating, 0–5, or null when it does not publish one.
+   *
+   * First-class rather than tucked into [affiliateMeta]: this is a fact about
+   * the product that a buyer reads, not something the affiliate network needs
+   * for a payout. Sparse in practice — Google Shopping omits it on most rows —
+   * so every consumer has to handle null rather than render an empty star row.
+   */
+  rating: number | null;
+  /** How many reviews [rating] averages over. Null whenever rating is. */
+  reviewCount: number | null;
+  /**
+   * The provider's own delivery line, verbatim ("Free delivery by Tue, 26
+   * Aug"). Kept as opaque text: it is the provider's promise, not ours, and
+   * re-deriving a date from it would turn their estimate into our claim.
+   */
+  deliveryNote: string | null;
+  /** The manufacturer, when the provider names one. */
+  brand: string | null;
+  /**
+   * Spec lines, in the provider's own order.
+   *
+   * Empty from a plain search — only the detail lookup carries them, which is
+   * why the detail screen is worth opening at all.
+   */
+  features: ProductFeature[];
+  /**
+   * Every seller the provider found, cheapest first.
+   *
+   * Empty from a search (which reports one merchant), populated by the detail
+   * lookup. [productUrl] still points at the single best one so nothing that
+   * only wants "where do I send them" has to understand this list.
+   */
+  offers: ProductOffer[];
   /** Anything network-specific worth keeping for reconciliation or payouts. */
   affiliateMeta: Record<string, unknown>;
 }

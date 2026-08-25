@@ -174,24 +174,49 @@ void main() {
     expect(find.byIcon(Icons.send_outlined), findsNothing);
   });
 
-  testWidgets('tapping add-friend or request-sent says nothing — an apology '
-      'toast is worse than a tap that does nothing', (tester) async {
-    await pump(tester);
+  testWidgets('the add-person and request icons open WishMates and WishLink', (
+    tester,
+  ) async {
+    // Sprint 11 gave these two somewhere to go. They were drawn but inert
+    // through the sprints that had nothing behind them, and this test is what
+    // used to hold that: it now holds the opposite, which is the point.
+    final tapped = <String>[];
 
-    for (final asset in const [
-      'assets/icons/add_friend.png',
-      'assets/icons/request_sent.png',
-    ]) {
-      await tester.tap(
-        find.byWidgetPredicate(
-          (w) => w is Image && (w.image as AssetImage).assetName == asset,
+    tester.view
+      ..physicalSize = const Size(393, 1600)
+      ..devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: HomeHeader(
+            address: null,
+            onLocationTap: () {},
+            onSearchTap: () {},
+            onNotificationsTap: () => tapped.add('notifications'),
+            onWishmatesTap: () => tapped.add('wishmates'),
+            onWishLinksTap: () => tapped.add('wishlinks'),
+          ),
         ),
-        warnIfMissed: false,
-      );
-      await tester.pump();
-    }
+      ),
+    );
+    await tester.pump();
 
-    expect(find.byType(SnackBar), findsNothing);
+    await tester.tap(find.byTooltip('WishMates'));
+    await tester.pump();
+    expect(tapped, ['wishmates']);
+
+    await tester.tap(find.byTooltip('WishLink requests'));
+    await tester.pump();
+    expect(tapped, ['wishmates', 'wishlinks']);
+
+    // And the bell still goes where it always did — the two new buttons sit
+    // beside it, they do not replace it.
+    await tester.tap(find.byTooltip('Notifications'));
+    await tester.pump();
+    expect(tapped, ['wishmates', 'wishlinks', 'notifications']);
   });
 
   testWidgets('the logo mark is drawn bigger than a plain icon — the asset '

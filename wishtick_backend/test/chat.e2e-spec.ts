@@ -27,6 +27,16 @@ interface Actor {
 interface ChatView {
   id: string;
   type: string;
+  unreadCount: number;
+  counterpart: {
+    userId: string;
+    username: string | null;
+    displayName: string | null;
+    online: boolean;
+    lastSeenAt: string | null;
+  } | null;
+  participantCount: number;
+  lastMessage: { id: string; senderId: string | null; body: string; kind: string } | null;
 }
 interface MessageView {
   id: string;
@@ -459,6 +469,150 @@ describe('Chat (e2e)', () => {
       ).body as Envelope<{ sections: Record<string, { available: boolean; count: number }> }>;
       expect(dash.data.sections.wishlistChats.available).toBe(true);
       expect(dash.data.sections.wishlistChats.count).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  /**
+   * What a chat-list row is made of (`4177:179`).
+   *
+   * A direct chat's `refId` is a one-way hash of the pair, so without
+   * `counterpart` the list could not name a single person on it; without
+   * `lastMessage` every row would read the same. Both are projections, so the
+   * tests that matter are the ones about what they must *not* carry.
+   */
+  describe('the chat list', () => {
+    /** Two accounts that have accepted each other, and their thread. */
+    const pairWithThread = async (): Promise<{ a: Actor; b: Actor; chatId: string }> => {
+      const a = await newUser();
+      const b = await newUser();
+      for (const [x, y] of [
+        [a, b],
+        [b, a],
+      ]) {
+        await request(app.getHttpServer())
+          .post(`${V1}/people/${y.userId}/request`)
+          .set(auth(x.token))
+          .expect(201);
+      }
+      const opened = (
+        await request(app.getHttpServer())
+          .post(`${V1}/chats/direct/${b.userId}`)
+          .set(auth(a.token))
+          .expect(201)
+      ).body as Envelope<{ chatId: string }>;
+      return { a, b, chatId: opened.data.chatId };
+    };
+
+    const listChats = async (actor: Actor, type: string): Promise<ChatView[]> =>
+      (
+        (
+          await request(app.getHttpServer())
+            .get(`${V1}/chats?type=${type}`)
+            .set(auth(actor.token))
+            .expect(200)
+        ).body as Envelope<ChatView[]>
+      ).data;
+
+    it('names the person on the other side, from either end', async () => {
+      const { a, b, chatId } = await pairWithThread();
+
+      const [forA] = await listChats(a, 'direct');
+      const [forB] = await listChats(b, 'direct');
+
+      expect(forA.id).toBe(chatId);
+      // Each side is shown the *other* one — the same row, read from opposite
+      // ends, which is the whole reason this cannot be derived from refId.
+      expect(forA.counterpart?.userId).toBe(b.userId);
+      expect(forB.counterpart?.userId).toBe(a.userId);
+      expect(forA.counterpart).toHaveProperty('online');
+      expect(forA.counterpart).toHaveProperty('lastSeenAt');
+    });
+
+    it('leaves counterpart null for a chat that is about a thing, not a person', async () => {
+      const owner = await newUser();
+      const friend = await newUser();
+      const wl = await makeWishlist(owner);
+      // Both of them in it, so a chat with exactly two participants is *not*
+      // enough to make one of them "the other side" — only the type is.
+      await wishlistChatId(owner, wl);
+      await wishlistChatId(friend, wl);
+
+      const [chat] = await listChats(owner, 'wishlist');
+
+      expect(chat.participantCount).toBe(2);
+      // A wishlist thread's subject is the wishlist; there is no "other side".
+      expect(chat.counterpart).toBeNull();
+    });
+
+    it('carries the newest message, and nothing before it', async () => {
+      const { a, b, chatId } = await pairWithThread();
+      await post(a, chatId, { body: 'first' }).expect(201);
+      await post(b, chatId, { body: 'Hi, please find the invitation' }).expect(201);
+
+      const [row] = await listChats(a, 'direct');
+
+      expect(row.lastMessage?.body).toBe('Hi, please find the invitation');
+      expect(row.lastMessage?.senderId).toBe(b.userId);
+      expect(row.unreadCount).toBe(1);
+    });
+
+    it('is null for a thread nobody has written in', async () => {
+      const { a } = await pairWithThread();
+
+      const [row] = await listChats(a, 'direct');
+
+      // An empty thread is a real state — the row exists the moment it opens.
+      expect(row.lastMessage).toBeNull();
+    });
+
+    it('truncates a long message rather than shipping the whole essay', async () => {
+      const { a, chatId } = await pairWithThread();
+      await post(a, chatId, { body: 'x'.repeat(500) }).expect(201);
+
+      const [row] = await listChats(a, 'direct');
+
+      // 140 characters plus the ellipsis. One pasted wall of text must not set
+      // the size of every other row on the screen.
+      expect(row.lastMessage?.body).toHaveLength(141);
+      expect(row.lastMessage?.body.endsWith('…')).toBe(true);
+    });
+
+    it('strips a deleted message the way the thread does', async () => {
+      const { a, chatId } = await pairWithThread();
+      const sent = (await post(a, chatId, { body: 'oops' }).expect(201))
+        .body as Envelope<MessageView>;
+      await request(app.getHttpServer())
+        .delete(`${V1}/messages/${sent.data.id}`)
+        .set(auth(a.token))
+        .expect(200);
+
+      const [row] = await listChats(a, 'direct');
+
+      // The envelope survives so the row keeps its place in time; the words
+      // do not, exactly as in history.
+      expect(row.lastMessage?.id).toBe(sent.data.id);
+      expect(row.lastMessage?.body).toBe('');
+    });
+
+    it('never previews a surprise to the person it is hidden from', async () => {
+      const owner = await newUser();
+      const gifter = await newUser();
+      const wl = await makeWishlist(owner);
+      const chatId = await wishlistChatId(owner, wl);
+
+      await post(gifter, chatId, { body: 'visible to both' }).expect(201);
+      await post(gifter, chatId, {
+        body: 'getting the espresso machine',
+        surprise: true,
+      }).expect(201);
+
+      const [ownerRow] = await listChats(owner, 'wishlist');
+      const [gifterRow] = await listChats(gifter, 'wishlist');
+
+      // The worst possible leak: a spoiler the owner cannot open in the thread
+      // arriving unasked-for, on a list screen, as the newest thing said.
+      expect(ownerRow.lastMessage?.body).toBe('visible to both');
+      expect(gifterRow.lastMessage?.body).toBe('getting the espresso machine');
     });
   });
 

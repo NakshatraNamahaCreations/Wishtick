@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
   NormalizedProduct,
+  ProductOffer,
   ProductSearchQuery,
   ProductSearchResult,
   ProviderCategory,
@@ -31,6 +32,16 @@ const CATEGORY_QUERIES: Record<string, { label: string; q: string }> = {
   toys: { label: 'Toys & Games', q: 'toys and games gift' },
   fitness: { label: 'Fitness', q: 'fitness equipment gift' },
   jewellery: { label: 'Jewellery', q: 'jewellery gift' },
+  // The five `discover.curation.ts` asks for that had no entry here. Without
+  // them Festival, Rakhi, Retirement, Special Moments and Best Wishes each
+  // resolved to a category this provider could not query, returned nothing,
+  // and were dropped from the feed — five of thirteen occasions leading to a
+  // blank grid.
+  food_drink: { label: 'Food & Drink', q: 'gourmet food hamper gift' },
+  experiences: { label: 'Experiences', q: 'experience gift voucher' },
+  handmade: { label: 'Handmade', q: 'handmade gift' },
+  kitchen: { label: 'Kitchen', q: 'kitchen gift set' },
+  stationery: { label: 'Stationery', q: 'stationery gift set' },
 };
 
 /**
@@ -42,7 +53,14 @@ const CATEGORY_QUERIES: Record<string, { label: string; q: string }> = {
  */
 const BROWSE_QUERY = 'gifts';
 
-/** What we keep on a Product row so it can be monetized later. */
+/**
+ * What we keep on a Product row so it can be monetized later.
+ *
+ * Strictly monetization plumbing. Rating, reviews and delivery used to live
+ * here too and no longer do — they are facts a buyer reads, so they are
+ * first-class fields on NormalizedProduct where the UI can reach them without
+ * knowing which provider it is talking to.
+ */
 export interface SerpApiMeta {
   productId?: string;
   /** The key to `google_immersive_product`. Without it, no merchant link. */
@@ -50,9 +68,6 @@ export interface SerpApiMeta {
   source?: string | null;
   merchantLinkResolved?: boolean;
   storeCount?: number;
-  rating?: number | null;
-  reviews?: number | null;
-  delivery?: string | null;
 }
 
 /**
@@ -167,16 +182,25 @@ export class SerpApiProductProvider implements IProductProvider {
       immersiveToken: token,
       merchantLinkResolved: best?.link != null,
       storeCount: stores.length,
-      rating: result.rating ?? null,
-      reviews: result.reviews ?? null,
     };
+
+    // Google's own `description` is empty on every row observed; the prose
+    // equivalent is this structured spec list, which the previous mapping
+    // dropped entirely — so the detail lookup was paying for a call and
+    // throwing away the only thing that made it worth making.
+    const features = (result.about_the_product?.features ?? [])
+      .map((f) => ({ label: (f.title ?? '').trim(), value: (f.value ?? '').trim() }))
+      .filter((f) => f.label !== '' && f.value !== '');
 
     return {
       provider: this.name,
       externalId,
       title: result.title ?? best?.title ?? externalId,
       description: result.description ?? null,
-      imageUrls: (result.thumbnails ?? []).slice(0, 6),
+      // 12, not 6: the gallery is one of the two reasons to open a product,
+      // and a 15-thumbnail listing was being cut to six for no reason beyond
+      // caution about payload size.
+      imageUrls: (result.thumbnails ?? []).slice(0, 12),
       productUrl: best?.link ?? SerpApiProductProvider.googleProductUrl(externalId),
       // Monetization is a separate vendor's job; this adapter never invents one.
       affiliateUrl: null,
@@ -188,6 +212,16 @@ export class SerpApiProductProvider implements IProductProvider {
       // Nothing here says "out of stock"; a product with no store is the
       // closest signal Google gives us.
       inStock: best !== null,
+      rating: result.rating ?? null,
+      reviewCount: result.reviews ?? null,
+      // The immersive engine reports sellers, not a delivery promise.
+      deliveryNote: null,
+      brand: result.brand ?? null,
+      features,
+      // Cheapest total first — the same ordering [bestStore] picks from, so
+      // the list's head and `productUrl` can never disagree about which
+      // seller is the best deal.
+      offers: SerpApiProductProvider.toOffers(stores),
       affiliateMeta: { serpapi: meta },
     };
   }
@@ -234,12 +268,26 @@ export class SerpApiProductProvider implements IProductProvider {
    */
   private static queryFor(query: ProductSearchQuery): string | null {
     const keywords = query.q?.trim();
-    const shelf = query.category ? CATEGORY_QUERIES[query.category]?.q : undefined;
+    const shelf = query.category ? SerpApiProductProvider.shelfQuery(query.category) : undefined;
     if (keywords && shelf) return `${shelf} ${keywords}`;
     if (keywords || shelf) return keywords || shelf!;
 
     const hasPriceFilter = query.minPriceMinor !== undefined || query.maxPriceMinor !== undefined;
     return hasPriceFilter ? BROWSE_QUERY : null;
+  }
+
+  /**
+   * What to ask Google for a category shelf.
+   *
+   * Curated where [CATEGORY_QUERIES] has an entry, derived from the taxonomy
+   * key otherwise. Deriving matters more than the quality of the derived
+   * query: an unmapped category used to return null, which Discover renders
+   * as an empty shelf and then drops silently — so adding a taxonomy term
+   * without touching this file quietly removed a shelf from the feed, with
+   * nothing anywhere saying so. A rough query beats a disappeared section.
+   */
+  private static shelfQuery(category: string): string {
+    return CATEGORY_QUERIES[category]?.q ?? `${category.replace(/_/g, ' ')} gift`;
   }
 
   /**
@@ -262,9 +310,6 @@ export class SerpApiProductProvider implements IProductProvider {
       immersiveToken: row.immersive_product_page_token,
       source: row.source ?? null,
       merchantLinkResolved: false,
-      rating: row.rating ?? null,
-      reviews: row.reviews ?? null,
-      delivery: row.delivery ?? null,
     };
 
     return {
@@ -282,6 +327,14 @@ export class SerpApiProductProvider implements IProductProvider {
       // The shelf we searched, never a claim about the product itself.
       category,
       inStock: true,
+      rating: row.rating ?? null,
+      reviewCount: row.reviews ?? null,
+      deliveryNote: row.delivery ?? null,
+      // A search row knows one merchant and no specs; both arrive only from
+      // the detail lookup, which is what the product screen enriches with.
+      brand: null,
+      features: [],
+      offers: [],
       affiliateMeta: { serpapi: meta },
     };
   }
@@ -295,16 +348,41 @@ export class SerpApiProductProvider implements IProductProvider {
    * monetized and there is nowhere to send anyone.
    */
   private static bestStore(stores: SerpStore[]): SerpStore | null {
+    return SerpApiProductProvider.rankedStores(stores)[0] ?? null;
+  }
+
+  /**
+   * Linkable stores, cheapest total first.
+   *
+   * The single source of the ordering, so [bestStore] and the offer list can
+   * never disagree about which seller is the best deal — a page whose "buy"
+   * button went somewhere other than the top of its own price list would be
+   * worse than showing no list at all.
+   */
+  private static rankedStores(stores: SerpStore[]): SerpStore[] {
     const usable = stores.filter((s) => s.link);
-    if (usable.length === 0) return null;
+    if (usable.length === 0) return [];
 
-    const priced = usable
-      .map((store) => ({ store, total: store.extracted_total ?? store.extracted_price }))
-      .filter((x): x is { store: SerpStore; total: number } => typeof x.total === 'number');
+    const priced: { store: SerpStore; total: number }[] = [];
+    const unpriced: SerpStore[] = [];
+    for (const store of usable) {
+      const total = store.extracted_total ?? store.extracted_price;
+      if (typeof total === 'number') priced.push({ store, total });
+      else unpriced.push(store);
+    }
 
-    if (priced.length === 0) return usable[0];
     priced.sort((a, b) => a.total - b.total);
-    return priced[0].store;
+    // Priceless listings last: they cannot be compared, and putting one first
+    // would hide the cheapest real offer behind it.
+    return [...priced.map((p) => p.store), ...unpriced];
+  }
+
+  private static toOffers(stores: SerpStore[]): ProductOffer[] {
+    return SerpApiProductProvider.rankedStores(stores).map((store) => ({
+      merchant: store.name ?? null,
+      amountMinor: toMinorUnits(store.extracted_total ?? store.extracted_price),
+      url: store.link ?? null,
+    }));
   }
 
   private static googleProductUrl(productId: string): string {

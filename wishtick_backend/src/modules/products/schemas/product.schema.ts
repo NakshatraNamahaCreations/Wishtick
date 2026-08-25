@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import type { ProductFeature, ProductOffer } from '../product.types';
 
 export type ProductDocument = HydratedDocument<Product>;
 
@@ -55,6 +56,31 @@ export class Product {
 
   @Prop({ type: Boolean, default: true })
   inStock!: boolean;
+
+  // Product facts a buyer reads, kept out of affiliateMeta on purpose — see
+  // NormalizedProduct. Sparse: most Google Shopping rows carry none of them.
+  @Prop({ type: Number, default: null })
+  rating!: number | null;
+
+  @Prop({ type: Number, default: null })
+  reviewCount!: number | null;
+
+  @Prop({ type: String, default: null })
+  deliveryNote!: string | null;
+
+  @Prop({ type: String, default: null })
+  brand!: string | null;
+
+  // Detail-lookup only, so a plain search never overwrites them — see
+  // ProductsService.upsertMany.
+  @Prop({ type: [{ label: String, value: String }], default: [] })
+  features!: ProductFeature[];
+
+  @Prop({
+    type: [{ merchant: String, amountMinor: Number, url: String }],
+    default: [],
+  })
+  offers!: ProductOffer[];
 
   @Prop({ type: Object, default: {} })
   affiliateMeta!: Record<string, unknown>;

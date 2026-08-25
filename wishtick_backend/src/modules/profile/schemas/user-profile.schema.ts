@@ -93,6 +93,31 @@ export class UserProfile {
   @Prop({ type: String, trim: true, maxlength: 120, default: null })
   displayName!: string | null;
 
+  /**
+   * The public handle — `@rohanm` — and the only way one user can find
+   * another. Stored lower-cased so `@Rohanm` and `@rohanm` cannot both exist;
+   * the frame shows it lower-case everywhere.
+   *
+   * Null until claimed, and a null handle is simply not discoverable. That is
+   * deliberate: deriving one from an email or a display name would publish a
+   * guessable handle for every existing account without anyone opting in, and
+   * a handle is the one field here that strangers can search by.
+   *
+   * Uniqueness is a PARTIAL index declared below, not `unique + sparse` here:
+   * sparse skips documents where the field is *missing*, and `default: null`
+   * writes an explicit null, so every account that never claimed a handle
+   * would collide with the first one.
+   */
+  @Prop({
+    type: String,
+    trim: true,
+    lowercase: true,
+    minlength: 3,
+    maxlength: 30,
+    default: null,
+  })
+  username!: string | null;
+
   @Prop({ type: String, default: null })
   photoUrl!: string | null;
 
@@ -159,5 +184,17 @@ export class UserProfile {
 }
 
 export const UserProfileSchema = SchemaFactory.createForClass(UserProfile);
+
+/**
+ * One holder per handle, counting only the accounts that claimed one.
+ *
+ * `partialFilterExpression` rather than `sparse`: sparse indexes a document
+ * whose field is present-and-null, which is every profile that never set a
+ * username, so a sparse unique index would let exactly one such profile exist.
+ */
+UserProfileSchema.index(
+  { username: 1 },
+  { unique: true, partialFilterExpression: { username: { $type: 'string' } } },
+);
 
 UserProfileSchema.index({ userId: 1 }, { unique: true });

@@ -57,6 +57,20 @@ export class ChatController {
     return this.chat.resolveWishlistChat(wishlistId, userId);
   }
 
+  @Post('chats/direct/:userId')
+  @ApiOperation({
+    summary: 'Open (or create) the direct thread with a WishMate',
+    description: 'Idempotent — the same pair always resolves to the same thread.',
+  })
+  @ApiResponseDoc({ status: 403, description: 'NOT_WISHMATES' })
+  async openDirect(
+    @CurrentUser('id') userId: string,
+    @Param('userId') otherId: string,
+  ): Promise<{ chatId: string }> {
+    const chat = await this.chat.openDirect(userId, otherId);
+    return { chatId: chat._id.toString() };
+  }
+
   @Get('chats/:id')
   @ApiOperation({ summary: 'One chat, with your unread count' })
   getChat(@CurrentUser('id') userId: string, @Param('id') id: string): Promise<ChatView> {

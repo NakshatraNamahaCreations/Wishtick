@@ -22,6 +22,17 @@ class ChatRepository {
     return json.map((e) => Chat.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// Opens (or reuses) the 1:1 thread with a WishMate.
+  ///
+  /// Idempotent — the same pair always resolves to the same thread, whichever
+  /// side asks — so the screen calls it on every open rather than storing a
+  /// chat id that could belong to a conversation the other person started.
+  /// Throws `NOT_WISHMATES` (403) when there is no accepted link.
+  Future<String> openDirect(String userId) async {
+    final json = await _api.post<Map<String, dynamic>>('/chats/direct/$userId');
+    return json['chatId'] as String;
+  }
+
   Future<Chat> getChat(String chatId) async {
     final json = await _api.get<Map<String, dynamic>>('/chats/$chatId');
     return Chat.fromJson(json);

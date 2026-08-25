@@ -34,10 +34,12 @@ extension WishlistVisibilityMeaning on WishlistVisibility {
   String get summary => switch (this) {
     WishlistVisibility.public => 'Anyone with the link can view it.',
     WishlistVisibility.private => 'Only people you invite can view it.',
-    WishlistVisibility.eventOnly => 'Only people invited to the event can '
-        'view it.',
-    WishlistVisibility.inviteOnly => 'Unlisted — anyone you send the link to '
-        'can view it.',
+    WishlistVisibility.eventOnly =>
+      'Only people invited to the event can '
+          'view it.',
+    WishlistVisibility.inviteOnly =>
+      'Unlisted — anyone you send the link to '
+          'can view it.',
   };
 
   /// Whether sending someone the share link is enough to let them in.

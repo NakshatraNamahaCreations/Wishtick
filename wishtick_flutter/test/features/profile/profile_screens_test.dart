@@ -73,6 +73,10 @@ void main() {
 
       for (final row in [
         'Edit Profile',
+        // Sprint 11: the chat list and the WishMates list both need somewhere
+        // to hang off, and no frame in that set says what.
+        'Messages',
+        'WishMates',
         'My Wishlist',
         'Gifts on hold by me',
         'Gifts Received',

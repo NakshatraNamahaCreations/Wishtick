@@ -12,6 +12,23 @@ import '../../wishlist/presentation/product_detail_screen.dart';
 import '../data/discover_repository.dart';
 import '../domain/discover_feed.dart';
 import 'widgets/discover_product_card.dart';
+import 'widgets/product_card_skeleton.dart';
+
+/// The grid the results and their placeholders share, so the swap from one to
+/// the other does not resize or reflow a single cell.
+const _kProductGrid = SliverGridDelegateWithFixedCrossAxisCount(
+  crossAxisCount: 2,
+  mainAxisSpacing: AppSpacing.md,
+  crossAxisSpacing: AppSpacing.md,
+  childAspectRatio: 0.58,
+);
+
+const _kGridPadding = EdgeInsets.fromLTRB(
+  AppSpacing.lg,
+  0,
+  AppSpacing.lg,
+  AppSpacing.xxl,
+);
 
 /// A full-page product grid (Figma `2167:18`).
 ///
@@ -190,9 +207,7 @@ class _ExploreProductsScreenState extends ConsumerState<ExploreProductsScreen> {
             ),
             Expanded(
               child: switch ((_items.isEmpty, _loading, _error)) {
-                (true, true, _) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
+                (true, true, _) => const _SkeletonGrid(),
                 (true, _, final String message) => Padding(
                   padding: const EdgeInsets.all(AppSpacing.xxl),
                   child: Column(
@@ -217,23 +232,13 @@ class _ExploreProductsScreenState extends ConsumerState<ExploreProductsScreen> {
                 ),
                 _ => GridView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    0,
-                    AppSpacing.lg,
-                    AppSpacing.xxl,
-                  ),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: AppSpacing.md,
-                    crossAxisSpacing: AppSpacing.md,
-                    childAspectRatio: 0.58,
-                  ),
-                  // One extra cell carries the paging spinner.
+                  padding: _kGridPadding,
+                  gridDelegate: _kProductGrid,
+                  // One extra cell carries the next page's placeholder.
                   itemCount: _items.length + (_loading ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index >= _items.length) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const ProductCardSkeleton();
                     }
                     final product = _items[index];
                     return DiscoverProductCard(
@@ -247,6 +252,33 @@ class _ExploreProductsScreenState extends ConsumerState<ExploreProductsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// What fills the page while the first search is in flight.
+///
+/// Six cells, which is more than a phone shows at once — the grid should run
+/// off the bottom edge the way a full result set does, rather than stopping
+/// short and reading as "this is all there is".
+class _SkeletonGrid extends StatelessWidget {
+  const _SkeletonGrid();
+
+  static const _count = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading products',
+      child: GridView.builder(
+        // Nothing to reach by scrolling yet, and a bounce over placeholders
+        // reads as broken.
+        physics: const NeverScrollableScrollPhysics(),
+        padding: _kGridPadding,
+        gridDelegate: _kProductGrid,
+        itemCount: _count,
+        itemBuilder: (context, _) => const ProductCardSkeleton(),
       ),
     );
   }

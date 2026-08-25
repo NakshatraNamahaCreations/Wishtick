@@ -18,3 +18,11 @@ String _groupIndian(String digits) {
   }
   return '${groups.join(',')},$last3';
 }
+
+/// Formats a plain count with the same Indian digit grouping as prices —
+/// `13000` → `13,000`.
+///
+/// Shares [_groupIndian] with [formatInrMinor] on purpose: a review count
+/// sitting beside a price in the same line should group the same way, and two
+/// competing conventions in one screen is what makes numbers look wrong.
+String formatCount(int value) => _groupIndian(value.toString());

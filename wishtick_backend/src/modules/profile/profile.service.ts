@@ -21,6 +21,16 @@ export interface MeView {
   createdAt: Date;
   profile: {
     displayName: string | null;
+    /**
+     * The `@handle`, or null for an account that never claimed one.
+     *
+     * Here rather than only on the WishMates endpoints because the app has to
+     * know whether the signed-in user is discoverable *before* it offers them
+     * any of the graph: without a handle, search cannot find them and every
+     * WishMates screen is a dead end. It is the user's own handle, so no
+     * privacy question arises — the opt-in one is about other people's.
+     */
+    username: string | null;
     photoUrl: string | null;
     /** A bundled avatar key when no photo was uploaded. */
     avatarKey: string | null;
@@ -97,6 +107,7 @@ export class ProfileService {
       createdAt: user.createdAt,
       profile: {
         displayName: profile.displayName ?? user.name ?? null,
+        username: profile.username ?? null,
         photoUrl: profile.photoUrl,
         avatarKey: profile.avatarKey,
         gender: profile.gender,

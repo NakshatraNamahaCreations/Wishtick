@@ -272,10 +272,7 @@ class _CheckRow extends StatelessWidget {
 /// terms they are shown should be the ones this build ships with.
 class _LegalSpan extends TextSpan {
   _LegalSpan({required String text, required VoidCallback onTap, super.style})
-    : super(
-        text: text,
-        recognizer: TapGestureRecognizer()..onTap = onTap,
-      );
+    : super(text: text, recognizer: TapGestureRecognizer()..onTap = onTap);
 }
 
 /// The circular sparkle mark above the headline.

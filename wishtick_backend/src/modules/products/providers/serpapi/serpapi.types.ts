@@ -83,11 +83,21 @@ export interface SerpStore {
 export interface SerpImmersiveProductResponse {
   product_results?: {
     title?: string;
+    /**
+     * Usually absent. Observed empty on every row checked — the prose a
+     * product page would call a description lives in
+     * [about_the_product.features] as structured spec lines instead, which is
+     * why mapping only this field left the detail screen bare.
+     */
     description?: string;
     thumbnails?: string[];
     stores?: SerpStore[];
     rating?: number;
     reviews?: number;
+    brand?: string;
+    about_the_product?: {
+      features?: { title?: string; value?: string }[];
+    };
   };
   error?: string;
 }

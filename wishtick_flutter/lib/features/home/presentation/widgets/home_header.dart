@@ -12,6 +12,8 @@ class HomeHeader extends StatelessWidget {
     required this.onLocationTap,
     required this.onSearchTap,
     required this.onNotificationsTap,
+    required this.onWishmatesTap,
+    required this.onWishLinksTap,
     this.unreadCount = 0,
     super.key,
   });
@@ -21,6 +23,12 @@ class HomeHeader extends StatelessWidget {
   final VoidCallback onLocationTap;
   final VoidCallback onSearchTap;
   final VoidCallback onNotificationsTap;
+
+  /// The add-person icon → "WishMates" (`4177:138`).
+  final VoidCallback onWishmatesTap;
+
+  /// The request icon → "WishLink" (`4177:77` / `4177:111`).
+  final VoidCallback onWishLinksTap;
 
   /// How many notifications are unread. Zero draws a bare bell.
   final int unreadCount;
@@ -138,22 +146,28 @@ class HomeHeader extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Add-friend and request-sent are the design's marks for
-                    // features no sprint has built yet, so they are drawn
-                    // but not wired: a tap that only apologises is worse
-                    // than one that does nothing. They become buttons when
-                    // there is somewhere for them to go.
-                    const Padding(
-                      padding: EdgeInsets.all(AppSpacing.xs),
-                      child: Image(
+                    // Sprint 11 gave these two somewhere to go. They were
+                    // drawn but deliberately inert until then — a tap that
+                    // only apologises is worse than one that does nothing —
+                    // and the split follows their own iconography: the person
+                    // opens your WishMates, the envelope opens your requests.
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(AppSpacing.xs),
+                      onPressed: onWishmatesTap,
+                      tooltip: 'WishMates',
+                      icon: const Image(
                         image: AssetImage('assets/icons/add_friend.png'),
                         width: AppSizes.iconLg,
                         height: AppSizes.iconLg,
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.all(AppSpacing.xs),
-                      child: Image(
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(AppSpacing.xs),
+                      onPressed: onWishLinksTap,
+                      tooltip: 'WishLink requests',
+                      icon: const Image(
                         image: AssetImage('assets/icons/request_sent.png'),
                         width: AppSizes.iconLg,
                         height: AppSizes.iconLg,
@@ -163,6 +177,7 @@ class HomeHeader extends StatelessWidget {
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.all(AppSpacing.xs),
                       onPressed: onNotificationsTap,
+                      tooltip: 'Notifications',
                       icon: Stack(
                         clipBehavior: Clip.none,
                         children: [

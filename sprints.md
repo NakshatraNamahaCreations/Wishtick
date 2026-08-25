@@ -1188,6 +1188,229 @@ The gifter pass found two more:
 
 ---
 
+## Sprint 11 — WishMates (social graph) — ✅ DONE
+
+> **Sequencing:** added after the original plan was written. It is feature work,
+> so it lands *before* the Sprint 10 release gate despite the higher number —
+> Sprint 10's dark-mode, accessibility and deep-link passes must cover these
+> screens too.
+
+**Goal:** let one user find, connect to and message another. Until now the only
+user-to-user link in the product was someone sharing a wishlist with you; there
+was no way to find a person at all.
+
+**Vocabulary** (the frames' words, kept in the code):
+- **WishMate** — an accepted connection. "Friend".
+- **WishLink** — a *request*. Received and Sent are the same pending rows seen
+  from opposite ends, which is why direction is stored and status is not
+  duplicated per side.
+
+**Frames:** `4177:138` (WishMates list), `4177:77` / `4177:111` (WishLink
+Received / Sent), `4177:42` (search), `4177:217` (profile — not connected),
+`4177:267` (profile — connected), `4177:179` (chat list), `4177:6` (1:1 chat).
+
+### Delivered — backend
+
+- **`WishLink` schema** — **one row per pair**, not one per direction. Two rows
+  can drift into states that mean nothing (A→B accepted while B→A pending), and
+  every read would have to reconcile them. Unique index on the ordered pair;
+  `WishmatesService.pairFilter` matches it whichever way round it was written.
+- **`WishmatesService`** — request, accept, decline, withdraw, remove, mutual
+  counts, friend-of-a-friend suggestions, relationship-aware profile.
+- **Handles** — `UserProfile.username`, claimed via `POST /me/username`.
+- **`ChatType.DIRECT`** — 1:1 threads. Messages, reactions, read receipts and
+  the WebSocket gateway already existed and were reused unchanged; only the type
+  and its authorization branch are new.
+- **`PresenceService`** — Redis-backed online/last-seen.
+- **26 e2e tests.** Full backend after this sprint: **204 unit, 468 e2e**, tsc
+  and eslint clean.
+
+### API surface
+
+| Method | Path | For |
+|---|---|---|
+| POST | `/me/username` | claim/change a handle |
+| GET | `/usernames/:username/available` | availability check |
+| GET | `/people/search?q=` | `4177:42` |
+| GET | `/people/suggestions` | "People You May Know" |
+| GET | `/people/:userId` | `4177:217` / `4177:267` |
+| POST | `/people/:userId/request` | Add WishMate |
+| GET | `/wishmates` | `4177:138` |
+| GET | `/wishmates/pending-count` | the list screen's banner |
+| DELETE | `/wishmates/:userId` | Remove WishMate |
+| GET | `/wishlinks/received` \| `/sent` | `4177:77` / `4177:111` |
+| POST | `/wishlinks/:linkId/accept` \| `/decline` | Accept / Decline |
+| DELETE | `/wishlinks/:linkId` | the Sent tab's Delete |
+| POST | `/chats/direct/:userId` | open the 1:1 thread |
+
+`/chats`, `/chats/:id/messages`, `/messages/:id/reactions` and `/chats/:id/read`
+are the **existing** chat endpoints and need no change for `4177:179` / `4177:6`.
+
+### Decisions worth not re-litigating
+
+- **A handle is opt-in, and nothing derives one.** An account with no username
+  is not discoverable. Generating handles from emails or display names would
+  publish a guessable, searchable identifier for every existing user without
+  anyone agreeing to it — and the handle is precisely the field strangers search
+  by.
+- **Asking back is consent.** If B has already asked A and A then asks B, the
+  existing request is *accepted* rather than a second one created. Otherwise two
+  people each sit waiting on the other.
+- **A decline is invisible to the sender.** It resolves to `relationship: none`,
+  identical to never having asked. The row is kept (not deleted) so a decline
+  cannot be farmed in a loop, but nobody is ever told they were turned down.
+- **Withdrawing deletes the row**, unlike declining. The addressee never saw it,
+  so there is nothing to remember — and a kept `declined` row would block the
+  sender from ever asking again.
+- **Direct messages are gated on an accepted link.** A DM is the one channel
+  that reaches someone with no wishlist, event or gift between you, so the
+  connection *is* the permission; without it a guessed user id opens a channel
+  to a stranger. **History survives an unfriending — posting does not.** Deleting
+  a conversation because a link was removed destroys what both people wrote.
+- **Presence counts connections, it does not flag them.** One user holds several
+  sockets (phone + web); a boolean would mark them offline when they closed one
+  tab. The 90s TTL is what makes it self-correcting — a phone that loses signal
+  never sends a disconnect, and without expiry would read "Online" forever.
+
+### Three bugs this sprint surfaced (all fixed)
+
+1. **`unique: true, sparse: true` on `username` broke every profile write.**
+   `sparse` skips documents where the field is *missing*; `default: null` writes
+   an explicit null, so the second account without a handle collided with the
+   first. It failed 21 suites. Now a **partial index** filtered to
+   `$type: 'string'`. ⚠️ **A dev database that already built the sparse index
+   must have it dropped** — the in-memory test DB rebuilds per run and will not
+   show this.
+2. **`maxWorkers` for the e2e suite was tuned on a single green run.** 4 passed
+   with 25 suites, then crashed mongod (`fassert() failure`) once this sprint
+   added a 26th. Now **3**, confirmed over three consecutive full runs. Adding a
+   suite may require lowering it again — see the note in `test/jest-e2e.json`.
+3. **Each Jest worker now gets its own Redis key prefix.** Every e2e suite
+   shared `wishtick-test:`, so parallel suites shared the product-search cache,
+   the provider rate-limit counters and the OTP store.
+
+### Delivered — the Flutter app
+
+- **A username-claim surface** (`UsernameClaimScreen`, route `/handle`). No
+  frame draws it and every frame here depends on it, so it was built first.
+  Debounced availability check, the server's own `^[a-z0-9_]{3,30}$` mirrored
+  locally so a bad handle costs no round trip, and errors branched on the
+  **code** rather than the message. `openWithHandle` gates both Home entry
+  points on it: an account with no handle would otherwise land on screens that
+  are empty for a reason they cannot explain.
+- **All eight screens**, against the settled API: WishMates list, the WishLink
+  tabs, people search, both profile variants (one route — the *server's*
+  reported relationship decides which), the chat list and the 1:1 thread.
+- **Presence in the client** — `online`/`lastSeenAt` arrive on every row, so
+  the green dot costs no extra call. On `4177:6` a dropped socket outranks it:
+  a thread that has silently stopped updating must not claim the other person
+  is there.
+- **52 widget tests**, each mutation-checked (34 mutations, all caught).
+  Full app suite: **657 green**.
+
+**Design system.** Two tokens were genuinely missing and were added the long
+way round (field + `light` + `dark` + `copyWith` + `lerp`):
+- **`cta` / `onCta`** — the Color System page's CTA swatch `#3F0E4C`
+  (official *plum deep*), which Accept and Delete both sample to. The note on
+  `primary` was right that no shipped screen used it; these frames are the
+  first that do.
+- **`presenceOnline`** — `#19EF52`, sampled at 12 px. Nothing within 137 of it
+  existed in the palette, and `success` (teal) is the wrong meaning: a live
+  socket is a fact about someone, not an outcome they achieved.
+
+`CurvedBottomClipper` was promoted to `core/widgets/` and `ChatComposer` out of
+`group_chat_screen.dart` — both were about to have a second copy.
+
+### Backend added during the app work
+
+Four additions, each because a frame could not otherwise be built:
+
+| Change | Why |
+|---|---|
+| `ChatView.counterpart` | A direct chat's `refId` is a **one-way hash** of the pair — it addresses the thread and names nobody, so `4177:179` could not draw a single row |
+| `ChatView.lastMessage` | The grey line. Truncated to 140 chars server-side, and carries the same `hideFromUserIds` exclusion the read path does — a surprise the recipient cannot open in the thread must not reach them as a preview |
+| `WishmateProfileView.recentActivity` | `4177:267`. See the privacy note below |
+| `profile.username` on `GET /me` | The app has to know whether the signed-in user is discoverable *before* offering them the graph |
+
+`PublicIdentity` was split out of `WishmateView` for the counterpart: the chat
+list has no viewer-relative context, and `mutualCount: 0` there would be a
+number that is wrong rather than absent. The Flutter models mirror the split.
+
+**13 new e2e tests** (6 recent-activity, 7 chat-list), each mutation-checked.
+Backend after this sprint: **204 unit, 481 e2e**.
+
+### The two open questions, answered
+
+- **Navigation.** Home's header had *two* inert placeholders, not one, and the
+  split follows their own iconography: `add_friend.png` → WishMates,
+  `request_sent.png` → WishLink. The test that used to assert they did nothing
+  now asserts the opposite. Chat is reached from a profile's Message button.
+- **`4177:267`'s "Recent Activity"** — scoped to events **the viewer was also
+  invited to, where both of them are attending**. That intersection is the only
+  rule that needs no further permission: every event returned is one the viewer
+  could already read off their own invitations, and all it adds is "they are
+  coming too". A wider rule turns a profile into a movement log. `pending` is
+  excluded on both sides — an unanswered invite would leak the host's guest
+  list to anyone else holding one.
+
+### What the device walk caught
+
+Three things the widget tests could not, all fixed and now covered:
+
+- **People search had no entry point.** Both header icons were wired and
+  `4177:42` is drawn as a *pushed* screen with no frame saying what pushes it —
+  so a list whose empty state reads "search for someone by their @handle"
+  offered no way to. There is now a search action on the WishMates app bar.
+- **The chat list had a route and nothing that navigated to it.** A 1:1 thread
+  opens from the person (`4177:267`'s Message button), but the list of them
+  needed its own home: Profile → **Messages**, with **WishMates** beside it.
+- **The search pill inherited the global `InputDecorationTheme`.** That theme
+  fills its fields with a squared-off background, so the pill rendered 95 px
+  tall with square corners and spilled out through the header's curved foot.
+  `4177:42` measures it at 48. Now `filled: false` inside a fixed-height box,
+  with a test on both.
+
+Verified live against the real backend, two accounts: claim a handle → request
+→ accept → the WishMates list → the connected profile (**with Recent Activity
+resolving the shared event**) → Message → send → the chat list showing the
+counterpart and the preview. Both new `ChatView` fields and the new
+`recentActivity` confirmed on-device, not just in tests.
+
+### Worth knowing for the next sprint
+
+- **Riverpod 3 retries a failed provider** (10 attempts, 200 ms → 6.4 s
+  backoff, anything that is not an `Error`). So a broken screen is *also*
+  loading, and an `AsyncLoading()`-first switch hides every failure behind a
+  spinner for half a minute. Every screen here matches
+  `AsyncValue(hasError: true, hasValue: false)` **before** loading; the
+  `hasValue` guard keeps a failed *refresh* showing what we already have.
+- `pumpAndSettle` still hangs on the loading state's `CircularProgressIndicator`
+  — the widget tests pump a fixed number of frames instead.
+- A re-`pumpWidget` reuses the cached `ProviderScope`; the harness gives it a
+  `UniqueKey` so a second pump in one test actually refetches.
+
+### Still open
+
+- **"Requested" on a profile has nowhere to withdraw from.** The profile view
+  reports a *relationship*, not the `WishLink` row behind it, so there is no
+  `linkId` to hand `DELETE /wishlinks/:linkId`. The button points at the Sent
+  tab, which does it properly. Adding `linkId` to `WishmateProfileView` would
+  close it.
+- **Dismissing a suggestion is per-visit only** — the ✕ on `4177:217`'s rail
+  hides the card for the length of the screen. There is no endpoint to
+  remember it, and the card returns on the next refetch.
+- **No dev-mode fake** for `wishmates`, consistent with chat, events, profile
+  and group gifts, which also run against the real backend under `DevMode`.
+- **`WishmateView.displayName` does not fall back to `User.name`** the way
+  `GET /me` does, so an account that signed up and never onboarded shows as
+  `@handle` on both lines of a row. Not reachable in the product — the router
+  forces onboarding, which writes `displayName` — but it bit the API-created
+  test accounts during the device walk.
+
+---
+
+---
+
 ## Backlog / not scheduled
 
 - Workspace screens (`2175:1021`, `2209:221`) — purpose unclear, clarify with design.

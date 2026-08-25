@@ -7,11 +7,7 @@ import '../domain/wishlist_participant.dart';
 
 @immutable
 class ManageAccessState {
-  const ManageAccessState({
-    this.participants,
-    this.error,
-    this.busy = false,
-  });
+  const ManageAccessState({this.participants, this.error, this.busy = false});
 
   /// Null while the first load is in flight; empty means nobody has access.
   final List<WishlistParticipant>? participants;
@@ -116,8 +112,6 @@ class ManageAccessController extends Notifier<ManageAccessState> {
 }
 
 final manageAccessProvider =
-    NotifierProvider.family<
-      ManageAccessController,
-      ManageAccessState,
-      String
-    >(ManageAccessController.new);
+    NotifierProvider.family<ManageAccessController, ManageAccessState, String>(
+      ManageAccessController.new,
+    );

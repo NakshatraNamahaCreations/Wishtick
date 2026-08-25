@@ -28,6 +28,26 @@
       ]
     },
     {
+      // Same physical device, no cable. Prompts for the address rather than
+      // storing one: a LAN IP is handed out by DHCP, and the last time one was
+      // hardcoded here it went stale the moment the lease changed. The prompt
+      // makes a stale address impossible to miss — you retype it or you don't
+      // launch.
+      //
+      // The phone and this machine must be on the *same* network. Ethernet and
+      // Wi-Fi are often separate subnets that do not route to each other, so
+      // "both are in the building" is not enough; check that the address below
+      // and the phone's own IP share the first three octets.
+      "name": "Wishtick (real API — device over Wi-Fi)",
+      "request": "launch",
+      "type": "dart",
+      "program": "${workspaceFolder}/wishtick_flutter/lib/main.dart",
+      "cwd": "${workspaceFolder}/wishtick_flutter",
+      "args": [
+        "--dart-define=WISHTICK_API_BASE_URL=http://${input:lanHost}:3000"
+      ]
+    },
+    {
       "name": "Wishtick (FAKE API — no backend needed)",
       "request": "launch",
       "type": "dart",
@@ -36,6 +56,13 @@
       "args": [
         "--dart-define=WISHTICK_FAKE_BACKEND=true"
       ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "lanHost",
+      "type": "promptString",
+      "description": "This machine's LAN IP — the adapter the phone's Wi-Fi is on. PowerShell: Get-NetIPAddress -AddressFamily IPv4 | ? PrefixOrigin -eq Dhcp"
     }
   ]
 }

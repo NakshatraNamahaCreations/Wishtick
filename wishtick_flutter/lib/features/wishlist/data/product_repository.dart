@@ -39,6 +39,21 @@ class ProductRepository {
     return ProductSearchResult.fromJson(json);
   }
 
+  /// One product in full — specs, every seller, and the whole image gallery.
+  ///
+  /// Costs the backend a second upstream call, so this is only worth asking
+  /// for once someone has actually opened a product. A search result is
+  /// already enough to render the page; this fills in what it could not carry.
+  Future<NormalizedProduct> details({
+    required String provider,
+    required String externalId,
+  }) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/products/$provider/$externalId',
+    );
+    return NormalizedProduct.fromJson(json['product'] as Map<String, dynamic>);
+  }
+
   /// Resolves a pasted product URL — either a recognised affiliate network
   /// answers directly, or the page is scraped for Open Graph tags.
   Future<ResolvedUrlProduct> resolveUrl(String url) async {

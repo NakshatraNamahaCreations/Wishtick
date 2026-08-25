@@ -181,6 +181,8 @@ export interface AppConfig {
     breakerResetMs: number;
     cacheTtlSeconds: number;
     staleTtlSeconds: number;
+    prewarmEnabled: boolean;
+    prewarmCron: string;
     urlFetchTimeoutMs: number;
     urlMaxBytes: number;
     urlMaxRedirects: number;
@@ -389,8 +391,18 @@ export const configuration = (): AppConfig => {
       rateLimitPerMinute: toInt(process.env.PRODUCT_RATE_LIMIT_PER_MINUTE, 600),
       breakerFailureThreshold: toInt(process.env.PRODUCT_BREAKER_FAILURE_THRESHOLD, 5),
       breakerResetMs: toInt(process.env.PRODUCT_BREAKER_RESET_MS, 30_000),
-      cacheTtlSeconds: toInt(process.env.PRODUCT_CACHE_TTL_SECONDS, 900),
+      // 6h, not the 15m this started at. A search is a live scrape upstream
+      // and costs seconds; freshness here buys price accuracy, which the
+      // import re-checks anyway before anyone is charged. Trading a slightly
+      // older price for a page that loads is the right way round — and the
+      // stale window below is still the outage backstop.
+      cacheTtlSeconds: toInt(process.env.PRODUCT_CACHE_TTL_SECONDS, 21_600),
       staleTtlSeconds: toInt(process.env.PRODUCT_STALE_TTL_SECONDS, 86_400),
+      prewarmEnabled: toBool(process.env.PRODUCT_PREWARM_ENABLED, true),
+      // Every 4h at :20 — inside the 6h freshness window, so a warmed shelf
+      // never lapses back to cold. Off the hour for the same reason the
+      // nightly sync is: shared vendors, shared schedulers.
+      prewarmCron: process.env.PRODUCT_PREWARM_CRON ?? '20 */4 * * *',
       urlFetchTimeoutMs: toInt(process.env.PRODUCT_URL_FETCH_TIMEOUT_MS, 5_000),
       urlMaxBytes: toInt(process.env.PRODUCT_URL_MAX_BYTES, 512 * 1024),
       urlMaxRedirects: toInt(process.env.PRODUCT_URL_MAX_REDIRECTS, 3),

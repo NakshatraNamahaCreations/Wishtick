@@ -411,3 +411,29 @@ class _Timestamp extends StatelessWidget {
     );
   }
 }
+
+/// "Today" / "14 Jul" between calendar days.
+class DayDivider extends StatelessWidget {
+  const DayDivider({required this.date, super.key});
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final local = date.toLocal();
+    final isToday =
+        local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      child: Text(
+        isToday ? 'Today' : DateFormat('d MMM').format(local),
+        style: context.text.bodySmall?.copyWith(
+          color: context.colors.textSecondary,
+        ),
+      ),
+    );
+  }
+}

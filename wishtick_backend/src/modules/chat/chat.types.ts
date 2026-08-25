@@ -3,6 +3,15 @@ export enum ChatType {
   WISHLIST = 'wishlist',
   /** Attached to a group gift; its participants coordinate the surprise. */
   GROUP_GIFT = 'group_gift',
+  /**
+   * One-to-one between two WishMates (`4177:6`).
+   *
+   * Unlike the other two this hangs off no entity, so its `refId` is derived
+   * from the pair itself — see [ChatService.directRefId]. That keeps the
+   * unique `(type, refId)` index doing the same job it does everywhere else:
+   * two people can only ever have one direct thread.
+   */
+  DIRECT = 'direct',
 }
 
 export enum MessageKind {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/format/currency.dart';
 import '../../../core/theme/app_dimens.dart';
@@ -12,6 +11,7 @@ import '../../group_gift/presentation/group_gift_controller.dart';
 import '../domain/chat_message.dart';
 import 'chat_controller.dart';
 import 'widgets/chat_bubbles.dart';
+import 'widgets/chat_composer.dart';
 
 /// "Group Chat" (`316:640`).
 ///
@@ -152,7 +152,7 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: WishtickErrorText(state.error!),
             ),
-          _Composer(
+          ChatComposer(
             controller: _composer,
             enabled: (state.chat?.canPost ?? false) && !state.sending,
             busy: state.sending,
@@ -347,145 +347,6 @@ class _LoadMore extends StatelessWidget {
                 onPressed: onTap,
                 child: const Text('Load earlier messages'),
               ),
-      ),
-    );
-  }
-}
-
-class _Composer extends StatelessWidget {
-  const _Composer({
-    required this.controller,
-    required this.enabled,
-    required this.busy,
-    required this.onSend,
-  });
-
-  final TextEditingController controller;
-  final bool enabled;
-  final bool busy;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.sm,
-          AppSpacing.lg,
-          AppSpacing.md,
-        ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.xs,
-          ),
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: colors.border),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.attach_file,
-                size: AppSizes.iconMd,
-                color: colors.textMuted,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  enabled: enabled,
-                  minLines: 1,
-                  maxLines: 4,
-                  textCapitalization: TextCapitalization.sentences,
-                  onSubmitted: (_) => onSend(),
-                  decoration: InputDecoration(
-                    hintText: enabled
-                        ? 'Type message...'
-                        : 'You cannot post here',
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    filled: false,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.md,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              _SendButton(busy: busy, onTap: enabled ? onSend : null),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SendButton extends StatelessWidget {
-  const _SendButton({required this.busy, this.onTap});
-
-  final bool busy;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Material(
-      color: onTap == null ? colors.border : colors.primary,
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: busy ? null : onTap,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: AppSizes.minTapTarget - AppSpacing.sm,
-          height: AppSizes.minTapTarget - AppSpacing.sm,
-          child: busy
-              ? Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colors.onPrimary,
-                  ),
-                )
-              : Icon(
-                  Icons.send,
-                  size: AppSizes.iconMd,
-                  color: colors.onPrimary,
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-/// "Today" / "14 Jul" between calendar days.
-class DayDivider extends StatelessWidget {
-  const DayDivider({required this.date, super.key});
-
-  final DateTime date;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final local = date.toLocal();
-    final isToday =
-        local.year == now.year &&
-        local.month == now.month &&
-        local.day == now.day;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-      child: Text(
-        isToday ? 'Today' : DateFormat('d MMM').format(local),
-        style: context.text.bodySmall?.copyWith(
-          color: context.colors.textSecondary,
-        ),
       ),
     );
   }

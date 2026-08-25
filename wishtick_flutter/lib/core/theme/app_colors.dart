@@ -17,6 +17,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.primaryDeep,
     required this.primaryMuted,
     required this.primarySubtle,
+    required this.cta,
+    required this.onCta,
+    required this.presenceOnline,
     required this.accent,
     required this.onAccent,
     required this.accentSubtle,
@@ -72,6 +75,27 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
 
   /// Tinted plum background for pills, badges and selected states.
   final Color primarySubtle;
+
+  /// The Color System page's **CTA colour** (`#3F0E4C`, official *plum deep*):
+  /// the filled pill for the decisive action inside a card — Accept on
+  /// `4177:77`, Delete on `4177:111`.
+  ///
+  /// Its own token rather than a reuse of [primary], which the frames spend on
+  /// the ordinary Continue pill (`#522651`), or of [primaryDeep], which is the
+  /// violet-leaning [AppPalette.plumInk]. Sprint 11 is the first sprint whose
+  /// frames actually reach for the CTA swatch — before it, the note on
+  /// [primary] was right that no shipped screen used it.
+  final Color cta;
+
+  /// Text and icons drawn on [cta].
+  final Color onCta;
+
+  /// The dot on a WishMate's avatar while they hold a live socket.
+  ///
+  /// The same green in both themes: it is drawn as a small disc ringed by
+  /// the page colour, so it never sits on a surface it has to contrast with,
+  /// and 'online' should not change hue when the lights go out.
+  final Color presenceOnline;
 
   /// Brand pink. Hearts, wishlist affordances, inline emphasis.
   final Color accent;
@@ -221,6 +245,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     // content of unselected option tiles.
     primaryMuted: AppPalette.plumSoft,
     primarySubtle: AppPalette.plumPale,
+    cta: AppPalette.plumDeep,
+    onCta: AppPalette.ivory,
+    presenceOnline: AppPalette.presenceGreen,
     accent: AppPalette.pink,
     // Ink, not white: white on this pink falls below AA. Ink clears 4.5:1.
     onAccent: AppPalette.ink,
@@ -282,6 +309,12 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     primaryDeep: AppPalette.plumDeep,
     primaryMuted: AppPalette.plumSoft,
     primarySubtle: AppPalette.darkSurfaceAlt,
+    // Not [AppPalette.plumDeep] as in light: on the dark ramp a *deeper* plum
+    // is not a stronger call to action, it is a less visible one. The CTA has
+    // to be the most prominent fill on the screen, which is the brighter plum.
+    cta: AppPalette.plum,
+    onCta: AppPalette.ivory,
+    presenceOnline: AppPalette.presenceGreen,
     accent: AppPalette.pink,
     // [accent] is the same pink in both themes, so its foreground matches too.
     onAccent: AppPalette.navyDeep,
@@ -343,6 +376,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color? primaryDeep,
     Color? primaryMuted,
     Color? primarySubtle,
+    Color? cta,
+    Color? onCta,
+    Color? presenceOnline,
     Color? accent,
     Color? onAccent,
     Color? accentSubtle,
@@ -394,6 +430,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       primaryDeep: primaryDeep ?? this.primaryDeep,
       primaryMuted: primaryMuted ?? this.primaryMuted,
       primarySubtle: primarySubtle ?? this.primarySubtle,
+      cta: cta ?? this.cta,
+      onCta: onCta ?? this.onCta,
+      presenceOnline: presenceOnline ?? this.presenceOnline,
       accent: accent ?? this.accent,
       onAccent: onAccent ?? this.onAccent,
       accentSubtle: accentSubtle ?? this.accentSubtle,
@@ -451,6 +490,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       primaryDeep: c(primaryDeep, other.primaryDeep),
       primaryMuted: c(primaryMuted, other.primaryMuted),
       primarySubtle: c(primarySubtle, other.primarySubtle),
+      cta: c(cta, other.cta),
+      onCta: c(onCta, other.onCta),
+      presenceOnline: c(presenceOnline, other.presenceOnline),
       accent: c(accent, other.accent),
       onAccent: c(onAccent, other.onAccent),
       accentSubtle: c(accentSubtle, other.accentSubtle),

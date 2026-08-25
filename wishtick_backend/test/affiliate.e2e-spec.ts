@@ -237,6 +237,12 @@ describe('Affiliate monetization & conversions (e2e)', () => {
           merchant: 'MerchantTest',
           category: null,
           inStock: true,
+          rating: null,
+          reviewCount: null,
+          deliveryNote: null,
+          brand: null,
+          features: [],
+          offers: [],
           affiliateMeta: {},
         },
       ]);

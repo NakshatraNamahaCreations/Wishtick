@@ -17,7 +17,13 @@ process.env.MONGO_DB_NAME ??= 'wishtick_test';
 
 process.env.REDIS_HOST ??= 'localhost';
 process.env.REDIS_PORT ??= '6379';
-process.env.REDIS_KEY_PREFIX = 'wishtick-test:';
+// Per worker, not per run. Mongo is already isolated (each suite gets its own
+// in-memory replica set) but Redis is a single shared server, so one prefix
+// meant parallel suites shared a keyspace — the product search cache, the
+// provider rate-limit counters and the OTP store all collide under keys that
+// carry no suite identity. Cross-talk there fails a test for something the
+// other suite did.
+process.env.REDIS_KEY_PREFIX = `wishtick-test-${process.env.JEST_WORKER_ID ?? '0'}:`;
 
 process.env.JWT_ACCESS_SECRET = 'test-access-secret-that-is-definitely-long-enough-1234';
 process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-that-is-definitely-long-enough-5678';

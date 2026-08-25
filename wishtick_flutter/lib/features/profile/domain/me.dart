@@ -15,6 +15,7 @@ class Me {
     required this.emailVerified,
     required this.phoneVerified,
     required this.displayName,
+    required this.username,
     required this.photoUrl,
     required this.avatarKey,
     required this.gender,
@@ -35,6 +36,14 @@ class Me {
 
   final String? displayName;
 
+  /// The `@handle`, or null for an account that never claimed one.
+  ///
+  /// Null is the gate on the whole of WishMates: an account with no handle
+  /// is not discoverable, cannot be searched for, and cannot be sent a
+  /// request — so the entry points send the user to claim one first rather
+  /// than into screens that could only ever come back empty.
+  final String? username;
+
   /// An uploaded photo. Null when the user picked a bundled avatar instead.
   final String? photoUrl;
 
@@ -51,6 +60,10 @@ class Me {
   final String? country;
   final bool onboardingCompleted;
   final DateTime createdAt;
+
+  /// Whether this account can be found by anybody who does not already know
+  /// it — see [username].
+  bool get hasHandle => username != null && username!.isNotEmpty;
 
   /// What the Profile header shows above the contact line.
   String get name => displayName?.trim().isNotEmpty == true
@@ -73,6 +86,7 @@ class Me {
       emailVerified: json['emailVerified'] as bool? ?? false,
       phoneVerified: json['phoneVerified'] as bool? ?? false,
       displayName: profile['displayName'] as String?,
+      username: profile['username'] as String?,
       photoUrl: profile['photoUrl'] as String?,
       avatarKey: profile['avatarKey'] as String?,
       gender: profile['gender'] as String?,

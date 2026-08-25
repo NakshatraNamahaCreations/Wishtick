@@ -93,6 +93,15 @@ abstract final class AppPalette {
   /// Deepest plum — snackbars and the darkest chip fills.
   static const plumInk = Color(0xFF23074A);
 
+  /// The "online now" dot on a WishMate's avatar (`4177:267`, `4177:179`,
+  /// `4177:6`), sampled at 12 px across.
+  ///
+  /// Not [teal], and deliberately not the [success] token behind it: a live
+  /// socket is a fact about someone, not an outcome the user achieved, and
+  /// borrowing the tick colour for it makes every online friend read as a
+  /// completed task.
+  static const presenceGreen = Color(0xFF19EF52);
+
   /// Start of the gradient headline treatment ("Ready to Celebrate?").
   static const plumMuted = Color(0xFF522651);
 

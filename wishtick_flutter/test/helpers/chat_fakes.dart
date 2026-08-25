@@ -4,6 +4,7 @@ import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/features/chat/data/chat_repository.dart';
 import 'package:wishtick_flutter/features/chat/data/chat_socket.dart';
 import 'package:wishtick_flutter/features/chat/domain/chat_message.dart';
+import 'package:wishtick_flutter/features/wishmates/domain/wishmate.dart';
 
 Chat buildChat({
   String id = 'chat_1',
@@ -19,6 +20,50 @@ Chat buildChat({
   whoCanPost: whoCanPost,
   participantCount: participantCount,
   lastMessageAt: DateTime(2026, 8, 1, 12),
+);
+
+/// A 1:1 thread as `GET /chats?type=direct` returns it (`4177:179`).
+Chat buildDirectChat({
+  String id = 'chat_d1',
+  PersonIdentity? counterpart,
+  MessagePreview? lastMessage,
+  int unreadCount = 0,
+  DateTime? lastMessageAt,
+}) => Chat(
+  id: id,
+  type: ChatType.direct,
+  // A one-way hash of the pair in life; opaque here, and never rendered.
+  refId: 'hash_$id',
+  unreadCount: unreadCount,
+  whoCanPost: 'participants',
+  participantCount: 2,
+  lastMessageAt: lastMessageAt ?? DateTime(2026, 8, 25, 10),
+  counterpart:
+      counterpart ??
+      const PersonIdentity(
+        userId: 'u_priyal',
+        username: 'priyalsharma',
+        displayName: 'Priyal Sharma',
+        photoUrl: null,
+        online: false,
+        lastSeenAt: null,
+      ),
+  lastMessage: lastMessage,
+);
+
+MessagePreview buildPreview({
+  String id = 'msg_last',
+  String? senderId = 'u_priyal',
+  String body = 'Hi, please find the invitation',
+  bool hasAttachments = false,
+  DateTime? createdAt,
+}) => MessagePreview(
+  id: id,
+  senderId: senderId,
+  kind: MessageKind.text,
+  body: body,
+  hasAttachments: hasAttachments,
+  createdAt: createdAt ?? DateTime(2026, 8, 25, 10),
 );
 
 ChatMessage buildMessage({
@@ -99,6 +144,10 @@ class FakeChatRepository implements ChatRepository {
 
   Chat chat;
 
+  /// What [listChats] returns. Null means "just [chat]", which is what every
+  /// single-thread test wants; the chat-list tests set a real list.
+  List<Chat>? chats;
+
   /// Newest first, as the wire returns them.
   List<ChatMessage> messages;
   String? nextCursor;
@@ -115,7 +164,22 @@ class FakeChatRepository implements ChatRepository {
   }
 
   @override
-  Future<List<Chat>> listChats({ChatType? type}) async => _guard([chat]);
+  Future<List<Chat>> listChats({ChatType? type}) async {
+    final all = chats ?? [chat];
+    return _guard(
+      type == null ? all : all.where((c) => c.type == type).toList(),
+    );
+  }
+
+  /// Ids handed back by [openDirect], keyed by user id, so a test can assert
+  /// which person a screen resolved a thread for.
+  final directOpens = <String>[];
+
+  @override
+  Future<String> openDirect(String userId) async {
+    directOpens.add(userId);
+    return _guard(chat.id);
+  }
 
   @override
   Future<Chat> getChat(String chatId) async {
