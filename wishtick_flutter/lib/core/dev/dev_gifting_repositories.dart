@@ -10,6 +10,7 @@ import '../../features/gifting/domain/gift.dart';
 import '../../features/gifting/domain/gift_list_item.dart';
 import '../../features/gifting/domain/order.dart';
 import 'dev_keys.dart';
+import 'dev_repositories.dart';
 
 /// Reservation window. The backend's default TTL is 72h; the reserve sheet mock
 /// shows 48:00:00. The fake uses the backend's number so the countdown here and
@@ -372,6 +373,27 @@ class DevGiftingRepository implements GiftingRepository {
     return Uri.parse(link ?? 'https://wishtick.dev/r/$itemId');
   }
 
+  /// Dev mode has no affiliate network, so this points at the catalogue row's
+  /// own link — a seller tap still opens something real, it just earns
+  /// nothing, which is true of the whole dev catalogue.
+  @override
+  Uri productRedirectUri(
+    String provider,
+    String externalId, {
+    int? offerIndex,
+  }) {
+    final product = DevProductRepository.catalog
+        .where((p) => p.provider == provider && p.externalId == externalId)
+        .firstOrNull;
+    final offers = product?.offers ?? const [];
+    final url = offerIndex != null && offerIndex < offers.length
+        ? offers[offerIndex].url
+        : null;
+    return Uri.parse(
+      url ?? product?.productUrl ?? 'https://wishtick.dev/r/p/$externalId',
+    );
+  }
+
   static String _mintReference(DateTime now) {
     final date = now.toIso8601String().substring(0, 10).replaceAll('-', '');
     final suffix = 1000 + Random().nextInt(9000);
@@ -397,6 +419,14 @@ class DevInviteRepository implements InviteRepository {
   final SharedPreferences _prefs;
 
   static const _latency = Duration(milliseconds: 300);
+
+  /// Dev mode has no share slugs, so the slug *is* the token here — enough to
+  /// walk `/e/<slug>` through to the invite screen without a backend.
+  @override
+  Future<String> joinBySlug(String slug) async {
+    await Future<void>.delayed(_latency);
+    return slug;
+  }
 
   Map<String, dynamic> _read() =>
       jsonDecode(_prefs.getString(DevKeys.invites) ?? '{}')

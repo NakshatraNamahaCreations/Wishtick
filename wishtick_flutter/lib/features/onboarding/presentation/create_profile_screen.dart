@@ -362,10 +362,12 @@ class _PhotoCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    // The design always shows a face here, and the card below already previews
-    // the same default — an empty circle with a person glyph made the two
-    // disagree about what "no avatar chosen yet" looks like.
-    final preview = avatar ?? BundledAvatar.all.first;
+    // The design always shows a face here, and the card below previews the same
+    // one. Both now read the draft straight through: the form seeds
+    // [BundledAvatar.defaultChoice], so there is no "nothing chosen" state left
+    // for a preview to paper over — which is what used to let somebody submit a
+    // face they never actually saved.
+    final preview = avatar ?? BundledAvatar.defaultChoice;
 
     return SizedBox(
       width: _diameter,
@@ -458,7 +460,7 @@ class _SelectAvatarCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final preview = avatar ?? BundledAvatar.all.first;
+    final preview = avatar ?? BundledAvatar.defaultChoice;
 
     return Semantics(
       button: true,

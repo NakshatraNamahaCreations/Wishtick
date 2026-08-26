@@ -141,25 +141,16 @@ class WishlistRepository {
   }
 
   /// Grants access, by [userId] for someone already on Wishtick or by
-  /// [inviteEmail] for someone who may have no account yet — the backend links
-  /// a pending email invite to their account when they sign up.
-  ///
-  /// Exactly one of the two is required; the server answers 400
-  /// `IDENTIFIER_REQUIRED` otherwise, 409 `PARTICIPANT_ALREADY_EXISTS` for a
-  /// duplicate and 409 `CANNOT_INVITE_OWNER` for yourself.
+  /// The server answers 409 `PARTICIPANT_ALREADY_EXISTS` for a duplicate and
+  /// 409 `CANNOT_INVITE_OWNER` for yourself.
   Future<WishlistParticipant> addParticipant(
     String wishlistId, {
-    String? userId,
-    String? inviteEmail,
+    required String userId,
     ParticipantRole role = ParticipantRole.viewer,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/wishlists/$wishlistId/participants',
-      body: {
-        'userId': ?userId,
-        'inviteEmail': ?inviteEmail,
-        'role': role.wireValue,
-      },
+      body: {'userId': userId, 'role': role.wireValue},
     );
     return WishlistParticipant.fromJson(json);
   }
@@ -234,6 +225,8 @@ class WishlistRepository {
     String? notes,
     int? priority,
     int? quantity,
+    String? recipientName,
+    String? relation,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/wishlists/$wishlistId/items/from-product',
@@ -243,6 +236,10 @@ class WishlistRepository {
         'notes': ?notes,
         'priority': ?priority,
         'quantity': ?quantity,
+        // Set by "Gift Now", which saves to the buyer's own list on someone
+        // else's behalf; a plain save leaves both off the body entirely.
+        'recipientName': ?recipientName,
+        'relation': ?relation,
       },
     );
     return WishlistItem.fromJson(json);

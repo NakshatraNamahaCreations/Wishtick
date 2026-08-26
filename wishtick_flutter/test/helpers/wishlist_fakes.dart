@@ -110,7 +110,11 @@ class FakeWishlistRepository implements WishlistRepository {
   final updateCalls = <String>[];
   final archiveCalls = <String>[];
   final addItemCalls = <String>[];
-  final addItemFromProductCalls = <(String provider, String externalId)>[];
+
+  /// Includes the recipient tag, which is the only thing that distinguishes a
+  /// "Gift Now" save from a plain one.
+  final addItemFromProductCalls =
+      <(String provider, String externalId, String? recipientName)>[];
   final updateItemCalls = <String>[];
   final removeItemCalls = <String>[];
   final configureShareCalls = <(String id, bool rotate)>[];
@@ -249,8 +253,10 @@ class FakeWishlistRepository implements WishlistRepository {
     String? notes,
     int? priority,
     int? quantity,
+    String? recipientName,
+    String? relation,
   }) async {
-    addItemFromProductCalls.add((provider, externalId));
+    addItemFromProductCalls.add((provider, externalId, recipientName));
     _throwIfFailing();
     final created = buildItem(
       id: 'item_${items.length + 1}',
@@ -330,7 +336,7 @@ class FakeWishlistRepository implements WishlistRepository {
   /// The guest list `listParticipants` returns; empty unless a test sets it.
   final List<WishlistParticipant> participants = [];
 
-  final addParticipantCalls = <({String? userId, String? email})>[];
+  final addParticipantCalls = <({String userId, ParticipantRole role})>[];
   final revokeParticipantCalls = <String>[];
 
   @override
@@ -342,21 +348,17 @@ class FakeWishlistRepository implements WishlistRepository {
   @override
   Future<WishlistParticipant> addParticipant(
     String wishlistId, {
-    String? userId,
-    String? inviteEmail,
+    required String userId,
     ParticipantRole role = ParticipantRole.viewer,
   }) async {
-    addParticipantCalls.add((userId: userId, email: inviteEmail));
+    addParticipantCalls.add((userId: userId, role: role));
     _throwIfFailing();
     final added = WishlistParticipant(
       id: 'p_${participants.length + 1}',
       userId: userId,
       name: null,
-      inviteEmail: inviteEmail,
       role: role,
-      state: userId == null
-          ? ParticipantState.invited
-          : ParticipantState.accepted,
+      state: ParticipantState.accepted,
       createdAt: DateTime(2026, 6, 1),
     );
     participants.add(added);

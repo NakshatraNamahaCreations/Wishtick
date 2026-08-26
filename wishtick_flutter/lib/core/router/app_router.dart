@@ -18,6 +18,7 @@ import '../../features/events/presentation/event_invite_preview_screen.dart';
 import '../../features/events/presentation/event_invite_templates_screen.dart';
 import '../../features/events/presentation/invite_screen.dart';
 import '../../features/events/presentation/my_events_screen.dart';
+import '../../features/events/presentation/public_event_screen.dart';
 import '../../features/events/presentation/upload_invitation_screen.dart';
 import '../../features/gifting/presentation/gift_arrival_screen.dart';
 import '../../features/gifting/presentation/gift_details_screen.dart';
@@ -86,6 +87,8 @@ import '../theme/theme_extensions.dart';
 import '../widgets/sprint_placeholder.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
+import 'deep_links.dart';
+import 'pending_link.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -117,11 +120,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       final onSplash = location == AppRoutes.splash;
       final inAuthFlow = location.startsWith(AppRoutes.welcome);
       final inOnboarding = location.startsWith(AppRoutes.onboarding);
-      // A shared wishlist or an event invite is a public link: someone sent it
-      // to a friend who may have no account. Sending them to sign-in would
-      // break the share.
-      final isPublicLink =
-          location.startsWith('/w/') || location.startsWith('/i/');
+      // A shared link is one somebody sent to a friend who may have no
+      // account — sending them to sign-in would break the share. Derived from
+      // the prefixes the app claims as deep links rather than listed again
+      // here: the two lists drifting is how `/m/` came to be claimed as a
+      // public contribute link while this guard still bounced it to /welcome.
+      final isPublicLink = AppLinks.claimedPrefixes.any(location.startsWith);
       // The Terms and the Privacy Policy are linked from the consent line on
       // the sign-in screen, which is read *before* there is a session. Sending
       // that tap to /welcome would answer "what am I agreeing to?" with the
@@ -144,7 +148,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // Fully set up: the splash, the auth flow and onboarding are dead ends.
-      if (onSplash || inAuthFlow || inOnboarding) return AppRoutes.home;
+      if (onSplash || inAuthFlow || inOnboarding) {
+        // Unless they were on their way somewhere — somebody who arrived from
+        // a share link, signed in, and possibly went through onboarding on the
+        // way. Home would be a dead end for them too: it says nothing about
+        // the invitation they tapped.
+        return ref.read(pendingDeepLinkProvider).take() ?? AppRoutes.home;
+      }
       return null;
     },
     routes: [
@@ -374,6 +384,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) =>
             InviteScreen(token: state.pathParameters['token']!),
+      ),
+      GoRoute(
+        // A public event's share link. Unlike `/i/:token` this one *does* need
+        // an account — the link names nobody, so signing in is what says who
+        // is joining. The screen resolves it into `/i/:token` and replaces
+        // itself.
+        path: '/e/:slug',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            PublicEventScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
         path: '/gift/:wishlistId/items/:itemId',

@@ -18,9 +18,6 @@ export class WishlistParticipant {
   @Prop({ type: SchemaTypes.ObjectId, ref: 'User', default: null })
   userId!: Types.ObjectId | null;
 
-  @Prop({ type: String, default: null, lowercase: true, trim: true })
-  inviteEmail!: string | null;
-
   @Prop({ type: String, enum: Object.values(ParticipantRole), default: ParticipantRole.VIEWER })
   role!: ParticipantRole;
 
@@ -55,5 +52,4 @@ export const WishlistParticipantSchema = SchemaFactory.createForClass(WishlistPa
 
 // The hot path: AccessPolicyService resolves (wishlist, user) on every request.
 WishlistParticipantSchema.index({ wishlistId: 1, userId: 1 });
-WishlistParticipantSchema.index({ wishlistId: 1, inviteEmail: 1 });
 WishlistParticipantSchema.index({ userId: 1, state: 1 });

@@ -22,6 +22,23 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<!-- The wishtick:// scheme. Not a Universal Link: nobody without the app
+	     can tap it from a chat and it offers no store fallback, but it needs no
+	     domain verification, so it is what makes deep-link routing testable
+	     before wishtick.com exists. See Runner.entitlements for the real thing. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.wishtick.applink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>wishtick</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>

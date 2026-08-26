@@ -568,6 +568,7 @@ export class ChatService {
           username: null,
           displayName: null,
           photoUrl: null,
+          avatarKey: null,
           online: false,
           lastSeenAt: null,
         },

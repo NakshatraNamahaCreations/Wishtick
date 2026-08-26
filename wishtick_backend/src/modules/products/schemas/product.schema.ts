@@ -77,7 +77,20 @@ export class Product {
   features!: ProductFeature[];
 
   @Prop({
-    type: [{ merchant: String, amountMinor: Number, url: String }],
+    type: [
+      {
+        merchant: String,
+        amountMinor: Number,
+        url: String,
+        // Cached per offer, not per product: the three sellers behind one
+        // product are three different merchant URLs, and the product-level
+        // `affiliateUrl` can only ever hold one of them. Without this, every
+        // seller row but the first would either send an unmonetized link or
+        // silently redirect to whichever seller happened to be converted.
+        affiliateUrl: { type: String, default: null },
+        affiliated: { type: Boolean, default: null },
+      },
+    ],
     default: [],
   })
   offers!: ProductOffer[];

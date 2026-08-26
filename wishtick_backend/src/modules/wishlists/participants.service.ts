@@ -24,15 +24,13 @@ export interface ParticipantView {
   id: string;
   userId: string | null;
   /**
-   * The participant's display name, when they have an account.
+   * The participant's display name.
    *
    * Hydrated here rather than left to the caller: without it the guest list is
    * a column of ObjectIds, and every client would have to fan out to /users to
-   * render one row. Null for an email invite that has not been claimed yet —
-   * there is no account to take a name from.
+   * render one row. Null only for an account with no name set.
    */
   name: string | null;
-  inviteEmail: string | null;
   role: ParticipantRole;
   state: ParticipantState;
   createdAt: Date;
@@ -81,29 +79,9 @@ export class ParticipantsService {
     const wishlist = await this.wishlists.findOrFail(wishlistId);
     await this.access.assertCanManage(wishlist, ctx);
 
-    if (!dto.userId && !dto.inviteEmail) {
-      throw new AppException(
-        ErrorCode.IDENTIFIER_REQUIRED,
-        'Provide either a userId or an inviteEmail',
-        400,
-      );
-    }
+    const userId = new Types.ObjectId(dto.userId);
 
-    // An email invite is resolved to an account when one already exists, so the
-    // policy can match on userId instead of waiting for a signup that will
-    // never come.
-    let userId = dto.userId ? new Types.ObjectId(dto.userId) : null;
-    // Kept so the returned view can carry a name without a second lookup.
-    let user: UserDocument | undefined;
-    if (!userId && dto.inviteEmail) {
-      const existing = await this.users.findByEmail(dto.inviteEmail);
-      if (existing) {
-        userId = existing._id;
-        user = existing;
-      }
-    }
-
-    if (userId && userId.equals(wishlist.ownerId)) {
+    if (userId.equals(wishlist.ownerId)) {
       throw new AppException(
         ErrorCode.CANNOT_INVITE_OWNER,
         'The owner already has full access to this wishlist',
@@ -111,18 +89,11 @@ export class ParticipantsService {
       );
     }
 
-    if (dto.userId) {
-      // Verify the account exists; otherwise a typo silently creates a
-      // participant row that can never match anyone.
-      user = await this.users.findByIdOrFail(dto.userId);
-    }
+    // Verify the account exists; otherwise a stale id silently creates a
+    // participant row that can never match anyone.
+    const user = await this.users.findByIdOrFail(dto.userId);
 
-    const existing = await this.model
-      .findOne({
-        wishlistId: wishlist._id,
-        ...(userId ? { userId } : { inviteEmail: dto.inviteEmail }),
-      })
-      .exec();
+    const existing = await this.model.findOne({ wishlistId: wishlist._id, userId }).exec();
 
     if (existing && !existing.revokedAt) {
       throw new AppException(
@@ -146,13 +117,12 @@ export class ParticipantsService {
     const participant = await this.model.create({
       wishlistId: wishlist._id,
       userId,
-      inviteEmail: dto.inviteEmail ?? null,
       role: dto.role ?? ParticipantRole.VIEWER,
-      // Auto-accepted for now: the owner picked this person deliberately, and
-      // an accept step with no notification to trigger it (Sprint 9) would just
-      // leave every invite stuck at "invited".
-      state: userId ? ParticipantState.ACCEPTED : ParticipantState.INVITED,
-      acceptedAt: userId ? new Date() : null,
+      // Auto-accepted: the owner picked this person deliberately out of their
+      // WishMates, and an accept step with nothing to trigger it would leave
+      // every share stuck at "invited".
+      state: ParticipantState.ACCEPTED,
+      acceptedAt: new Date(),
       invitedBy: new Types.ObjectId(ctx.userId!),
     });
 
@@ -200,29 +170,11 @@ export class ParticipantsService {
     );
   }
 
-  /**
-   * Links pending email invites to a newly created account.
-   *
-   * Without this, inviting someone who has not joined yet produces a row that
-   * never matches: the policy resolves on userId, and the invite would sit
-   * unusable forever while the invitee sees nothing.
-   */
-  async linkInvitesForNewUser(userId: Types.ObjectId, email: string): Promise<number> {
-    const result = await this.model
-      .updateMany(
-        { inviteEmail: email.toLowerCase(), userId: null, revokedAt: null },
-        { $set: { userId, state: ParticipantState.ACCEPTED, acceptedAt: new Date() } },
-      )
-      .exec();
-    return result.modifiedCount;
-  }
-
   private static toView(p: WishlistParticipantDocument, user?: UserDocument): ParticipantView {
     return {
       id: p._id.toString(),
       userId: p.userId?.toString() ?? null,
       name: user?.name?.trim() || null,
-      inviteEmail: p.inviteEmail,
       role: p.role,
       state: p.state,
       createdAt: p.createdAt,

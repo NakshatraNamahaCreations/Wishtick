@@ -61,8 +61,9 @@ export class PublicInvitesService {
   async getByToken(token: string, viewerUserId?: string): Promise<PublicInviteView> {
     const { invite, event } = await this.resolve(token);
 
-    const [hostFirstName, wishlists] = await Promise.all([
+    const [hostFirstName, inviteeName, wishlists] = await Promise.all([
       this.hostFirstName(event),
+      this.inviteeName(invite),
       this.visibleWishlists(event, viewerUserId),
     ]);
 
@@ -81,7 +82,7 @@ export class PublicInvitesService {
         status: event.status,
       },
       host: { firstName: hostFirstName },
-      invitee: { name: invite.name, rsvp: invite.rsvp, plusOnes: invite.plusOnes },
+      invitee: { name: inviteeName, rsvp: invite.rsvp, plusOnes: invite.plusOnes },
       wishlists,
     };
   }
@@ -112,7 +113,6 @@ export class PublicInvitesService {
     await this.invites.respond(invite, dto.response, {
       plusOnes: dto.plusOnes,
       message: dto.message,
-      name: dto.name,
     });
 
     return this.getByToken(token, viewerUserId);
@@ -174,6 +174,28 @@ export class PublicInvitesService {
       type: 'website',
       siteName: 'Wishtick',
     };
+  }
+
+  /**
+   * The greeting on the invitation — "Hi Priya".
+   *
+   * The name used to be typed by the host when they addressed the invite. It
+   * comes from the invitee's own account now, which is both more likely to be
+   * how they spell it and one less thing for the host to fill in. Null for an
+   * invite written before invitations were WishMate-only; the page greets them
+   * without a name rather than with a wrong one.
+   */
+  private async inviteeName(invite: EventInviteDocument): Promise<string | null> {
+    if (!invite.invitedUserId) return null;
+
+    const profile = await this.profiles
+      .findOne({ userId: invite.invitedUserId })
+      .select('displayName')
+      .exec();
+    if (profile?.displayName) return profile.displayName.trim() || null;
+
+    const user = await this.users.findById(invite.invitedUserId);
+    return user?.name?.trim() || null;
   }
 
   /** First name only — the same redaction rule as the public wishlist view. */

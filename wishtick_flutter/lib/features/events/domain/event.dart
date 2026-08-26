@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../wishmates/domain/wishmate.dart';
+
 /// What kind of occasion this is. Drives which invite templates are offered.
 enum EventType {
   birthday('birthday'),
@@ -283,20 +285,23 @@ class EventInvite {
     required this.id,
     required this.rsvp,
     required this.plusOnes,
-    required this.sendCount,
     required this.createdAt,
-    this.email,
-    this.phone,
-    this.name,
+    this.person,
     this.invitedUserId,
     this.message,
     this.respondedAt,
   });
 
   final String id;
-  final String? email;
-  final String? phone;
-  final String? name;
+
+  /// Who was invited.
+  ///
+  /// Replaces the old email/phone/name trio: invitations are addressed to a
+  /// WishMate now, so the guest list shows the same face, name and handle the
+  /// rest of the app shows. Null for an account that has since been deleted —
+  /// the invite outlives the profile.
+  final PersonIdentity? person;
+
   final String? invitedUserId;
   final RsvpResponse rsvp;
 
@@ -306,19 +311,17 @@ class EventInvite {
   final String? message;
   final DateTime? respondedAt;
 
-  /// How many times the invite has been sent. Drives "Resend".
-  final int sendCount;
-
   /// When they were added to the guest list — "Added on" (`4096:162`).
   final DateTime createdAt;
 
-  /// What to call them when no name was given.
-  String get displayName => name?.trim().isNotEmpty ?? false
-      ? name!.trim()
-      : (email ?? phone ?? 'Guest');
+  /// What to call them on the guest list. Never blank, even for an account
+  /// with nothing filled in.
+  String get displayName => person?.name ?? 'Guest';
 
-  /// Their contact handle, whichever they were invited by.
-  String? get contact => email ?? phone;
+  /// Their `@handle`, where a contact address used to go. Null for a guest
+  /// who never claimed one.
+  String? get contact =>
+      person?.username == null ? null : '@${person!.username}';
 
   /// This guest's contribution to the head count — nobody, unless they are
   /// coming.
@@ -326,9 +329,9 @@ class EventInvite {
 
   factory EventInvite.fromJson(Map<String, dynamic> json) => EventInvite(
     id: json['id'] as String,
-    email: json['email'] as String?,
-    phone: json['phone'] as String?,
-    name: json['name'] as String?,
+    person: json['person'] == null
+        ? null
+        : PersonIdentity.fromJson(json['person'] as Map<String, dynamic>),
     invitedUserId: json['invitedUserId'] as String?,
     rsvp: RsvpResponse.fromWire(json['rsvp'] as String?),
     plusOnes: json['plusOnes'] as int? ?? 0,
@@ -336,7 +339,6 @@ class EventInvite {
     respondedAt: json['respondedAt'] == null
         ? null
         : DateTime.parse(json['respondedAt'] as String),
-    sendCount: json['sendCount'] as int? ?? 0,
     createdAt: DateTime.parse(json['createdAt'] as String),
   );
 }

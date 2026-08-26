@@ -1,7 +1,7 @@
 import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import type { Model } from 'mongoose';
+import { Types, type Model } from 'mongoose';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import { EVENT_REMINDER_JOB } from 'src/modules/events/event-reminders.service';
 import { Event, type EventDocument } from 'src/modules/events/schemas/event.schema';
@@ -15,6 +15,16 @@ const PNG_BYTES = Buffer.from(
   'base64',
 );
 const IN_A_MONTH = (): string => new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString();
+/**
+ * A syntactically valid user id with no account behind it.
+ *
+ * Used where a test only needs the invite row to exist — bulk dedupe, the
+ * published-state guard — and signing up 50 real accounts would cost more than
+ * the assertion is worth. Inviting an id that resolves to nobody is allowed on
+ * purpose: the guest list renders the row without a name rather than rejecting
+ * a batch of 50 because one WishMate deleted their account mid-request.
+ */
+const newObjectId = (): string => new Types.ObjectId().toString();
 
 interface Envelope<T> {
   success: boolean;
@@ -43,11 +53,11 @@ describe('Events & invites (e2e)', () => {
 
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-  const newUser = async (): Promise<Actor> => {
+  const newUser = async (name = 'Aarav Sharma'): Promise<Actor> => {
     const email = `ev${++seq}.${Date.now()}@example.com`;
     const res = await request(app.getHttpServer())
       .post(`${V1}/auth/signup`)
-      .send({ email, password: PASSWORD, name: 'Aarav Sharma' })
+      .send({ email, password: PASSWORD, name })
       .expect(201);
     const body = res.body as Envelope<{ user: { id: string }; tokens: { accessToken: string } }>;
     return { token: body.data.tokens.accessToken, userId: body.data.user.id, email };
@@ -245,15 +255,10 @@ describe('Events & invites (e2e)', () => {
       const event = await createEvent(host);
       await publish(host, event.id);
 
-      // 50 unique guests, plus 5 duplicates (same address again) and 2 junk
-      // entries with no contact — the shape of a real contact-list paste.
-      const unique = Array.from({ length: 50 }, (_, i) => ({ email: `guest${i}@example.com` }));
-      const recipients = [
-        ...unique,
-        ...unique.slice(0, 5),
-        { name: 'No contact' },
-        { name: 'Also nothing' },
-      ];
+      // 50 unique WishMates, plus 5 duplicates (the same person tapped twice)
+      // and the host themselves, who cannot be a guest at their own party.
+      const unique = Array.from({ length: 50 }, () => ({ userId: newObjectId() }));
+      const recipients = [...unique, ...unique.slice(0, 5), { userId: host.userId }];
 
       const res = await request(app.getHttpServer())
         .post(`${V1}/events/${event.id}/invites`)
@@ -266,7 +271,7 @@ describe('Events & invites (e2e)', () => {
       ).data;
       expect(result.created).toHaveLength(50);
       expect(result.duplicates).toBe(5);
-      expect(result.skipped).toBe(2);
+      expect(result.skipped).toBe(1);
 
       // The guest list holds exactly 50, not 55 — the database dedupe held.
       const invites = (
@@ -277,8 +282,11 @@ describe('Events & invites (e2e)', () => {
       ).body as Envelope<unknown[]>;
       expect(invites.data).toHaveLength(50);
 
-      // 50 emails went out, one per guest.
-      expect(ctx.mailer.sent.filter((m) => m.subject.includes('Big Party'))).toHaveLength(50);
+      // Nothing was emailed or texted: an invitation reaches a WishMate in the
+      // app, and this is the assertion that would catch a delivery channel
+      // creeping back in.
+      expect(ctx.mailer.sent.filter((m) => m.subject.includes('Big Party'))).toHaveLength(0);
+      expect(ctx.sms.sent).toHaveLength(0);
 
       // A second identical request adds nobody.
       const again = await request(app.getHttpServer())
@@ -297,20 +305,23 @@ describe('Events & invites (e2e)', () => {
       const event = await createEvent(host);
       await publish(host, event.id);
 
+      const priya = await newUser('Priya Nair');
       await request(app.getHttpServer())
         .post(`${V1}/events/${event.id}/invites`)
         .set(auth(host.token))
-        .send({ recipients: [{ email: 'priya@example.com', name: 'Priya' }] })
+        .send({ recipients: [{ userId: priya.userId }] })
         .expect(200);
 
-      // The invitee opens their emailed link — no auth header.
-      const inviteToken = InviteTokenHelper.fromLastEmail(ctx);
+      // The invitee opens their link — no auth header.
+      const inviteToken = await InviteTokenHelper.only(app, host.token, event.id);
 
       const view = await request(app.getHttpServer())
         .get(`${V1}/public/invites/${inviteToken}`)
         .expect(200);
+      // The greeting comes from their own account now, not from something the
+      // host typed when addressing the invite.
       expect((view.body as Envelope<{ invitee: { name: string } }>).data.invitee.name).toBe(
-        'Priya',
+        'Priya Nair',
       );
 
       await request(app.getHttpServer())
@@ -332,12 +343,13 @@ describe('Events & invites (e2e)', () => {
       const host = await newUser();
       const event = await createEvent(host);
       await publish(host, event.id);
+      const guest = await newUser();
       await request(app.getHttpServer())
         .post(`${V1}/events/${event.id}/invites`)
         .set(auth(host.token))
-        .send({ recipients: [{ email: 'gone@example.com' }] })
+        .send({ recipients: [{ userId: guest.userId }] })
         .expect(200);
-      const inviteToken = InviteTokenHelper.fromLastEmail(ctx);
+      const inviteToken = await InviteTokenHelper.only(app, host.token, event.id);
 
       const invites = (
         await request(app.getHttpServer())
@@ -360,7 +372,7 @@ describe('Events & invites (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post(`${V1}/events/${event.id}/invites`)
         .set(auth(host.token))
-        .send({ recipients: [{ email: 'early@example.com' }] })
+        .send({ recipients: [{ userId: newObjectId() }] })
         .expect(409);
       expect((res.body as Envelope<never>).error?.code).toBe(ErrorCode.EVENT_NOT_PUBLISHED);
     });
@@ -425,7 +437,7 @@ describe('Events & invites (e2e)', () => {
         await request(app.getHttpServer())
           .post(`${V1}/events/${event.data.id}/invites`)
           .set(auth(host.token))
-          .send({ recipients: [{ email: 'guest@example.com' }] })
+          .send({ recipients: [{ userId: newObjectId() }] })
           .expect(200)
       ).body as Envelope<{ created: { id: string }[] }>;
 
@@ -450,10 +462,11 @@ describe('Events & invites (e2e)', () => {
       const host = await newUser();
       const event = await createEvent(host);
       await publish(host, event.id);
+      const rohan = await newUser('Rohan');
       await request(app.getHttpServer())
         .post(`${V1}/events/${event.id}/invites`)
         .set(auth(host.token))
-        .send({ recipients: [{ email: 'added.on@example.com', name: 'Rohan' }] })
+        .send({ recipients: [{ userId: rohan.userId }] })
         .expect(200);
 
       const list = (
@@ -461,12 +474,17 @@ describe('Events & invites (e2e)', () => {
           .get(`${V1}/events/${event.id}/invites`)
           .set(auth(host.token))
           .expect(200)
-      ).body as Envelope<{ name: string | null; createdAt: string }[]>;
+      ).body as Envelope<{ person: { displayName: string | null } | null; createdAt: string }[]>;
 
       // "Added on" has no other source: an invite with no createdAt renders a
       // dash where the design shows a timestamp.
       expect(list.data[0].createdAt).toEqual(expect.any(String));
       expect(Number.isNaN(Date.parse(list.data[0].createdAt))).toBe(false);
+
+      // And the row knows whose it is. The invite itself carries only a user
+      // id now, so without the identity lookup every guest row is a blank
+      // name — a guest list that lists nobody.
+      expect(list.data[0].person?.displayName).toBe('Rohan');
     });
   });
 
@@ -517,7 +535,7 @@ describe('Events & invites (e2e)', () => {
         await request(app.getHttpServer())
           .post(`${V1}/events/${event.id}/invites`)
           .set(auth(host.token))
-          .send({ recipients: [{ email: 'guest.upload@example.com' }] })
+          .send({ recipients: [{ userId: newObjectId() }] })
           .expect(200)
       ).body as Envelope<{ created: { id: string }[] }>;
 
@@ -571,15 +589,11 @@ describe('Events & invites (e2e)', () => {
       const host = await newUser();
       const event = await createEvent(host);
       await publish(host, event.id);
+      const [rohan, sona] = [await newUser('Rohan'), await newUser('Sona')];
       await request(app.getHttpServer())
         .post(`${V1}/events/${event.id}/invites`)
         .set(auth(host.token))
-        .send({
-          recipients: [
-            { email: 'rohan@example.com', name: 'Rohan' },
-            { email: 'sona@example.com', name: 'Sona' },
-          ],
-        })
+        .send({ recipients: [{ userId: rohan.userId }, { userId: sona.userId }] })
         .expect(200);
       return { host, eventId: event.id };
     };
@@ -609,12 +623,14 @@ describe('Events & invites (e2e)', () => {
       const host = await newUser();
       const event = await createEvent(host);
       await publish(host, event.id);
+      // The name is the guest's own, so the injection now arrives through
+      // somebody's account rather than through what the host typed — which is
+      // if anything the more likely way for one to reach the export.
+      const attacker = await newUser('=cmd|calc!A1');
       await request(app.getHttpServer())
         .post(`${V1}/events/${event.id}/invites`)
         .set(auth(host.token))
-        .send({
-          recipients: [{ email: 'x@example.com', name: '=cmd|calc!A1' }],
-        })
+        .send({ recipients: [{ userId: attacker.userId }] })
         .expect(200);
 
       const res = await request(app.getHttpServer())
@@ -721,11 +737,10 @@ describe('Events & invites (e2e)', () => {
         .set(auth(guest.token))
         .expect(404);
 
-      // Invite the guest by their account email.
       await request(app.getHttpServer())
         .post(`${V1}/events/${event.id}/invites`)
         .set(auth(host.token))
-        .send({ recipients: [{ email: guest.email }] })
+        .send({ recipients: [{ userId: guest.userId }] })
         .expect(200);
 
       // Invited but not replied → still no access. An unanswered invite is not
@@ -735,7 +750,7 @@ describe('Events & invites (e2e)', () => {
         .set(auth(guest.token))
         .expect(404);
 
-      const inviteToken = InviteTokenHelper.fromLastEmail(ctx);
+      const inviteToken = await InviteTokenHelper.only(app, host.token, event.id);
       await request(app.getHttpServer())
         .post(`${V1}/public/invites/${inviteToken}/rsvp`)
         .set(auth(guest.token))
@@ -766,48 +781,204 @@ describe('Events & invites (e2e)', () => {
 
   // ── Invite linking on signup ──────────────────────────────────────────────
 
-  describe('linking invites on signup', () => {
-    it('attaches an invite sent before the guest had an account', async () => {
+  /**
+   * Joining a public event from its share link (`/e/<slug>`).
+   *
+   * The link names nobody, so identity is the session — which is what lets one
+   * URL sit in a group chat. Everything after the join is the existing invite
+   * machinery, so these tests care mostly about who is turned away.
+   */
+  describe('join by share link', () => {
+    const publicEvent = async (host: Actor, over: Record<string, unknown> = {}) => {
+      const event = await createEvent(host, { visibility: 'public', ...over });
+      if (over.status !== 'draft') await publish(host, event.id);
+      const full = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<EventView & { share?: { slug: string } }>;
+      return { id: event.id, slug: full.data.share!.slug };
+    };
+
+    const join = (guest: Actor, slug: string) =>
+      request(app.getHttpServer()).post(`${V1}/events/by-slug/${slug}/join`).set(auth(guest.token));
+
+    it('mints an invite whose token the existing RSVP flow accepts', async () => {
       const host = await newUser();
-      const event = await createEvent(host);
-      await publish(host, event.id);
+      const guest = await newUser();
+      const event = await publicEvent(host);
 
-      const futureGuestEmail = `future.${Date.now()}@example.com`;
+      const joined = (await join(guest, event.slug).expect(201)).body as Envelope<{
+        token: string;
+      }>;
+      const token = joined.data.token;
+
+      // The whole point of returning a token: nothing new is needed to answer.
+      const view = await request(app.getHttpServer())
+        .get(`${V1}/public/invites/${token}`)
+        .expect(200);
+      expect(view.body.data.event.title).toBe('Big Party');
+
       await request(app.getHttpServer())
-        .post(`${V1}/events/${event.id}/invites`)
+        .post(`${V1}/public/invites/${token}/rsvp`)
+        .send({ response: 'yes' })
+        .expect(200);
+
+      const counts = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<EventView>;
+      expect(counts.data.rsvpCounts).toMatchObject({ yes: 1, invited: 1 });
+    });
+
+    it('is idempotent — a link tapped twice is one guest, not two', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const event = await publicEvent(host);
+
+      const first = (await join(guest, event.slug).expect(201)).body as Envelope<{ token: string }>;
+      const second = (await join(guest, event.slug).expect(201)).body as Envelope<{
+        token: string;
+      }>;
+
+      // A second row would split the RSVP: answer on one, the host sees the
+      // other still pending.
+      expect(second.data.token).toBe(first.data.token);
+
+      const invites = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}/invites`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<unknown[]>;
+      expect(invites.data).toHaveLength(1);
+    });
+
+    it('keeps an answer already given when the link is reopened', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const event = await publicEvent(host);
+
+      const token = (
+        (await join(guest, event.slug).expect(201)).body as Envelope<{ token: string }>
+      ).data.token;
+      await request(app.getHttpServer())
+        .post(`${V1}/public/invites/${token}/rsvp`)
+        .send({ response: 'yes' })
+        .expect(200);
+
+      // Reopened after an install, say. Re-minting would silently drop the yes.
+      await join(guest, event.slug).expect(201);
+
+      const view = await request(app.getHttpServer())
+        .get(`${V1}/public/invites/${token}`)
+        .expect(200);
+      expect(view.body.data.invitee.rsvp).toBe('yes');
+    });
+
+    it('refuses a private event — there the host decides who comes', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const event = await publicEvent(host, { visibility: 'private' });
+
+      const res = await join(guest, event.slug).expect(404);
+      expect(res.body.error.code).toBe('EVENT_NOT_FOUND');
+    });
+
+    it('lets an invite_only event in — it is defined as reachable by link', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const event = await publicEvent(host, { visibility: 'invite_only' });
+
+      await join(guest, event.slug).expect(201);
+    });
+
+    it('refuses a draft, so an unsent party cannot be gate-crashed', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const draft = await createEvent(host, { visibility: 'public' });
+      const full = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${draft.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<EventView & { share?: { slug: string } }>;
+
+      const res = await join(guest, full.data.share!.slug).expect(404);
+      expect(res.body.error.code).toBe('EVENT_NOT_FOUND');
+    });
+
+    it('refuses the host their own link', async () => {
+      const host = await newUser();
+      const event = await publicEvent(host);
+
+      const res = await join(host, event.slug).expect(400);
+      expect(res.body.error.code).toBe('CANNOT_INVITE_HOST');
+    });
+
+    it('will not undo a revoke — the host took that access away on purpose', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const event = await publicEvent(host);
+      await join(guest, event.slug).expect(201);
+
+      const invites = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}/invites`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+      await request(app.getHttpServer())
+        .delete(`${V1}/events/${event.id}/invites/${invites.data[0].id}`)
         .set(auth(host.token))
-        .send({ recipients: [{ email: futureGuestEmail }] })
-        .expect(200);
+        .expect(204);
 
-      // They sign up later with that email.
-      const signup = await request(app.getHttpServer())
-        .post(`${V1}/auth/signup`)
-        .send({ email: futureGuestEmail, password: PASSWORD })
-        .expect(201);
-      const guestToken = (signup.body as Envelope<{ tokens: { accessToken: string } }>).data.tokens
-        .accessToken;
+      const res = await join(guest, event.slug).expect(404);
+      expect(res.body.error.code).toBe('EVENT_NOT_FOUND');
+    });
 
-      // The listener runs asynchronously; give it a beat.
-      await new Promise((r) => setTimeout(r, 200));
-
-      const invited = await request(app.getHttpServer())
-        .get(`${V1}/events/invited`)
-        .set(auth(guestToken))
-        .expect(200);
-      expect((invited.body as Envelope<{ id: string }[]>).data.some((e) => e.id === event.id)).toBe(
-        true,
-      );
+    it('answers 404 for a slug that never existed', async () => {
+      const guest = await newUser();
+      const res = await join(guest, 'nosuchslug123456').expect(404);
+      expect(res.body.error.code).toBe('EVENT_NOT_FOUND');
     });
   });
 });
 
-/** Pulls an invite token out of the invite email the fake mailer captured. */
+/**
+ * Pulls an invite token out of the host's own copyable link.
+ *
+ * Invitations are not emailed any more — they are addressed to a WishMate, who
+ * finds theirs in the app — so there is no mailbox to read one out of. The
+ * host-only link endpoint is the remaining way to get at a specific invitee's
+ * token, and using it here means the tests exercise the same path the share
+ * sheet does.
+ */
 class InviteTokenHelper {
-  static fromLastEmail(ctx: TestApp): string {
-    const mail = ctx.mailer.last;
-    if (!mail) throw new Error('No invite email was sent');
-    const match = /\/i\/([A-Za-z0-9_-]+)/.exec(mail.text);
-    if (!match) throw new Error(`No invite token in email: ${mail.text.slice(0, 120)}`);
-    return match[1];
+  static async forInvite(
+    app: INestApplication,
+    hostToken: string,
+    eventId: string,
+    inviteId: string,
+  ): Promise<string> {
+    const res = await request(app.getHttpServer())
+      .get(`${V1}/events/${eventId}/invites/${inviteId}/link`)
+      .set({ Authorization: `Bearer ${hostToken}` })
+      .expect(200);
+    return (res.body as Envelope<{ url: string }>).data.url.split('/').pop()!;
+  }
+
+  /** The token for the event's only invite — the common single-guest case. */
+  static async only(app: INestApplication, hostToken: string, eventId: string): Promise<string> {
+    const list = await request(app.getHttpServer())
+      .get(`${V1}/events/${eventId}/invites`)
+      .set({ Authorization: `Bearer ${hostToken}` })
+      .expect(200);
+    const invites = (list.body as Envelope<{ id: string }[]>).data;
+    if (invites.length !== 1) throw new Error(`Expected one invite, found ${invites.length}`);
+    return InviteTokenHelper.forInvite(app, hostToken, eventId, invites[0].id);
   }
 }

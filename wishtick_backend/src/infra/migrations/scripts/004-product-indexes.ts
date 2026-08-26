@@ -21,7 +21,16 @@ export const migration004: Migration = {
     // Drives the nightly sync sweep: oldest snapshots first.
     await db.collection('products').createIndex({ lastSyncedAt: 1 });
 
-    await db.collection('click_events').createIndex({ itemId: 1, createdAt: -1 });
+    // Tolerated, not asserted: 023 later narrows this same index to a partial
+    // one, and the schema now declares that narrowed form — so on a database
+    // Mongoose has already touched, an index of this name exists with
+    // different options before this line runs and Mongo rejects the duplicate
+    // name. 023 is the authority on the final shape either way; failing here
+    // would only stop a fresh environment from booting at all.
+    await db
+      .collection('click_events')
+      .createIndex({ itemId: 1, createdAt: -1 })
+      .catch(() => undefined);
     await db.collection('click_events').createIndex({ trackingId: 1 }, { unique: true });
     await db.collection('click_events').createIndex({ userId: 1, createdAt: -1 });
     // Clicks are only interesting in aggregate; 180 days covers any payout

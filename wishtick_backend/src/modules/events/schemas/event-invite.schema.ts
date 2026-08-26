@@ -12,22 +12,16 @@ export class EventInvite {
   eventId!: Types.ObjectId;
 
   /**
-   * Null while the invitee has no account. Linked on signup by matching the
-   * email or phone below, so an invite sent before someone joined still works.
+   * Who was invited.
+   *
+   * Nullable only for invites written before invitations were WishMate-only,
+   * when a row could be addressed to an email or phone number and linked to an
+   * account later if a matching signup ever happened. Nothing creates one of
+   * those any more; a stranger joins through the share link instead, which
+   * makes them an account first and an invite second.
    */
   @Prop({ type: SchemaTypes.ObjectId, ref: 'User', default: null })
   invitedUserId!: Types.ObjectId | null;
-
-  @Prop({ type: String, default: null, lowercase: true, trim: true })
-  email!: string | null;
-
-  /** E.164, normalized on write. */
-  @Prop({ type: String, default: null, trim: true })
-  phone!: string | null;
-
-  /** Display name for the guest list before they have an account. */
-  @Prop({ type: String, default: null, trim: true, maxlength: 120 })
-  name!: string | null;
 
   /**
    * The invitee's credential. Unguessable, because it is the only thing between
@@ -49,12 +43,6 @@ export class EventInvite {
   @Prop({ type: String, default: null, maxlength: 500 })
   message!: string | null;
 
-  @Prop({ type: Number, default: 0 })
-  sendCount!: number;
-
-  @Prop({ type: Date, default: null })
-  lastSentAt!: Date | null;
-
   /** Revoked rather than deleted, for the same reasons as a wishlist participant. */
   @Prop({ type: Date, default: null })
   revokedAt!: Date | null;
@@ -72,22 +60,12 @@ EventInviteSchema.index({ invitedUserId: 1, revokedAt: 1 });
 /**
  * Deduplication is enforced by the DATABASE, not just by the bulk-invite code.
  *
- * Partial unique indexes on (event, email) and (event, phone): the invite
- * endpoint takes a list from a user's address book, which routinely contains
- * the same person twice, and two concurrent requests could otherwise both pass
- * an application-level check. A duplicate invite means someone gets two
- * messages and the RSVP count double-counts them.
+ * Two concurrent invite requests could otherwise both pass the
+ * application-level check, and a duplicate invite double-counts the RSVP.
+ *
+ * Also the hot path for AccessPolicyService, which resolves (event, user) for
+ * every EVENT_ONLY wishlist read — one index serving both duties.
  */
-EventInviteSchema.index(
-  { eventId: 1, email: 1 },
-  { unique: true, partialFilterExpression: { email: { $type: 'string' } } },
-);
-EventInviteSchema.index(
-  { eventId: 1, phone: 1 },
-  { unique: true, partialFilterExpression: { phone: { $type: 'string' } } },
-);
-// Also the hot path for AccessPolicyService, which resolves (event, user) for
-// every EVENT_ONLY wishlist read — one index serving both duties.
 EventInviteSchema.index(
   { eventId: 1, invitedUserId: 1 },
   { unique: true, partialFilterExpression: { invitedUserId: { $type: 'objectId' } } },

@@ -23,6 +23,17 @@ export interface ProductOffer {
   merchant: string | null;
   amountMinor: number | null;
   url: string | null;
+  /**
+   * The tracked link for THIS seller, cached once converted.
+   *
+   * Per offer rather than per product because the sellers are different
+   * merchants: the product-level [affiliateUrl] can only hold one of them, so
+   * a shared cache would send every seller row to whichever was converted
+   * first. Null until someone clicks this particular row.
+   */
+  affiliateUrl?: string | null;
+  /** What Cuelinks reported for this seller. Recorded for reporting only. */
+  affiliated?: boolean | null;
 }
 
 /**

@@ -12,6 +12,19 @@ export interface PublicIdentity {
   username: string | null;
   displayName: string | null;
   photoUrl: string | null;
+
+  /**
+   * One of the twenty bundled avatars (`avatar_01` … `avatar_20`), when they
+   * picked one instead of uploading a photo.
+   *
+   * Carried alongside [photoUrl] rather than resolved into it, because the
+   * asset lives in the app bundle and has no URL the server could hand out.
+   * Without this field every account that chose a bundled avatar — which is
+   * most of them, since it is what onboarding offers first — appears to
+   * everybody *else* as a bare initial, while looking correct to its owner.
+   */
+  avatarKey: string | null;
+
   /** Whether they hold a live socket right now — the green dot. */
   online: boolean;
   /** ISO, or null for someone never seen since presence was introduced. */

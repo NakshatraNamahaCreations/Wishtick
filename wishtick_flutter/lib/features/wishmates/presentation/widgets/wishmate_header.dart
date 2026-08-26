@@ -34,7 +34,10 @@ class WishmateHeader extends StatelessWidget {
       clipper: const CurvedBottomClipper(dip: CurvedBottomClipper.shallow),
       child: Container(
         width: double.infinity,
-        decoration: BoxDecoration(gradient: context.gradients.header),
+        // Sampled down the left edge of `4177:42`: plumShadow → plumRich →
+        // plumMuted, the same ramp the profile hero uses. Not
+        // `gradients.header`, whose violet-leaning ink reads blue here.
+        decoration: BoxDecoration(gradient: context.gradients.eventMasthead),
         padding: EdgeInsets.only(
           top: topInset,
           // The clipper eats into the foot, so the content is held clear of it.

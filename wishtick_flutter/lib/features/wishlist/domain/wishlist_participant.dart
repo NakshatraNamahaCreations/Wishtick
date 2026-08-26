@@ -26,7 +26,8 @@ enum ParticipantRole {
 
 /// Where an invite has got to.
 enum ParticipantState {
-  /// Invited by email, no account claimed it yet.
+  /// Legacy: an email invite nobody claimed. Nothing produces one now that
+  /// sharing picks from WishMates, but old rows still deserialize.
   invited('invited'),
   accepted('accepted'),
   revoked('revoked');
@@ -41,16 +42,15 @@ enum ParticipantState {
 
 /// One person with access to a wishlist (`ParticipantView`).
 ///
-/// Either [userId]/[name] or [inviteEmail] identifies them: an invite sent to
-/// an address with no account yet has no user to name, and gets linked to one
-/// when that person signs up.
+/// Always an account: sharing picks from WishMates, so there is a [userId]
+/// behind every row. [name] can still be null for somebody who signed up and
+/// filled nothing in.
 @immutable
 class WishlistParticipant {
   const WishlistParticipant({
     required this.id,
     required this.userId,
     required this.name,
-    required this.inviteEmail,
     required this.role,
     required this.state,
     required this.createdAt,
@@ -59,24 +59,20 @@ class WishlistParticipant {
   final String id;
   final String? userId;
   final String? name;
-  final String? inviteEmail;
   final ParticipantRole role;
   final ParticipantState state;
   final DateTime createdAt;
 
-  /// What to put on the row. Falls back through name → email → a placeholder,
-  /// because a bare user id is not something to show anyone.
-  String get displayName => name?.trim().isNotEmpty ?? false
-      ? name!.trim()
-      : (inviteEmail ?? 'Someone on Wishtick');
+  /// What to put on the row. A bare user id is not something to show anyone,
+  /// so a nameless account gets a placeholder instead.
+  String get displayName =>
+      name?.trim().isNotEmpty ?? false ? name!.trim() : 'Someone on Wishtick';
 
-  /// The line under [displayName], or null when it would just repeat it.
-  String? get subtitle {
-    final hasName = name?.trim().isNotEmpty ?? false;
-    return hasName ? inviteEmail : null;
-  }
+  /// The line under [displayName]. Nothing to add now that the name is the
+  /// account's own — kept so the row layout has one place to grow a handle.
+  String? get subtitle => null;
 
-  /// An email invite still waiting for its owner to create an account.
+  /// A legacy email invite still waiting for its owner to create an account.
   bool get isPending => state == ParticipantState.invited;
 
   factory WishlistParticipant.fromJson(Map<String, dynamic> json) =>
@@ -84,7 +80,6 @@ class WishlistParticipant {
         id: json['id'] as String,
         userId: json['userId'] as String?,
         name: json['name'] as String?,
-        inviteEmail: json['inviteEmail'] as String?,
         role: ParticipantRole.fromWire(json['role'] as String? ?? 'viewer'),
         state: ParticipantState.fromWire(
           json['state'] as String? ?? 'accepted',

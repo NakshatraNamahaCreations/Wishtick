@@ -14,6 +14,7 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
     required this.header,
     required this.celebration,
     required this.curatedBanner,
+    required this.eventMasthead,
   });
 
   /// The plum masthead: Home's header card (`51:11`), and the hero on the
@@ -35,6 +36,16 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
   /// (used elsewhere for a different plum → violet treatment).
   final LinearGradient curatedBanner;
 
+  /// The three-stop plum wash behind "What are you celebrating?" (`257:733`),
+  /// the WishMates mastheads (`4177:42`, `4177:77`, `4177:111`, `4177:179`)
+  /// and the profile hero (`4177:217`, `4177:267`).
+  ///
+  /// Not [header]: that one is a two-stop violet-leaning ink → plum, and every
+  /// frame above starts on a warm near-black the header never reaches. Sampling
+  /// `4177:217` down its left edge lands on these three stops to the pixel —
+  /// #1D041D at the top, #612260 at the midpoint, #522651 at the foot.
+  final LinearGradient eventMasthead;
+
   static const light = WishtickGradients(
     headline: LinearGradient(colors: [AppPalette.plumMuted, AppPalette.bronze]),
     // The pair the light theme calls primaryDeep → primary.
@@ -53,6 +64,7 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
       begin: Alignment.bottomLeft,
       end: Alignment.topRight,
     ),
+    eventMasthead: _eventMasthead,
   );
 
   /// Both stops step up in luminance so the sweep stays legible on the dark
@@ -76,6 +88,16 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
       begin: Alignment.bottomLeft,
       end: Alignment.topRight,
     ),
+    eventMasthead: _eventMasthead,
+  );
+
+  /// Shared by both themes rather than brightened for the dark ramp like the
+  /// stops above: this wash is already near-black at its top, so a dark-mode
+  /// variant would be lightening the one masthead that is meant to be darkest.
+  static const _eventMasthead = LinearGradient(
+    colors: [AppPalette.plumShadow, AppPalette.plumRich, AppPalette.plumMuted],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
   );
 
   @override
@@ -84,12 +106,14 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
     LinearGradient? header,
     LinearGradient? celebration,
     LinearGradient? curatedBanner,
+    LinearGradient? eventMasthead,
   }) {
     return WishtickGradients(
       headline: headline ?? this.headline,
       header: header ?? this.header,
       celebration: celebration ?? this.celebration,
       curatedBanner: curatedBanner ?? this.curatedBanner,
+      eventMasthead: eventMasthead ?? this.eventMasthead,
     );
   }
 
@@ -103,6 +127,11 @@ class WishtickGradients extends ThemeExtension<WishtickGradients> {
       curatedBanner: LinearGradient.lerp(
         curatedBanner,
         other.curatedBanner,
+        t,
+      )!,
+      eventMasthead: LinearGradient.lerp(
+        eventMasthead,
+        other.eventMasthead,
         t,
       )!,
     );

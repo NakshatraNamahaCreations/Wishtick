@@ -107,6 +107,10 @@ export class ProductImportService {
       // Every field below is a COPY taken at this instant, deliberately.
       title: snapshot.title.slice(0, 200),
       notes: dto.notes ?? null,
+      // Set only by the "Gift Now" path, which saves to the buyer's own list
+      // on someone else's behalf. A plain "Add to Wishlist" leaves both null.
+      recipientName: dto.recipientName ?? null,
+      relation: dto.relation ?? null,
       imageUrls: snapshot.imageUrls.slice(0, 5),
       productLink: snapshot.productUrl,
       price: { amountMinor: snapshot.amountMinor, currency: snapshot.currency },

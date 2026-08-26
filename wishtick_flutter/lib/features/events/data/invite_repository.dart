@@ -14,6 +14,24 @@ class InviteRepository {
 
   final ApiClient _api;
 
+  /// Joins a public event from its share link, returning the token of *this
+  /// user's* invite — which everything below then works on unchanged.
+  ///
+  /// Authenticated, unlike the rest of this class: a share link names nobody,
+  /// so the session is what says who is joining. Idempotent, so reopening the
+  /// link after an install returns the invite already answered rather than a
+  /// fresh one.
+  ///
+  /// Throws `EVENT_NOT_FOUND` (404) for an unknown slug and, deliberately
+  /// indistinguishably, for a draft, a cancelled or private event, or an
+  /// invite the host revoked. `CANNOT_INVITE_HOST` (400) for the host.
+  Future<String> joinBySlug(String slug) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/events/by-slug/$slug/join',
+    );
+    return json['token'] as String;
+  }
+
   /// Opens an invite. Throws `INVITE_TOKEN_INVALID` (404) for an unknown token.
   /// A cancelled event still resolves — "cancelled" is information the guest
   /// needs more than a 404.

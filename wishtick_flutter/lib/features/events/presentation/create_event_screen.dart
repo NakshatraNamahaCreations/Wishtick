@@ -6,7 +6,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/curved_bottom_clipper.dart';
-import '../../../core/widgets/sparkle_icon.dart';
+import '../../../core/widgets/occasion_picker_grid.dart';
 import 'create_event_controller.dart';
 import 'widgets/relation_picker_sheet.dart';
 
@@ -59,29 +59,39 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           Column(
             children: [
               const SizedBox(height: _kScrimHeight),
-              // The page colour runs *behind* the header too: the header's foot
-              // is a curve, and without this the dimmed page would show through
-              // the corners it leaves uncovered.
+              Stack(
+                children: [
+                  // The page colour behind the header's *foot only*. The curve
+                  // cuts upward into it, and without something opaque there
+                  // the dimmed page shows through the cut.
+                  //
+                  // Deliberately not behind the whole header: its top corners
+                  // are rounded, and those are meant to reveal the dimmed page
+                  // the sheet sits over. Filling the full height painted them
+                  // cream instead, which read as two white notches.
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: CurvedBottomClipper.eventRise,
+                    child: ColoredBox(color: colors.background),
+                  ),
+                  _CurvedHeader(
+                    title: 'What are you celebrating?',
+                    subtitle:
+                        'Plan your special day with just a few simple '
+                        'details.',
+                  ),
+                ],
+              ),
               Expanded(
                 child: ColoredBox(
                   color: colors.background,
-                  child: Column(
-                    children: [
-                      _CurvedHeader(
-                        title: 'What are you celebrating?',
-                        subtitle:
-                            'Plan your special day with just a few simple '
-                            'details.',
-                      ),
-                      Expanded(
-                        child: _Body(
-                          state: state,
-                          notifier: notifier,
-                          person: _person,
-                          onPickRelation: _pickRelation,
-                        ),
-                      ),
-                    ],
+                  child: _Body(
+                    state: state,
+                    notifier: notifier,
+                    person: _person,
+                    onPickRelation: _pickRelation,
                   ),
                 ),
               ),
@@ -192,7 +202,12 @@ class _Body extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
-              _OccasionGrid(
+              OccasionPickerGrid(
+                // `kEventOccasions` carries an `EventType` the picker has no
+                // use for; narrowing it here keeps that off the shared widget.
+                occasions: [
+                  for (final o in kEventOccasions) (key: o.key, label: o.label),
+                ],
                 selectedKey: state.occasionKey,
                 onSelect: notifier.setOccasion,
               ),
@@ -230,11 +245,18 @@ class _CurvedHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return ClipPath(
-      clipper: const CurvedBottomClipper(),
+      // `257:733` bends the opposite way to the Sprint 11 mastheads: its plum
+      // ends lower at the edges than at the centre.
+      clipper: const CurvedBottomClipper(
+        dip: CurvedBottomClipper.eventRise,
+        edge: CurvedBottomEdge.rise,
+      ),
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: colors.primaryDeep,
+          // Not the flat plum it read as: `257:733` washes it top to bottom
+          // from a near-black plum down to the muted plum at the curve.
+          gradient: context.gradients.eventMasthead,
           borderRadius: const BorderRadius.vertical(
             top: Radius.circular(AppRadius.sheet),
           ),
@@ -305,115 +327,6 @@ class _RelationField extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// The eight illustrated occasion cards.
-///
-/// Drawn with icons rather than the design's illustrations: those are not
-/// exported, and a wrong illustration would be worse than an honest glyph.
-class _OccasionGrid extends StatelessWidget {
-  const _OccasionGrid({required this.selectedKey, required this.onSelect});
-
-  final String selectedKey;
-  final ValueChanged<String> onSelect;
-
-  /// Widgets rather than [IconData] so the brand sparkle can sit alongside the
-  /// Material glyphs. None of them carry a size or colour — the card supplies
-  /// both through an [IconTheme], which [Icon] and [SparkleIcon] both read.
-  static const _icons = <String, Widget>{
-    'birthday': Icon(Icons.cake_outlined),
-    'anniversary': Icon(Icons.favorite_border),
-    'wedding': Icon(Icons.church_outlined),
-    'house_warming': Icon(Icons.home_outlined),
-    'mom_to_be': Icon(Icons.child_friendly_outlined),
-    'custom': SparkleIcon(),
-    'rakhi': Icon(Icons.volunteer_activism_outlined),
-    'best_wishes': Icon(Icons.card_giftcard),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 3,
-      mainAxisSpacing: AppSpacing.lg,
-      crossAxisSpacing: AppSpacing.lg,
-      // 100 wide over a 92 tile plus its caption, as `257:733` measures.
-      childAspectRatio: 0.89,
-      children: [
-        for (final occasion in kEventOccasions)
-          _OccasionCard(
-            label: occasion.label,
-            icon:
-                _icons[occasion.key] ?? const Icon(Icons.celebration_outlined),
-            selected: occasion.key == selectedKey,
-            onTap: () => onSelect(occasion.key),
-          ),
-      ],
-    );
-  }
-}
-
-class _OccasionCard extends StatelessWidget {
-  const _OccasionCard({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final Widget icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Expanded(
-          child: Material(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(
-                    color: selected ? colors.primary : colors.border,
-                    width: selected ? 1.5 : 1,
-                  ),
-                ),
-                child: IconTheme(
-                  data: IconThemeData(
-                    size: AppSizes.iconLg + AppSpacing.md,
-                    color: selected ? colors.primary : colors.primaryMuted,
-                  ),
-                  child: icon,
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          style: context.text.bodySmall?.copyWith(
-            color: colors.textPrimary,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }

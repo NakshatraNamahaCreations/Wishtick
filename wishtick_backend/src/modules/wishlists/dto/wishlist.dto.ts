@@ -295,20 +295,18 @@ export class ListItemsQueryDto {
   priority?: number;
 }
 
+/**
+ * Who to share a wishlist with — a Wishtick user, and only that.
+ *
+ * Sharing used to accept an email address for somebody without an account,
+ * with the row linked up if a matching signup ever arrived. That is gone: the
+ * app shares from a grid of WishMates, and anybody else is reached with the
+ * list's share link, which makes them an account first.
+ */
 export class AddParticipantDto {
-  @ApiPropertyOptional({ description: 'An existing user id. Provide this or inviteEmail.' })
-  @IsOptional()
+  @ApiProperty({ description: 'The Wishtick user to share with' })
   @IsMongoId()
-  userId?: string;
-
-  @ApiPropertyOptional({ description: 'Invite someone who may not have an account yet.' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(254)
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toLowerCase() : value,
-  )
-  inviteEmail?: string;
+  userId!: string;
 
   @ApiPropertyOptional({ enum: ParticipantRole, default: ParticipantRole.VIEWER })
   @IsOptional()

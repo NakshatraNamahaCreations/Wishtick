@@ -538,6 +538,8 @@ class DevWishlistRepository implements WishlistRepository {
     String? notes,
     int? priority,
     int? quantity,
+    String? recipientName,
+    String? relation,
   }) async {
     await _ready();
     final product = DevProductRepository.catalog.firstWhere(
@@ -650,23 +652,15 @@ class DevWishlistRepository implements WishlistRepository {
   @override
   Future<WishlistParticipant> addParticipant(
     String wishlistId, {
-    String? userId,
-    String? inviteEmail,
+    required String userId,
     ParticipantRole role = ParticipantRole.viewer,
   }) async {
     await _ready();
     await Future<void>.delayed(_latency);
-    if (userId == null && inviteEmail == null) {
-      throw StateError('Provide either a userId or an inviteEmail');
-    }
 
     final rows = _readParticipants();
     final duplicate = rows.any(
-      (r) =>
-          r['wishlistId'] == wishlistId &&
-          (userId != null
-              ? r['userId'] == userId
-              : r['inviteEmail'] == inviteEmail),
+      (r) => r['wishlistId'] == wishlistId && r['userId'] == userId,
     );
     // Same 409 the real endpoint answers with, so the screen's duplicate
     // handling is exercised in dev rather than only in production.
@@ -679,11 +673,9 @@ class DevWishlistRepository implements WishlistRepository {
       'wishlistId': wishlistId,
       'userId': userId,
       'name': null,
-      'inviteEmail': inviteEmail,
       'role': role.wireValue,
-      // An email invite has nobody behind it yet; a user id is auto-accepted,
-      // exactly as the backend decides it.
-      'state': userId != null ? 'accepted' : 'invited',
+      // A WishMate has an account already, so there is nothing left to claim.
+      'state': 'accepted',
       'createdAt': DateTime.now().toIso8601String(),
     };
     await _writeParticipants([...rows, row]);

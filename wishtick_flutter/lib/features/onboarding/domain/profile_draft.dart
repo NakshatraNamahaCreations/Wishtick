@@ -41,6 +41,15 @@ class BundledAvatar {
     List.generate(count, (i) => BundledAvatar(i + 1)),
   );
 
+  /// What a new profile starts out wearing.
+  ///
+  /// A real selection, not a placeholder the screen happens to draw. Create
+  /// Profile always shows a face, so somebody who leaves it alone has every
+  /// reason to think they chose it — and while the draft held null the key was
+  /// never sent, so they turned up to everybody else as a bare initial. The
+  /// picker opens with this one already ticked, and saving persists it.
+  static final defaultChoice = all.first;
+
   String get key => 'avatar_${index.toString().padLeft(2, '0')}';
   String get asset => 'assets/avatar/${index.toString().padLeft(2, '0')}.png';
 
@@ -78,8 +87,14 @@ class ProfileDraft {
   final DateTime? dateOfBirth;
   final Gender? gender;
 
-  /// A chosen preset. Mutually exclusive with [photoMediaId] — the backend
-  /// clears one when the other is set, so the UI mirrors that.
+  /// The chosen preset. Mutually exclusive with [photoMediaId] — the backend
+  /// clears one when the other is set, so the UI mirrors that, and
+  /// [copyWith]'s `clearAvatar` is how an upload from the gallery takes over.
+  ///
+  /// Null means *deliberately* none, which on this form only happens once a
+  /// photo has been picked. A fresh form starts on [BundledAvatar.defaultChoice]
+  /// — seeded where the form is created rather than defaulted here, so that
+  /// clearing it stays possible.
   final BundledAvatar? avatar;
   final String? photoMediaId;
 

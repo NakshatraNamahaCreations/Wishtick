@@ -582,7 +582,6 @@ abstract final class PrivacyDocument {
           name: LegalEntity.grievanceOfficerName,
           designation: LegalEntity.grievanceOfficerTitle,
           email: LegalEntity.supportEmail,
-          address: LegalEntity.registeredOffice,
         ),
       ]),
 

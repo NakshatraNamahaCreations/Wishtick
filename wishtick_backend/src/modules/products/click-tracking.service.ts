@@ -104,6 +104,67 @@ export class ClickTrackingService {
   }
 
   /**
+   * The same, for a catalogue product nobody has saved yet.
+   *
+   * This is what a seller row on the product page opens. There is no item, so
+   * there is no wishlist to authorize against — and none is needed: search
+   * results are public, and this returns nothing a search could not.
+   *
+   * [offerIndex] picks one seller out of `Product.offers`; omitted, the
+   * product's own destination is used.
+   */
+  async resolveProductRedirect(
+    provider: string,
+    externalId: string,
+    ctx: AccessContext & { referer?: string; userAgent?: string; offerIndex?: number },
+  ): Promise<string> {
+    const product = await this.products.findSnapshot(provider, externalId);
+    if (!product) {
+      throw new AppException(ErrorCode.PRODUCT_NOT_FOUND, 'Product not found', 404);
+    }
+
+    const hasOffer =
+      ctx.offerIndex !== undefined &&
+      Number.isInteger(ctx.offerIndex) &&
+      ctx.offerIndex >= 0 &&
+      ctx.offerIndex < (product.offers?.length ?? 0);
+
+    const monetized = hasOffer
+      ? await this.monetization.ensureOfferMonetized(product, ctx.offerIndex!, {
+          userId: ctx.userId,
+        })
+      : await this.monetization.ensureMonetized(product, { userId: ctx.userId });
+
+    if (!monetized.monetized) {
+      this.logger.debug(
+        `Unmonetized catalogue click on ${provider}/${externalId}: ${monetized.reason}`,
+      );
+    }
+
+    const trackingId = randomUUID();
+
+    await this.clicks
+      .create({
+        itemId: null,
+        wishlistId: null,
+        productId: product._id,
+        userId: ctx.userId ? new Types.ObjectId(ctx.userId) : null,
+        provider: product.provider,
+        offerIndex: hasOffer ? ctx.offerIndex : null,
+        trackingId,
+        referer: ctx.referer?.slice(0, 500) ?? null,
+        userAgent: ctx.userAgent?.slice(0, 300) ?? null,
+      })
+      .catch((err: Error) => {
+        this.logger.error(
+          `Failed to record catalogue click on ${provider}/${externalId}: ${err.message}`,
+        );
+      });
+
+    return ClickTrackingService.withTracking(monetized.destination, trackingId);
+  }
+
+  /**
    * Appends our click id as `subId`, the near-universal affiliate convention
    * for a partner's own tracking key, so a conversion postback (Sprint 6's
    * auto-ticking) can be matched back to this exact click.

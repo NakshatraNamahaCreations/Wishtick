@@ -119,6 +119,8 @@ class FakeGiftingRepository implements GiftingRepository {
   ApiException? purchaseFailure;
   ApiException? orderFailure;
 
+  final productRedirectCalls =
+      <(String provider, String externalId, int? offerIndex)>[];
   final reserveCalls = <String>[];
   final releaseCalls = <String>[];
   final purchaseCalls = <String>[];
@@ -266,10 +268,34 @@ class FakeGiftingRepository implements GiftingRepository {
     redirectCalls.add(itemId);
     return Uri.parse('https://wishtick.test/api/v1/r/$itemId');
   }
+
+  @override
+  Uri productRedirectUri(
+    String provider,
+    String externalId, {
+    int? offerIndex,
+  }) {
+    final path = 'https://wishtick.test/api/v1/r/p/$provider/$externalId';
+    productRedirectCalls.add((provider, externalId, offerIndex));
+    return Uri.parse(offerIndex == null ? path : '$path?offer=$offerIndex');
+  }
 }
 
 /// Scriptable stand-in for the invite API.
 class FakeInviteRepository implements InviteRepository {
+  /// Slug → token. Recorded so a test can assert *which* link was joined.
+  final joinedSlugs = <String>[];
+
+  /// What [joinBySlug] hands back; the invite screen then opens on this token.
+  String joinToken = 'joined_token';
+
+  @override
+  Future<String> joinBySlug(String slug) async {
+    joinedSlugs.add(slug);
+    if (failure != null) throw failure!;
+    return joinToken;
+  }
+
   FakeInviteRepository({this.invite});
 
   /// What `getByToken` returns; replaced by a successful RSVP, as the real

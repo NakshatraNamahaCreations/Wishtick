@@ -17,7 +17,7 @@ export interface EventReminderDueEvent {
   title: string;
   startsAt: Date;
   timezone: string;
-  recipients: { userId: string | null; email: string | null; phone: string | null }[];
+  recipients: { userId: string | null }[];
 }
 
 export interface ReminderResult {
@@ -75,7 +75,7 @@ export class EventRemindersRegistrar implements OnModuleInit {
     // countdown to a party they already said no to.
     const recipients = await this.invites
       .find({ eventId: event._id, revokedAt: null, rsvp: { $ne: 'no' } })
-      .select('invitedUserId email phone')
+      .select('invitedUserId')
       .exec();
 
     this.emitter.emit(EVENT_REMINDER_DUE, {
@@ -86,8 +86,6 @@ export class EventRemindersRegistrar implements OnModuleInit {
       timezone: event.timezone,
       recipients: recipients.map((r) => ({
         userId: r.invitedUserId?.toString() ?? null,
-        email: r.email,
-        phone: r.phone,
       })),
     } satisfies EventReminderDueEvent);
 

@@ -199,8 +199,7 @@ class _Body extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               Divider(height: 1, color: colors.border),
-              _DetailRow(label: 'Phone', value: invite.phone),
-              _DetailRow(label: 'Email', value: invite.email),
+              _DetailRow(label: 'WishMate', value: invite.contact),
               _DetailRow(
                 label: 'Added on',
                 value: _stamp.format(invite.createdAt.toLocal()),

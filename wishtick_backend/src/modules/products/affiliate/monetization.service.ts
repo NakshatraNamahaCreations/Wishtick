@@ -112,6 +112,94 @@ export class MonetizationService {
   }
 
   /**
+   * The same, for one named seller out of [Product.offers].
+   *
+   * Separate from [ensureMonetized] because the offers are *different
+   * merchants*: converting one says nothing about the others, and the
+   * product-level `affiliateUrl` has room for exactly one link. Each offer
+   * therefore caches its own, and a click on "Vijay Sales" can never be
+   * redirected to Amazon because Amazon happened to be converted first.
+   *
+   * No merchant-URL resolution step: an offer's `url` already *is* the
+   * merchant's page — that is where the list comes from.
+   */
+  async ensureOfferMonetized(
+    product: ProductDocument,
+    offerIndex: number,
+    context: MonetizeContext = {},
+  ): Promise<MonetizeOutcome> {
+    const offer = product.offers?.[offerIndex];
+    if (!offer?.url) {
+      // Not an error: a seller row with no link falls back to the product's own
+      // destination rather than dead-ending the tap.
+      return this.ensureMonetized(product, context);
+    }
+
+    if (offer.affiliateUrl) {
+      return { destination: offer.affiliateUrl, monetized: true, reason: 'ok' };
+    }
+
+    if (!this.cuelinks.enabled) {
+      return { destination: offer.url, monetized: false, reason: 'network_disabled' };
+    }
+
+    try {
+      const link = await this.guard.run('cuelinks', 'convert', () =>
+        this.cuelinks.convert({ url: offer.url!, ...context }),
+      );
+
+      // Same reasoning as ensureMonetized: the tracking URL decides, not the
+      // `affiliated` flag, which comes back false on live campaigns.
+      const trackingUrl = link.tracking_url ?? link.affiliate_url;
+      if (!trackingUrl) {
+        await this.markOffer(product, offerIndex, { affiliated: false });
+        return { destination: offer.url, monetized: false, reason: 'not_affiliated' };
+      }
+
+      await this.markOffer(product, offerIndex, {
+        affiliated: link.affiliated ?? false,
+        trackingUrl,
+      });
+      return { destination: trackingUrl, monetized: true, reason: 'ok' };
+    } catch (err) {
+      if (err instanceof ProviderUnavailableError) {
+        this.logger.warn(`Cuelinks unavailable (${err.reason}); sending unmonetized offer link`);
+        return { destination: offer.url, monetized: false, reason: 'upstream_error' };
+      }
+      throw err;
+    }
+  }
+
+  /** Records the network's verdict against one offer, leaving its siblings alone. */
+  private async markOffer(
+    product: ProductDocument,
+    offerIndex: number,
+    outcome: { affiliated: boolean; trackingUrl?: string },
+  ): Promise<void> {
+    // Positional `$set` on the one element: a whole-array write would clobber
+    // a sibling offer converted concurrently by another click.
+    await this.products
+      .updateOne(
+        { _id: product._id },
+        {
+          $set: {
+            [`offers.${offerIndex}.affiliated`]: outcome.affiliated,
+            ...(outcome.trackingUrl
+              ? { [`offers.${offerIndex}.affiliateUrl`]: outcome.trackingUrl }
+              : {}),
+          },
+        },
+      )
+      .exec();
+
+    const offer = product.offers?.[offerIndex];
+    if (offer) {
+      offer.affiliated = outcome.affiliated;
+      if (outcome.trackingUrl) offer.affiliateUrl = outcome.trackingUrl;
+    }
+  }
+
+  /**
    * The merchant's own product page, fetching it once if we only have Google's.
    *
    * Returns null when even the expensive engine cannot produce one — some

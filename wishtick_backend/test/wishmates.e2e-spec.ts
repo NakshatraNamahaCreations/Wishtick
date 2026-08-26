@@ -85,8 +85,41 @@ describe('WishMates (e2e)', () => {
     request(app.getHttpServer()).get(`${V1}${path}`).set(auth(a.token));
   const post = (a: Actor, path: string) =>
     request(app.getHttpServer()).post(`${V1}${path}`).set(auth(a.token));
+  const patch = (a: Actor, path: string) =>
+    request(app.getHttpServer()).patch(`${V1}${path}`).set(auth(a.token));
   const del = (a: Actor, path: string) =>
     request(app.getHttpServer()).delete(`${V1}${path}`).set(auth(a.token));
+
+  describe('the face other people see', () => {
+    it('carries the bundled avatar somebody picked, not just an upload', async () => {
+      const alice = await someone('alice_av');
+      const bob = await someone('bob_av');
+      await patch(alice, '/me').send({ avatarKey: 'avatar_07' }).expect(200);
+
+      // Onboarding offers the twenty bundled avatars before it offers an
+      // upload, so this is what most accounts have. It has no URL — the asset
+      // ships in the app — so a view that carries only `photoUrl` shows these
+      // people to everybody else as a bare initial while looking correct to
+      // them. That is the bug this asserts against.
+      const profile = await get(bob, `/people/${alice.userId}`).expect(200);
+      expect(profile.body.data.person.avatarKey).toBe('avatar_07');
+      expect(profile.body.data.person.photoUrl).toBeNull();
+
+      // And on the search rows, which is where a stranger is first seen.
+      const found = await get(bob, '/people/search?q=alice_av').expect(200);
+      expect(found.body.data[0].avatarKey).toBe('avatar_07');
+    });
+
+    it('leaves it null for an account that picked nothing', async () => {
+      const alice = await someone('alice_none');
+      const bob = await someone('bob_none');
+
+      const profile = await get(bob, `/people/${alice.userId}`).expect(200);
+      // Null rather than a default. A stock face here would make every account
+      // that has chosen nothing look like the same person.
+      expect(profile.body.data.person.avatarKey).toBeNull();
+    });
+  });
 
   describe('handles', () => {
     it('claims a handle and makes the account findable', async () => {

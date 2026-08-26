@@ -78,6 +78,32 @@ export class EventsController {
     return this.events.create(userId, dto);
   }
 
+  @Post('events/by-slug/:slug/join')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Join a public event from its share link',
+    description:
+      'Mints this user’s own invite and returns its token, which the invite screen and the RSVP ' +
+      'endpoints already run on. Idempotent — a link tapped twice, forwarded, or reopened after ' +
+      'an install lands on the same invite rather than stacking up rows. Authenticated, unlike ' +
+      'the token endpoints: a public link names nobody, so identity comes from the session.',
+  })
+  @ApiResponseDoc({
+    status: 404,
+    description:
+      'EVENT_NOT_FOUND — unknown slug, a draft, cancelled, private, or an invite the host revoked. ' +
+      'Deliberately indistinguishable: the slug is public and a stranger learns nothing beyond ' +
+      '“not for you”.',
+  })
+  @ApiResponseDoc({ status: 400, description: 'CANNOT_INVITE_HOST — you are hosting this one' })
+  async joinBySlug(
+    @CurrentUser('id') userId: string,
+    @Param('slug') slug: string,
+  ): Promise<{ token: string }> {
+    const invite = await this.invites.joinBySlug(slug, userId);
+    return { token: invite.token };
+  }
+
   @Get('events/mine')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Events you host, with RSVP counts' })
@@ -239,19 +265,6 @@ export class EventsController {
     return this.invites.inviteMany(id, userId, dto);
   }
 
-  @Post('events/:id/invites/:inviteId/resend')
-  @HttpCode(HttpStatus.OK)
-  @Throttle(INVITE_THROTTLE)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Resend an invite (same token)' })
-  resend(
-    @CurrentUser('id') userId: string,
-    @Param('id') id: string,
-    @Param('inviteId') inviteId: string,
-  ): Promise<InviteView> {
-    return this.invites.resend(id, inviteId, userId);
-  }
-
   @Delete('events/:id/invites/:inviteId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
@@ -272,7 +285,7 @@ export class EventsController {
   @ApiOperation({
     summary: "Get one invitee's personal link, to share by hand",
     description:
-      'For a guest with no email or phone on file. Fetched one at a time and never included in ' +
+      'For sharing an invitation outside the app. Fetched one at a time and never included in ' +
       'the guest list, because the token is that guest’s credential.',
   })
   @ApiResponseDoc({ status: 404, description: 'INVITE_NOT_FOUND' })

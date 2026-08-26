@@ -1,3 +1,4 @@
+import type { PublicIdentity } from 'src/modules/wishmates/wishmates.views';
 import type { EventDocument } from './schemas/event.schema';
 import type { EventInviteDocument } from './schemas/event-invite.schema';
 import type { EventStatus, EventType, EventVisibility, RsvpResponse } from './event.types';
@@ -61,15 +62,21 @@ export interface InvitedEventView {
 
 export interface InviteView {
   id: string;
-  email: string | null;
-  phone: string | null;
-  name: string | null;
+  /**
+   * Who was invited.
+   *
+   * Replaces the old `email` / `phone` / `name` trio. An invitation is now
+   * always addressed to an account, so the guest list can show the same face,
+   * name and handle the rest of the app shows, instead of whatever address the
+   * host happened to type. Null only for an account that has since been
+   * deleted — the invite outlives the profile.
+   */
+  person: PublicIdentity | null;
   invitedUserId: string | null;
   rsvp: RsvpResponse;
   plusOnes: number;
   message: string | null;
   respondedAt: Date | null;
-  sendCount: number;
   /** When they were added to the guest list — the "Added on" row of `4096:162`. */
   createdAt: Date;
 }
@@ -142,16 +149,16 @@ export const toEventView = (
   return view;
 };
 
-export const toInviteView = (invite: EventInviteDocument): InviteView => ({
+export const toInviteView = (
+  invite: EventInviteDocument,
+  person: PublicIdentity | null = null,
+): InviteView => ({
   id: invite._id.toString(),
-  email: invite.email,
-  phone: invite.phone,
-  name: invite.name,
+  person,
   invitedUserId: invite.invitedUserId?.toString() ?? null,
   rsvp: invite.rsvp,
   plusOnes: invite.plusOnes,
   message: invite.message,
   respondedAt: invite.respondedAt,
-  sendCount: invite.sendCount,
   createdAt: invite.createdAt,
 });

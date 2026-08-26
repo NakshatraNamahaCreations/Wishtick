@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Universal Links. iOS fetches
+	  https://wishtick.com/.well-known/apple-app-site-association at install and
+	  will only route links once it matches this app's Team ID + bundle id.
+
+	  ⚠️ SCAFFOLD — not yet active. Two things are still needed:
+	    1. This file must be attached to the Runner target in Xcode
+	       (Signing & Capabilities → + Capability → Associated Domains). Adding
+	       the file to the repo does not attach it to the build.
+	    2. `deeplinks/apple-app-site-association` needs the real Team ID, and
+	       the bundle id is still the Flutter default `com.example.*`.
+
+	  Until then iOS ignores these; the wishtick:// scheme in Info.plist works
+	  regardless and is what makes routing testable.
+	-->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:wishtick.com</string>
+		<string>applinks:www.wishtick.com</string>
+	</array>
+</dict>
+</plist>

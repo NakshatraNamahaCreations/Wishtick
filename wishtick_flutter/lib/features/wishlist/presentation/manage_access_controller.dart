@@ -62,23 +62,18 @@ class ManageAccessController extends Notifier<ManageAccessState> {
     }
   }
 
-  /// Invites by email. Returns false and leaves [ManageAccessState.error] set
-  /// when the server refuses — a duplicate, the owner's own address, or an
-  /// identifier it will not accept.
-  Future<bool> inviteByEmail(
-    String email, {
+  /// Gives one WishMate access. Returns false and leaves
+  /// [ManageAccessState.error] set when the server refuses — a duplicate, or
+  /// the owner themselves.
+  Future<bool> inviteWishmate(
+    String userId, {
     ParticipantRole role = ParticipantRole.viewer,
   }) async {
-    final trimmed = email.trim().toLowerCase();
-    if (trimmed.isEmpty) return false;
+    if (userId.isEmpty) return false;
 
     state = state.copyWith(busy: true, clearError: true);
     try {
-      final added = await _repo.addParticipant(
-        arg,
-        inviteEmail: trimmed,
-        role: role,
-      );
+      final added = await _repo.addParticipant(arg, userId: userId, role: role);
       state = state.copyWith(
         participants: [...?state.participants, added],
         busy: false,

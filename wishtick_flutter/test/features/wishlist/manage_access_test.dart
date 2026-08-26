@@ -10,7 +10,10 @@ import 'package:wishtick_flutter/features/wishlist/presentation/manage_access_co
 import 'package:wishtick_flutter/features/wishlist/presentation/manage_access_screen.dart';
 import 'package:wishtick_flutter/features/wishlist/presentation/share_wishlist_screen.dart';
 
+import 'package:wishtick_flutter/features/wishmates/data/wishmates_repository.dart';
+
 import '../../helpers/wishlist_fakes.dart';
+import '../../helpers/wishmates_fakes.dart';
 
 void main() {
   ({ProviderContainer container, FakeWishlistRepository repo}) build() {
@@ -25,13 +28,21 @@ void main() {
   Future<void> pump(
     WidgetTester tester,
     Widget child,
-    FakeWishlistRepository repo,
-  ) async {
+    FakeWishlistRepository repo, {
+    FakeWishmatesRepository? mates,
+  }) async {
     await tester.binding.setSurfaceSize(const Size(400, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [wishlistRepositoryProvider.overrideWithValue(repo)],
+        overrides: [
+          wishlistRepositoryProvider.overrideWithValue(repo),
+          // The invite button opens the WishMates picker, so this screen now
+          // needs the graph as well as the list.
+          wishmatesRepositoryProvider.overrideWithValue(
+            mates ?? FakeWishmatesRepository(mates: const []),
+          ),
+        ],
         child: MaterialApp(theme: AppTheme.light, home: child),
       ),
     );
@@ -57,7 +68,6 @@ void main() {
           id: 'p1',
           userId: 'u1',
           name: 'Rohan',
-          inviteEmail: null,
           role: ParticipantRole.viewer,
           state: ParticipantState.accepted,
           createdAt: DateTime(2026, 6, 1),
@@ -76,22 +86,42 @@ void main() {
       );
     });
 
-    test('inviteByEmail normalises the address and appends the row', () async {
+    test('inviteWishmate appends the row with the role it was given', () async {
       final t = build();
       final controller = t.container.read(
         manageAccessProvider('wl_1').notifier,
       );
       await controller.ensureLoaded();
 
-      final ok = await controller.inviteByEmail('  Friend@Example.COM ');
+      final ok = await controller.inviteWishmate(
+        'u_friend',
+        role: ParticipantRole.contributor,
+      );
 
       expect(ok, isTrue);
-      expect(t.repo.addParticipantCalls.single.email, 'friend@example.com');
+      expect(t.repo.addParticipantCalls.single.userId, 'u_friend');
+      // The chat role has to survive the trip: granting viewer instead would
+      // silently leave them out of the conversation they were added for.
+      expect(
+        t.repo.addParticipantCalls.single.role,
+        ParticipantRole.contributor,
+      );
       final state = t.container.read(manageAccessProvider('wl_1'));
       expect(state.participants, hasLength(1));
-      // Nobody has claimed the address yet, so it stays pending.
-      expect(state.participants!.single.isPending, isTrue);
+      // A WishMate has an account already, so there is nothing left to claim.
+      expect(state.participants!.single.isPending, isFalse);
       expect(state.error, isNull);
+    });
+
+    test('an empty user id is refused before it reaches the server', () async {
+      final t = build();
+      final controller = t.container.read(
+        manageAccessProvider('wl_1').notifier,
+      );
+      await controller.ensureLoaded();
+
+      expect(await controller.inviteWishmate(''), isFalse);
+      expect(t.repo.addParticipantCalls, isEmpty);
     });
 
     test(
@@ -108,7 +138,7 @@ void main() {
           statusCode: 409,
         );
 
-        final ok = await controller.inviteByEmail('friend@example.com');
+        final ok = await controller.inviteWishmate('u_friend');
 
         expect(ok, isFalse);
         final state = t.container.read(manageAccessProvider('wl_1'));
@@ -123,7 +153,7 @@ void main() {
         manageAccessProvider('wl_1').notifier,
       );
       await controller.ensureLoaded();
-      await controller.inviteByEmail('friend@example.com');
+      await controller.inviteWishmate('u_friend');
       final id = t.container
           .read(manageAccessProvider('wl_1'))
           .participants!
@@ -159,7 +189,9 @@ void main() {
       expect(find.text('Only you can see this list.'), findsOneWidget);
     });
 
-    testWidgets('inviting an email adds a pending row', (tester) async {
+    testWidgets('picking a WishMate adds them to the access list', (
+      tester,
+    ) async {
       final repo = FakeWishlistRepository();
       await pump(
         tester,
@@ -167,15 +199,58 @@ void main() {
           wishlist: buildWishlist(visibility: WishlistVisibility.private),
         ),
         repo,
+        mates: FakeWishmatesRepository(
+          mates: [buildWishmate(userId: 'u_9', displayName: 'Rohan Prasad')],
+        ),
       );
 
-      await tester.enterText(find.byType(TextField), 'friend@example.com');
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Invite'));
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Choose WishMates'));
       await tester.pumpAndSettle();
 
-      expect(repo.addParticipantCalls.single.email, 'friend@example.com');
-      expect(find.text('friend@example.com'), findsWidgets);
-      expect(find.text('Invited'), findsOneWidget);
+      await tester.tap(find.text('Rohan Prasad'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Send to'));
+      await tester.pumpAndSettle();
+
+      expect(repo.addParticipantCalls.single.userId, 'u_9');
+
+      // Dismiss the sheet — the screen refetches on the way out. The sheet
+      // adds people through the repository directly, so without that refetch
+      // the list underneath still says nobody has access, and the host is
+      // looking at a screen that contradicts what they just did.
+      await tester.tapAt(const Offset(200, 20));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Someone on Wishtick'), findsOneWidget);
+    });
+
+    testWidgets('the chat toggle decides what the picker grants', (
+      tester,
+    ) async {
+      final repo = FakeWishlistRepository();
+      await pump(
+        tester,
+        ManageAccessScreen(
+          wishlist: buildWishlist(visibility: WishlistVisibility.private),
+        ),
+        repo,
+        mates: FakeWishmatesRepository(
+          mates: [buildWishmate(userId: 'u_9', displayName: 'Rohan Prasad')],
+        ),
+      );
+
+      // Turned on BEFORE the sheet opens, which is the only order that can
+      // work: the target is built when the button is tapped.
+      await tester.tap(find.text('Let them join the chat'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Choose WishMates'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rohan Prasad'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Send to'));
+      await tester.pumpAndSettle();
+
+      expect(repo.addParticipantCalls.single.role, ParticipantRole.contributor);
     });
 
     testWidgets('the chat toggle is absent when the list has no chat', (

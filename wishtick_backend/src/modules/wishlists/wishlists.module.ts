@@ -8,7 +8,6 @@ import { EventParticipationModule } from 'src/modules/events/event-participation
 import { AccessPolicyService } from './access/access-policy.service';
 import { ItemsService } from './items.service';
 import { ParticipantsService } from './participants.service';
-import { ParticipantLinkingListener } from './participant-linking.listener';
 import { PublicWishlistsController } from './public-wishlists.controller';
 import { PublicWishlistsService } from './public-wishlists.service';
 import { WishlistItem, WishlistItemSchema } from './schemas/wishlist-item.schema';
@@ -45,7 +44,6 @@ import { WishlistsService } from './wishlists.service';
     ParticipantsService,
     PublicWishlistsService,
     AccessPolicyService,
-    ParticipantLinkingListener,
   ],
   // AccessPolicyService is exported because Sprints 6 and 8 must authorize
   // against the same decision — nothing re-implements it.

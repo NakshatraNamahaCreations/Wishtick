@@ -49,6 +49,7 @@ class PersonIdentity {
     required this.photoUrl,
     required this.online,
     required this.lastSeenAt,
+    this.avatarKey,
   });
 
   final String userId;
@@ -59,6 +60,11 @@ class PersonIdentity {
 
   final String? displayName;
   final String? photoUrl;
+
+  /// One of the twenty bundled avatars, when they picked one rather than
+  /// uploading a photo. Has no URL — the asset ships with the app — so it
+  /// travels as a key and is resolved at the point of drawing.
+  final String? avatarKey;
 
   /// Whether they hold a live socket right now — the green dot. Arrives on
   /// every row, so no screen needs a second call to draw presence.
@@ -95,6 +101,7 @@ class PersonIdentity {
     username: json['username'] as String?,
     displayName: json['displayName'] as String?,
     photoUrl: json['photoUrl'] as String?,
+    avatarKey: json['avatarKey'] as String?,
     online: json['online'] as bool? ?? false,
     lastSeenAt: json['lastSeenAt'] == null
         ? null
@@ -113,6 +120,7 @@ class Wishmate extends PersonIdentity {
     required this.mutualCount,
     required super.online,
     required super.lastSeenAt,
+    super.avatarKey,
   });
 
   /// How many accepted WishMates the viewer and this person share.
@@ -131,6 +139,7 @@ class Wishmate extends PersonIdentity {
     username: json['username'] as String?,
     displayName: json['displayName'] as String?,
     photoUrl: json['photoUrl'] as String?,
+    avatarKey: json['avatarKey'] as String?,
     mutualCount: json['mutualCount'] as int? ?? 0,
     online: json['online'] as bool? ?? false,
     lastSeenAt: json['lastSeenAt'] == null

@@ -2,6 +2,7 @@ import 'package:wishtick_flutter/features/events/data/events_repository.dart';
 import 'package:wishtick_flutter/features/events/domain/event.dart';
 import 'package:wishtick_flutter/features/events/domain/invite_template.dart';
 import 'package:wishtick_flutter/features/events/domain/invited_event.dart';
+import 'package:wishtick_flutter/features/wishmates/domain/wishmate.dart';
 
 WishtickEventDetail buildEvent({
   String id = 'evt_1',
@@ -36,17 +37,21 @@ EventInvite buildInviteRow({
   required String name,
   RsvpResponse rsvp = RsvpResponse.pending,
   int plusOnes = 0,
-  String? email = 'guest@example.com',
-  String? phone = '+91 9899889999',
+  String? username = 'guest',
   DateTime? respondedAt,
 }) => EventInvite(
   id: id,
-  name: name,
-  email: email,
-  phone: phone,
+  person: PersonIdentity(
+    userId: 'u-$id',
+    username: username,
+    displayName: name,
+    photoUrl: null,
+    online: false,
+    lastSeenAt: null,
+  ),
+  invitedUserId: 'u-$id',
   rsvp: rsvp,
   plusOnes: plusOnes,
-  sendCount: 1,
   createdAt: DateTime.utc(2026, 7, 14, 4, 30),
   respondedAt: respondedAt,
 );
@@ -206,14 +211,19 @@ class FakeEventsRepository implements EventsRepository {
   @override
   Future<List<EventInvite>> invites(String eventId) async => guests;
 
-  @override
-  Future<BulkInviteResult> invite(
-    String eventId, {
-    required List<({String? email, String? name, String? phone})> recipients,
-  }) async => const BulkInviteResult(created: [], duplicates: 0, skipped: 0);
+  /// The user ids [inviteWishmates] was handed, so a test can assert who was
+  /// invited rather than only that something was.
+  final invitedUserIds = <String>[];
 
   @override
-  Future<void> resend(String eventId, String inviteId) async {}
+  Future<BulkInviteResult> inviteWishmates(
+    String eventId,
+    List<String> userIds,
+  ) async {
+    _maybeThrow();
+    invitedUserIds.addAll(userIds);
+    return const BulkInviteResult(created: [], duplicates: 0, skipped: 0);
+  }
 
   @override
   Future<void> revoke(String eventId, String inviteId) async {

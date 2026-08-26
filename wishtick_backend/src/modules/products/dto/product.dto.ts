@@ -75,6 +75,26 @@ export class ImportProductDto {
   @MaxLength(1000)
   notes?: string;
 
+  /**
+   * Who the buyer is shopping for, when they came through "Gift Now".
+   *
+   * Free text mirroring `ImportantDate.personName`, and deliberately not a
+   * user id: the person being bought for usually has no Wishtick account, and
+   * this flow creates no `Gift` — it saves to the buyer's *own* list so they
+   * can find it again, then sends them to the shop.
+   */
+  @ApiPropertyOptional({ example: 'Ananya' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  recipientName?: string;
+
+  @ApiPropertyOptional({ example: 'Sister' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  relation?: string;
+
   @ApiPropertyOptional({ minimum: 1, maximum: 5, description: '1 = highest' })
   @IsOptional()
   @Type(() => Number)

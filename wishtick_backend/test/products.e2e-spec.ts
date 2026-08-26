@@ -611,6 +611,147 @@ describe('Products & affiliate (e2e)', () => {
     });
   });
 
+  describe('catalogue redirect — a click before anything is saved', () => {
+    /** A catalogue row with three sellers, as the product page renders it. */
+    const givenSellers = async () => {
+      await productModel.deleteMany({ externalId: 'sellers-1' });
+      return productModel.create({
+        provider: 'fixture',
+        externalId: 'sellers-1',
+        title: 'Carvaan Mini',
+        productUrl: 'https://shop.example.test/p/sellers-1',
+        affiliateUrl: 'https://track.example.test/click?pid=product',
+        amountMinor: 249_000,
+        currency: 'INR',
+        offers: [
+          {
+            merchant: 'Amazon.in',
+            amountMinor: 249_000,
+            url: 'https://amazon.example.test/p/1',
+            affiliateUrl: 'https://track.example.test/click?pid=amazon',
+          },
+          {
+            merchant: 'Vijay Sales',
+            amountMinor: 299_000,
+            url: 'https://vijay.example.test/p/1',
+            affiliateUrl: 'https://track.example.test/click?pid=vijay',
+          },
+        ],
+      });
+    };
+
+    it('sends an anonymous visitor to the seller they picked', async () => {
+      await givenSellers();
+
+      // No token: a product page is reachable from search, and search is
+      // public. Requiring auth here would break the share-link path.
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/r/p/fixture/sellers-1?offer=1`)
+        .expect(302);
+
+      const location = new URL(res.headers.location);
+      expect(location.searchParams.get('pid')).toBe('vijay');
+      expect(location.searchParams.get('subId')).toBeTruthy();
+    });
+
+    it('records the click against the product and the seller, with no item', async () => {
+      await givenSellers();
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/r/p/fixture/sellers-1?offer=0`)
+        .expect(302);
+
+      const trackingId = new URL(res.headers.location).searchParams.get('subId');
+      const click = await clickModel.findOne({ trackingId }).exec();
+
+      expect(click).not.toBeNull();
+      // The row is the point: `itemId` was required until this path existed,
+      // and a click with nothing saved behind it must still be evidence.
+      expect(click!.itemId).toBeNull();
+      expect(click!.offerIndex).toBe(0);
+      expect(click!.productId).not.toBeNull();
+    });
+
+    it('falls back to the product for an out-of-range or junk offer rather '
+      + 'than erroring at a browser', async () => {
+      await givenSellers();
+
+      for (const offer of ['9', 'banana', '-1']) {
+        const res = await request(app.getHttpServer())
+          .get(`${V1}/r/p/fixture/sellers-1?offer=${offer}`)
+          .expect(302);
+        expect(new URL(res.headers.location).searchParams.get('pid')).toBe('product');
+      }
+    });
+
+    it('404s an unknown product', async () => {
+      await request(app.getHttpServer()).get(`${V1}/r/p/fixture/nope-404`).expect(404);
+    });
+
+    it('does not shadow the item redirect', async () => {
+      // `/r/p/...` is declared first; if that ordering is ever lost, `p` is
+      // read as an itemId and every seller click 404s.
+      const { token } = await newUser();
+      const wishlistId = await createWishlist(token);
+      const item = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists/${wishlistId}/items/from-product`)
+          .set(auth(token))
+          .send({ provider: 'fixture', externalId: 'hp-001' })
+          .expect(201)
+      ).body as Envelope<ItemView>;
+
+      await request(app.getHttpServer())
+        .get(`${V1}/r/${item.data.id}`)
+        .set(auth(token))
+        .expect(302);
+    });
+  });
+
+  describe('saving for someone else — the Gift Now import', () => {
+    it('tags the item with who it is for', async () => {
+      const { token } = await newUser();
+      const wishlistId = await createWishlist(token);
+
+      const item = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists/${wishlistId}/items/from-product`)
+          .set(auth(token))
+          .send({
+            provider: 'fixture',
+            externalId: 'hp-001',
+            recipientName: 'Ananya',
+            relation: 'Sister',
+          })
+          .expect(201)
+      ).body as Envelope<ItemView>;
+
+      const stored = await itemModel.findById(item.data.id).exec();
+      expect(stored!.recipientName).toBe('Ananya');
+      expect(stored!.relation).toBe('Sister');
+      // No Gift record: Wishtick takes no payment, and the person being bought
+      // for has no account. The purchase happens at the merchant.
+      expect(stored!.ownerId.toString()).toBeTruthy();
+    });
+
+    it('a plain save leaves the tag empty', async () => {
+      const { token } = await newUser();
+      const wishlistId = await createWishlist(token);
+
+      const item = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists/${wishlistId}/items/from-product`)
+          .set(auth(token))
+          .send({ provider: 'fixture', externalId: 'hp-002' })
+          .expect(201)
+      ).body as Envelope<ItemView>;
+
+      const stored = await itemModel.findById(item.data.id).exec();
+      expect(stored!.recipientName).toBeNull();
+      expect(stored!.relation).toBeNull();
+    });
+  });
+
   // ── Exit criterion: warm-cache search latency ─────────────────────────────
 
   describe('performance', () => {

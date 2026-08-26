@@ -23,7 +23,7 @@ export interface GuestListFile {
 /** Column order, shared by all three formats so they cannot drift apart. */
 const COLUMNS = [
   { header: 'Name', width: 28 },
-  { header: 'Contact', width: 32 },
+  { header: 'Handle', width: 32 },
   { header: 'RSVP', width: 12 },
   { header: 'Additional guests', width: 18 },
   { header: 'Total attending', width: 16 },
@@ -88,8 +88,10 @@ export class GuestListExportService {
     // is not coming.
     const coming = invite.rsvp === RsvpResponse.YES || invite.rsvp === RsvpResponse.MAYBE;
     return [
-      invite.name ?? '',
-      invite.email ?? invite.phone ?? '',
+      invite.person?.displayName ?? '',
+      // Their handle, where an address used to go. It is what identifies a
+      // guest now, and unlike an email it is theirs to publish.
+      invite.person?.username ? `@${invite.person.username}` : '',
       RSVP_LABEL[invite.rsvp],
       String(invite.plusOnes),
       coming ? String(1 + invite.plusOnes) : '0',

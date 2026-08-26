@@ -56,6 +56,13 @@ dev_dependencies:
 
   flutter_lints: ^6.0.0
 
+  # Both arrive transitively with url_launcher; declared here so the buy-link
+  # tests can install a recording UrlLauncherPlatform. Without that, the only
+  # way an affiliate redirect breaks — opening the merchant directly, or not
+  # opening at all — is invisible to every other kind of test.
+  plugin_platform_interface: ^2.1.8
+  url_launcher_platform_interface: ^2.3.2
+
 flutter:
   uses-material-design: true
 

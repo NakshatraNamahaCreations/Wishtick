@@ -2,15 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/format/currency.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../../gifting/data/gifting_repository.dart';
 import '../data/product_repository.dart';
+import '../data/wishlist_repository.dart';
 import '../domain/product.dart';
 import 'save_to_wishlist_screen.dart';
+import 'widgets/choose_recipient_sheet.dart';
 import 'widgets/choose_wishlist_sheet.dart';
 import 'wishlists_controller.dart';
 
@@ -215,6 +219,94 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
+  /// Opens one seller through our affiliate redirect.
+  ///
+  /// Always via `/r/p/...`, never the offer's own URL: the redirect is what
+  /// converts the link, records the click, and attaches the tracking id. Going
+  /// straight to `offer.url` would work and earn nothing.
+  Future<void> _openSeller(int index) async {
+    final provider = widget.provider;
+    final externalId = widget.externalId;
+    // A scraped page has no catalogue row to redirect against.
+    if (provider == null || externalId == null) {
+      await _open(Uri.parse(_offers[index].url ?? widget.productUrl));
+      return;
+    }
+
+    await _open(
+      ref
+          .read(giftingRepositoryProvider)
+          .productRedirectUri(provider, externalId, offerIndex: index),
+    );
+  }
+
+  /// "Gift Now" — recipient first, then the shop.
+  ///
+  /// Deliberately creates no `Gift`: the person being bought for usually has
+  /// no Wishtick account, and Wishtick takes no payment. The purchase happens
+  /// at the merchant; what we keep is a tagged item on the buyer's *own* list
+  /// so they can find it again.
+  Future<void> _giftNow() async {
+    final recipient = await ChooseRecipientSheet.show(context);
+    if (recipient == null || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await _saveForRecipient(recipient);
+      if (!mounted) return;
+      await _openSeller(0);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Files the product on the buyer's own list, tagged for [recipient].
+  ///
+  /// Failure here does not stop the hand-off: the buyer asked to go shopping,
+  /// and losing the bookmark is a smaller problem than a button that appears
+  /// to do nothing.
+  Future<void> _saveForRecipient(GiftRecipient recipient) async {
+    final provider = widget.provider;
+    final externalId = widget.externalId;
+    if (provider == null || externalId == null) return;
+
+    try {
+      await ref.read(wishlistsProvider.notifier).ensureLoaded();
+      final lists = ref.read(wishlistsProvider).wishlists ?? const [];
+      if (lists.isEmpty) return;
+
+      await ref
+          .read(wishlistRepositoryProvider)
+          .addItemFromProduct(
+            lists.first.id,
+            provider: provider,
+            externalId: externalId,
+            recipientName: recipient.name,
+            relation: recipient.relation,
+          );
+    } on Exception catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't save it to your list — taking you to the "
+            'shop anyway.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _open(Uri uri) async {
+    // externalApplication, not the in-app view: the affiliate cookie has to
+    // land in the browser the purchase will actually happen in.
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (opened || !mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Couldn't open the store.")));
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -417,12 +509,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     const SizedBox(height: AppSpacing.xl),
                     _SectionTitle('Available at ${_offers.length} sellers'),
                     const SizedBox(height: AppSpacing.sm),
-                    for (final offer in _offers)
+                    for (final (index, offer) in _offers.indexed)
                       _OfferRow(
                         offer: offer,
                         // The first is the cheapest total, which is also
                         // where the buy button goes.
-                        best: offer == _offers.first,
+                        best: index == 0,
+                        // By index, not by URL: the redirect converts *this*
+                        // seller's link, and two sellers can share a URL.
+                        onTap: () => _openSeller(index),
                       ),
                   ],
 
@@ -480,15 +575,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _busy
-                          ? null
-                          : () => ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Gifting is coming in a later sprint.',
-                                ),
-                              ),
-                            ),
+                      onPressed: _busy ? null : _giftNow,
                       child: const Text('Gift Now'),
                     ),
                   ),
@@ -576,57 +663,75 @@ class _SectionTitle extends StatelessWidget {
 /// opened a merchant directly would skip the affiliate wrap, quietly costing
 /// the commission that pays for the catalogue.
 class _OfferRow extends StatelessWidget {
-  const _OfferRow({required this.offer, required this.best});
+  const _OfferRow({
+    required this.offer,
+    required this.best,
+    required this.onTap,
+  });
 
   final ProductOffer offer;
   final bool best;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              offer.merchant ?? 'Unnamed seller',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: context.text.bodyMedium?.copyWith(
-                color: colors.textPrimary,
-                fontWeight: best ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ),
-          if (best) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: AppSpacing.xxs,
-              ),
-              decoration: BoxDecoration(
-                color: colors.successSubtle,
-                borderRadius: BorderRadius.circular(AppRadius.xs),
-              ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Padding(
+        // Vertical padding the plain row did not need: this is a tap target
+        // now, and the bare text height is under the 48px minimum.
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Row(
+          children: [
+            Expanded(
               child: Text(
-                'Best price',
-                style: context.text.labelSmall?.copyWith(
-                  color: colors.onSuccessSubtle,
-                  fontWeight: FontWeight.w700,
+                offer.merchant ?? 'Unnamed seller',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.bodyMedium?.copyWith(
+                  color: colors.textPrimary,
+                  fontWeight: best ? FontWeight.w600 : FontWeight.w400,
                 ),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-          ],
-          Text(
-            formatInrMinor(offer.amountMinor),
-            style: context.text.bodyMedium?.copyWith(
-              color: colors.textPrimary,
-              fontWeight: best ? FontWeight.w700 : FontWeight.w400,
+            if (best) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xxs,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.successSubtle,
+                  borderRadius: BorderRadius.circular(AppRadius.xs),
+                ),
+                child: Text(
+                  'Best price',
+                  style: context.text.labelSmall?.copyWith(
+                    color: colors.onSuccessSubtle,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            Text(
+              formatInrMinor(offer.amountMinor),
+              style: context.text.bodyMedium?.copyWith(
+                color: colors.textPrimary,
+                fontWeight: best ? FontWeight.w700 : FontWeight.w400,
+              ),
             ),
-          ),
-        ],
+            // The row leaves the app, so it says so.
+            const SizedBox(width: AppSpacing.xs),
+            Icon(
+              Icons.open_in_new,
+              size: AppSizes.iconSm,
+              color: colors.textSecondary,
+            ),
+          ],
+        ),
       ),
     );
   }

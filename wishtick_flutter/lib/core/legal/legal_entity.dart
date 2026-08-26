@@ -14,15 +14,9 @@ abstract final class LegalEntity {
   static const gstin = '27AAECW4978Q1Z8';
   static const website = 'wishtick.com';
 
-  /// The registered office on the incorporation record.
-  static const registeredOffice =
-      'A-1102, Crystal Spires, G B Road, Manpada, Thane, '
-      'Maharashtra – 400610';
-
-  /// Where support and grievances are actually received (Terms clause 38).
-  static const operationsOffice =
-      '803 – Lodha Supremus, Gate No. 2, Kolshet, Thane, '
-      'Maharashtra – 400607';
+  // No postal address, deliberately. The documents identify the company by
+  // its CIN and GSTIN and route every contact — support, the Grievance
+  // Officer, the DPO — through [supportEmail] and the phone number below.
 
   /// The one address users are asked to write to.
   ///

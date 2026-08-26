@@ -11,6 +11,7 @@ Wishmate buildWishmate({
   String? username = 'priyalsharma',
   String? displayName = 'Priyal Sharma',
   String? photoUrl,
+  String? avatarKey,
   int mutualCount = 0,
   bool online = false,
   DateTime? lastSeenAt,
@@ -19,6 +20,7 @@ Wishmate buildWishmate({
   username: username,
   displayName: displayName,
   photoUrl: photoUrl,
+  avatarKey: avatarKey,
   mutualCount: mutualCount,
   online: online,
   lastSeenAt: lastSeenAt,
@@ -29,6 +31,7 @@ PersonIdentity buildIdentity({
   String? username = 'rohan_prasad',
   String? displayName = 'Rohan Prasad',
   String? photoUrl,
+  String? avatarKey,
   bool online = false,
   DateTime? lastSeenAt,
 }) => PersonIdentity(
@@ -36,6 +39,7 @@ PersonIdentity buildIdentity({
   username: username,
   displayName: displayName,
   photoUrl: photoUrl,
+  avatarKey: avatarKey,
   online: online,
   lastSeenAt: lastSeenAt,
 );

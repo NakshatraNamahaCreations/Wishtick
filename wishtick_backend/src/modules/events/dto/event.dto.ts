@@ -4,7 +4,6 @@ import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
-  IsEmail,
   IsEnum,
   IsInt,
   IsMongoId,
@@ -12,7 +11,6 @@ import {
   IsOptional,
   IsString,
   Length,
-  Matches,
   Max,
   MaxLength,
   Min,
@@ -206,35 +204,22 @@ export class UpdateEventDto {
   relation?: string | null;
 }
 
+/**
+ * Who is being invited — a Wishtick user, and only that.
+ *
+ * Invitations used to be addressed to an email or a phone number, with the
+ * account linked up later if the person ever signed up. That is gone: the app
+ * invites from a grid of WishMates, so a recipient is always somebody who
+ * already has an account, and the invite is bound to it from the first moment
+ * rather than after a signup happens to match an address.
+ *
+ * Somebody who is *not* a WishMate is reached by the share link instead — see
+ * `POST /events/by-slug/:slug/join`, where identity comes from signing in.
+ */
 export class InviteRecipientDto {
-  @ApiPropertyOptional({ example: 'guest@example.com' })
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(254)
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toLowerCase() : value,
-  )
-  email?: string;
-
-  @ApiPropertyOptional({ example: '+919876543210' })
-  @IsOptional()
-  @Matches(/^\+?[1-9]\d{7,14}$/, { message: 'phone must be a valid E.164 number' })
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.replace(/[\s()-]/g, '') : value,
-  )
-  phone?: string;
-
-  @ApiPropertyOptional({ description: 'An existing Wishtick user id' })
-  @IsOptional()
+  @ApiProperty({ description: 'The Wishtick user to invite' })
   @IsMongoId()
-  userId?: string;
-
-  @ApiPropertyOptional({ example: 'Priya' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  @Transform(trim)
-  name?: string;
+  userId!: string;
 }
 
 export class BulkInviteDto {
@@ -270,13 +255,6 @@ export class RsvpDto {
   @MaxLength(500)
   @Transform(trim)
   message?: string;
-
-  @ApiPropertyOptional({ description: 'Name to show on the guest list' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  @Transform(trim)
-  name?: string;
 }
 
 export class PreviewInviteDto {

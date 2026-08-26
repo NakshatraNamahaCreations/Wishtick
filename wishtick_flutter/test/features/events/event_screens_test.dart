@@ -176,7 +176,7 @@ void main() {
 
       expect(find.text('Rohan'), findsOneWidget);
       expect(find.text('+ 2 Additional Guests'), findsOneWidget);
-      expect(find.text('Phone'), findsOneWidget);
+      expect(find.text('WishMate'), findsOneWidget);
       expect(find.text('Added on'), findsOneWidget);
       expect(find.text('RSVP on'), findsOneWidget);
     });
@@ -184,16 +184,14 @@ void main() {
     testWidgets('a missing value reads as a dash, never as a blank', (
       tester,
     ) async {
-      repo.guests = [
-        buildInviteRow(id: 'i9', name: 'Anon', phone: null, email: null),
-      ];
+      repo.guests = [buildInviteRow(id: 'i9', name: 'Anon', username: null)];
       await pump(
         tester,
         const EventGuestDetailScreen(eventId: 'evt_1', inviteId: 'i9'),
       );
 
-      // Phone, Email and "RSVP on" are all unknown.
-      expect(find.text('—'), findsNWidgets(3));
+      // The handle and "RSVP on" are both unknown.
+      expect(find.text('—'), findsNWidgets(2));
     });
 
     testWidgets('removing asks first, and a cancel removes nobody', (

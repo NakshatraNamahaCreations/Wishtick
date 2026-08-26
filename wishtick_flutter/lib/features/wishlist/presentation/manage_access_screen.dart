@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
+import '../../wishmates/presentation/widgets/quick_share_sheet.dart';
 import '../domain/wishlist.dart';
 import '../domain/wishlist_participant.dart';
 import 'manage_access_controller.dart';
@@ -17,10 +18,10 @@ import 'manage_access_controller.dart';
 /// grants nothing — so without this page the "Only invited people can view"
 /// setting described a state the app could not reach.
 ///
-/// Invites go by email rather than by picking from a friend list: the backend
-/// resolves an address to an existing account when there is one, and holds the
-/// invite until they sign up when there is not, so an email works for both
-/// cases where a user picker would only work for one.
+/// Access is granted by picking WishMates. Anybody else is reached with the
+/// list's own share link, which makes them an account before it makes them a
+/// participant — so there is no address to type, none to mistype, and no
+/// invite sitting unclaimed waiting for a signup that may never come.
 class ManageAccessScreen extends ConsumerStatefulWidget {
   const ManageAccessScreen({required this.wishlist, super.key});
 
@@ -31,8 +32,6 @@ class ManageAccessScreen extends ConsumerStatefulWidget {
 }
 
 class _ManageAccessScreenState extends ConsumerState<ManageAccessScreen> {
-  final _email = TextEditingController();
-
   /// Whether the next invite may also join the wishlist's chat. Only offered
   /// when the list has chat at all — a role that unlocks nothing is noise.
   bool _canChat = false;
@@ -47,30 +46,25 @@ class _ManageAccessScreenState extends ConsumerState<ManageAccessScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    _email.dispose();
-    super.dispose();
-  }
-
   Future<void> _invite() async {
-    final email = _email.text.trim();
-    if (email.isEmpty) return;
-    FocusScope.of(context).unfocus();
-
-    final ok = await ref
-        .read(manageAccessProvider(_id).notifier)
-        .inviteByEmail(
-          email,
-          role: _canChat ? ParticipantRole.contributor : ParticipantRole.viewer,
-        );
+    await showQuickShareSheet(
+      context,
+      WishlistShareTarget(
+        wishlistId: _id,
+        title: widget.wishlist.title,
+        slug: widget.wishlist.share?.slug,
+        // `event_only` and `private` both admit nobody by link — only the
+        // people explicitly given access — so neither offers one.
+        isPublic:
+            widget.wishlist.visibility == WishlistVisibility.public ||
+            widget.wishlist.visibility == WishlistVisibility.inviteOnly,
+        role: _canChat ? ParticipantRole.contributor : ParticipantRole.viewer,
+      ),
+    );
     if (!mounted) return;
-    if (ok) {
-      _email.clear();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$email can now see this list')));
-    }
+    // The sheet adds people through the repository directly, so this screen's
+    // own list is stale by exactly the people it just added.
+    await ref.read(manageAccessProvider(_id).notifier).refresh();
   }
 
   Future<void> _confirmRemove(WishlistParticipant person) async {
@@ -131,27 +125,28 @@ class _ManageAccessScreenState extends ConsumerState<ManageAccessScreen> {
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'They will see this list the next time they open Wishtick. If '
-              'they do not have an account yet, the invite waits for them to '
-              'sign up with this address.',
+              'Pick from your WishMates. They will see this list the next time '
+              'they open Wishtick.',
               style: context.text.bodySmall?.copyWith(
                 color: colors.textSecondary,
                 height: 1.5,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            _InviteField(
-              controller: _email,
-              busy: state.busy,
-              onSubmit: () => unawaited(_invite()),
-            ),
+            // The toggle sits ABOVE the button, not below it: it changes what
+            // the button is about to grant, and a switch read after the sheet
+            // has already opened is a switch read too late.
             if (widget.wishlist.chatEnabled) ...[
-              const SizedBox(height: AppSpacing.xs),
               _ChatToggle(
                 value: _canChat,
                 onChanged: (next) => setState(() => _canChat = next),
               ),
+              const SizedBox(height: AppSpacing.sm),
             ],
+            _InviteButton(
+              busy: state.busy,
+              onPressed: () => unawaited(_invite()),
+            ),
             if (state.error case final message?) ...[
               const SizedBox(height: AppSpacing.md),
               WishtickErrorText(message),
@@ -258,60 +253,32 @@ class _VisibilityCard extends StatelessWidget {
   }
 }
 
-class _InviteField extends StatelessWidget {
-  const _InviteField({
-    required this.controller,
-    required this.busy,
-    required this.onSubmit,
-  });
+/// Opens the WishMate picker. Full-width, because it is the only action in
+/// its section — the old email row had to share the line with its field.
+class _InviteButton extends StatelessWidget {
+  const _InviteButton({required this.busy, required this.onPressed});
 
-  final TextEditingController controller;
   final bool busy;
-  final VoidCallback onSubmit;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: TextField(
-            controller: controller,
-            enabled: !busy,
-            keyboardType: TextInputType.emailAddress,
-            autocorrect: false,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => onSubmit(),
-            decoration: const InputDecoration(
-              hintText: 'Their email address',
-              prefixIcon: Icon(Icons.mail_outline, size: AppSizes.iconMd),
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        // Explicitly sized: the button theme sets an infinite *minimum* width
-        // (`Size.fromHeight`), so a themed button dropped straight into a Row
-        // asserts rather than shrinking to its label.
-        SizedBox(
-          width: 96,
-          height: AppSizes.inputHeight,
-          child: ElevatedButton(
-            onPressed: busy ? null : onSubmit,
-            child: busy
-                ? SizedBox(
-                    width: AppSizes.iconMd,
-                    height: AppSizes.iconMd,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(
-                        context.colors.onPrimary,
-                      ),
-                    ),
-                  )
-                : const Text('Invite'),
-          ),
-        ),
-      ],
+    return SizedBox(
+      height: AppSizes.inputHeight,
+      child: ElevatedButton.icon(
+        onPressed: busy ? null : onPressed,
+        icon: busy
+            ? SizedBox(
+                width: AppSizes.iconMd,
+                height: AppSizes.iconMd,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(context.colors.onPrimary),
+                ),
+              )
+            : const Icon(Icons.person_add_alt_1, size: AppSizes.iconMd),
+        label: const Text('Choose WishMates'),
+      ),
     );
   }
 }

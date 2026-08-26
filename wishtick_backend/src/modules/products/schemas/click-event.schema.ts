@@ -13,8 +13,21 @@ export type ClickEventDocument = HydratedDocument<ClickEvent>;
 export class ClickEvent {
   _id!: Types.ObjectId;
 
-  @Prop({ type: SchemaTypes.ObjectId, ref: 'WishlistItem', required: true })
-  itemId!: Types.ObjectId;
+  /**
+   * Null for a click straight off the catalogue — a seller row on the product
+   * page, where nothing has been saved to a wishlist yet. Was required until
+   * that path existed, and the redirect is the moment of intent whether or not
+   * an item backs it, so the row is still worth recording.
+   */
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'WishlistItem', default: null })
+  itemId!: Types.ObjectId | null;
+
+  /**
+   * Which seller was clicked, as an index into `Product.offers`. Null when the
+   * click was on the product itself rather than a named seller.
+   */
+  @Prop({ type: Number, default: null })
+  offerIndex!: number | null;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: 'Wishlist', default: null })
   wishlistId!: Types.ObjectId | null;
@@ -44,7 +57,14 @@ export class ClickEvent {
 
 export const ClickEventSchema = SchemaFactory.createForClass(ClickEvent);
 
-ClickEventSchema.index({ itemId: 1, createdAt: -1 });
+// Partial: catalogue clicks carry no item, and indexing their nulls would
+// bloat the index for rows this lookup can never be asked about.
+ClickEventSchema.index(
+  { itemId: 1, createdAt: -1 },
+  { partialFilterExpression: { itemId: { $type: 'objectId' } } },
+);
+/** Per-product attribution, which is the only index a catalogue click lands in. */
+ClickEventSchema.index({ productId: 1, createdAt: -1 });
 ClickEventSchema.index({ trackingId: 1 }, { unique: true });
 ClickEventSchema.index({ userId: 1, createdAt: -1 });
 /**

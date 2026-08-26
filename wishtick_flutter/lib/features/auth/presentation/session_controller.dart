@@ -8,6 +8,7 @@ import '../../onboarding/data/onboarding_repository.dart';
 import '../../profile/data/profile_repository.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_user.dart';
+import 'session_scoped_providers.dart';
 
 /// Where the app is in the sign-in lifecycle.
 enum SessionStatus {
@@ -91,7 +92,13 @@ class SessionController extends Notifier<SessionState> {
   }
 
   /// Stores the tokens from a successful signup/login and marks the user in.
+  ///
+  /// Caches are dropped here as well as on the way out. Signing out is not the
+  /// only way a session ends — an expired refresh token ends one too — and
+  /// clearing on the way in is what guarantees the person now signing in never
+  /// reads a value fetched for whoever was here before.
   Future<void> accept(AuthResult result) async {
+    _clearSessionCaches();
     await _tokens.save(result.tokens);
     state = SessionState(
       status: SessionStatus.authenticated,
@@ -152,6 +159,7 @@ class SessionController extends Notifier<SessionState> {
     }
     await _tokens.clear();
     state = const SessionState.signedOut();
+    _clearSessionCaches();
   }
 
   /// Deletes the account, then signs out locally (`64:158`).
@@ -169,13 +177,31 @@ class SessionController extends Notifier<SessionState> {
     }
     await _tokens.clear();
     state = const SessionState.signedOut();
+    _clearSessionCaches();
   }
 
   /// Called by the network layer when a refresh token is rejected mid-flight.
   Future<void> onExpired() async {
+    // Re-entrant by nature: this is called *from* a failed request, and
+    // clearing the caches below can start another one that fails the same way.
+    // Already being signed out means the work is done.
+    if (state.status == SessionStatus.unauthenticated) return;
     await _tokens.clear();
     state = const SessionState.signedOut();
+    _clearSessionCaches();
   }
+
+  /// Drops every cached value belonging to the session that just ended.
+  ///
+  /// Called *after* the state flips to signed out, so the router has already
+  /// begun tearing the screens down and an invalidated provider mostly has no
+  /// listener left to refetch for. A stray refetch that does happen fails
+  /// harmlessly — the tokens are gone by then — and cannot loop, because
+  /// [onExpired] returns early once the session is already closed.
+  ///
+  /// See `session_scoped_providers.dart` for what is in the list and why the
+  /// rule is "everything except this controller".
+  void _clearSessionCaches() => invalidateSessionScopedProviders(ref);
 }
 
 final sessionProvider = NotifierProvider<SessionController, SessionState>(

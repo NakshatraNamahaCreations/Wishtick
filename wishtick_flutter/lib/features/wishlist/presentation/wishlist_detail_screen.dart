@@ -7,6 +7,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
+import '../../wishmates/presentation/widgets/quick_share_sheet.dart';
 import '../domain/wishlist.dart';
 import '../domain/wishlist_item.dart';
 import 'share_wishlist_screen.dart';
@@ -76,14 +77,29 @@ class _WishlistDetailScreenState extends ConsumerState<WishlistDetailScreen> {
     }
   }
 
+  /// Opens the quick-share sheet — a grid of WishMates rather than a screen
+  /// asking for an email address.
+  ///
+  /// Everyone who can be given access is already a connection, so there is
+  /// nothing to type; a public list additionally offers its link. The old
+  /// [ShareWishlistScreen] remains the place for the *settings* behind a share
+  /// (visibility, passcode, expiry), reached from the access row.
   Future<void> _share() async {
     final wishlist = ref
         .read(wishlistDetailProvider(widget.wishlistId))
         .wishlist;
     if (wishlist == null) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (context) => ShareWishlistScreen(wishlist: wishlist),
+    await showQuickShareSheet(
+      context,
+      WishlistShareTarget(
+        wishlistId: wishlist.id,
+        title: wishlist.title,
+        slug: wishlist.share?.slug,
+        // `event_only` and `private` both admit nobody by link — only the
+        // people explicitly given access — so neither offers one.
+        isPublic:
+            wishlist.visibility == WishlistVisibility.public ||
+            wishlist.visibility == WishlistVisibility.inviteOnly,
       ),
     );
   }

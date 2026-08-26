@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_TEAM_ID.com.example.wishtickFlutter"],
+        "components": [
+          { "/": "/i/*", "comment": "One person's event invitation" },
+          { "/": "/e/*", "comment": "A public event's open invitation" },
+          { "/": "/w/*", "comment": "A shared wishlist" },
+          { "/": "/m/*", "comment": "A memory capsule's contribute link" }
+        ]
+      }
+    ]
+  }
+}

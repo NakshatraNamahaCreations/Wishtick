@@ -32,7 +32,6 @@ abstract final class TermsDocument {
         tone: LegalTone.good,
       ),
       LegalParagraph(
-        'Registered office: ${LegalEntity.registeredOffice}. '
         'CIN: ${LegalEntity.cin}. GSTIN: ${LegalEntity.gstin}. '
         'Website: ${LegalEntity.website}.',
       ),
@@ -1084,7 +1083,6 @@ abstract final class TermsDocument {
           designation: LegalEntity.grievanceOfficerTitle,
           email: LegalEntity.supportEmail,
           phone: LegalEntity.grievanceOfficerPhone,
-          address: LegalEntity.operationsOffice,
         ),
         LegalClause(
           '38.2',
@@ -1102,7 +1100,6 @@ abstract final class TermsDocument {
           role: LegalEntity.name,
           name: LegalEntity.brand,
           email: LegalEntity.supportEmail,
-          address: LegalEntity.operationsOffice,
         ),
       ]),
 

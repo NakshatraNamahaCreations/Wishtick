@@ -115,6 +115,16 @@ abstract final class AppPalette {
   /// this stays on the warm plum hue the GIF itself uses.
   static const plumNight = Color(0xFF160516);
 
+  /// The first two stops of `257:733`'s masthead wash, which runs
+  /// [plumShadow] → [plumRich] → [plumMuted] straight down.
+  ///
+  /// Neither is a near-miss of an existing swatch worth folding into:
+  /// [plumShadow] is a shade lighter and redder than [plumNight] (#160516),
+  /// and [plumRich] is a shade brighter and more saturated than the
+  /// [plumMuted] it lands on.
+  static const plumShadow = Color(0xFF1D041D);
+  static const plumRich = Color(0xFF612260);
+
   /// The Discover "CURATED GIFTS FOR EVERY OCCASION" banner's diagonal wash
   /// (`280:131`) — a warmer, wine-toned plum distinct from [plum]/[plumDeep],
   /// which the banner does not use.

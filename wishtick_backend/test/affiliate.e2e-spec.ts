@@ -215,6 +215,70 @@ describe('Affiliate monetization & conversions (e2e)', () => {
     });
   });
 
+  describe('per-seller links', () => {
+    /** The three-seller shape the product page renders. */
+    const givenOffers = () =>
+      givenProduct({
+        offers: [
+          { merchant: 'Amazon.in', amountMinor: 249_000, url: 'https://amazon.test/p/1' },
+          { merchant: 'Nykaa Fashion', amountMinor: 249_100, url: 'https://nykaa.test/p/1' },
+          { merchant: 'Vijay Sales', amountMinor: 299_000, url: 'https://vijay.test/p/1' },
+        ],
+      });
+
+    it('converts the seller that was clicked, not the product', async () => {
+      const product = await givenOffers();
+      reply({ data: { tracking_url: 'https://linksredirect.com/vijay', affiliated: true } });
+
+      const outcome = await monetization.ensureOfferMonetized(product, 2);
+
+      expect(outcome.destination).toBe('https://linksredirect.com/vijay');
+      // The URL sent for conversion is the third seller's, not the product's.
+      expect((requests[0].body as { url: string }).url).toBe('https://vijay.test/p/1');
+    });
+
+    it('caches each seller separately, so one converted seller cannot answer for another', async () => {
+      const product = await givenOffers();
+      reply({ data: { tracking_url: 'https://linksredirect.com/amazon', affiliated: true } });
+      await monetization.ensureOfferMonetized(product, 0);
+
+      const stored = await productModel.findById(product._id).exec();
+      expect(stored!.offers[0].affiliateUrl).toBe('https://linksredirect.com/amazon');
+      // The whole point: the siblings are untouched, so clicking them still
+      // converts their own URL rather than reusing Amazon's link.
+      expect(stored!.offers[1].affiliateUrl ?? null).toBeNull();
+      expect(stored!.offers[2].affiliateUrl ?? null).toBeNull();
+      // And the product-level cache is not hijacked by one seller either.
+      expect(stored!.affiliateUrl).toBeNull();
+    });
+
+    it('a cached seller link costs no second conversion call', async () => {
+      const product = await givenOffers();
+      reply({ data: { tracking_url: 'https://linksredirect.com/nykaa', affiliated: true } });
+      await monetization.ensureOfferMonetized(product, 1);
+
+      const before = requests.length;
+      const again = await monetization.ensureOfferMonetized(
+        (await productModel.findById(product._id).exec())!,
+        1,
+      );
+
+      expect(again.destination).toBe('https://linksredirect.com/nykaa');
+      expect(requests.length).toBe(before);
+    });
+
+    it('a seller with no link falls back to the product rather than dead-ending', async () => {
+      const product = await givenProduct({
+        affiliateUrl: 'https://linksredirect.com/product',
+        offers: [{ merchant: 'Mystery Shop', amountMinor: 100, url: null }],
+      });
+
+      const outcome = await monetization.ensureOfferMonetized(product, 0);
+
+      expect(outcome.destination).toBe('https://linksredirect.com/product');
+    });
+  });
+
   describe('the catalogue cache', () => {
     it('does not erase a resolved affiliate link when the product is re-searched', async () => {
       const product = await givenProduct({ affiliateUrl: 'https://linksredirect.com/keepme' });

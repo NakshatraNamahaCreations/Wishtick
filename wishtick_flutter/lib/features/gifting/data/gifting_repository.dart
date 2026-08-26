@@ -156,6 +156,23 @@ class GiftingRepository {
   /// short-circuit to the product's own `productLink`.
   Uri affiliateRedirectUri(String itemId) =>
       Uri.parse('${ApiConfig.baseUrl}/r/$itemId');
+
+  /// The URL a seller row — and "Gift Now" — opens for a catalogue product.
+  ///
+  /// Unlike [affiliateRedirectUri] this needs nothing saved first: the product
+  /// page is reached from search, where no wishlist item exists yet.
+  ///
+  /// [offerIndex] names one seller out of the product's list, so the click
+  /// goes to *that* merchant rather than to whichever one happened to be
+  /// converted first. Omit it for the product's own link.
+  Uri productRedirectUri(
+    String provider,
+    String externalId, {
+    int? offerIndex,
+  }) {
+    final path = '${ApiConfig.baseUrl}/r/p/$provider/$externalId';
+    return Uri.parse(offerIndex == null ? path : '$path?offer=$offerIndex');
+  }
 }
 
 final giftingRepositoryProvider = Provider<GiftingRepository>((ref) {

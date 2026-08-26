@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
@@ -113,6 +115,10 @@ class _Body extends ConsumerWidget {
 
 /// The plum hero: avatar, name, handle, mutuals, and the two action pills.
 class _Hero extends ConsumerWidget {
+  /// The disc inside the halo, measured off `4177:267` at x 146→246.
+  /// Larger than [AppSizes.avatarLg], which is the 96 used elsewhere.
+  static const _avatarDiameter = 100.0;
+
   const _Hero({required this.profile});
 
   final WishmateProfile profile;
@@ -164,6 +170,72 @@ class _Hero extends ConsumerWidget {
     if (context.mounted) reportWishmateResult(context, result);
   }
 
+  /// The share glyph on `4177:217`.
+  ///
+  /// Text only, and deliberately so: there is no `/u/` link yet. The claimed
+  /// deep-link prefixes are `/i/ /e/ /w/ /m/`, none of which resolves to a
+  /// person, and inventing a URL here would put an address into somebody's
+  /// WhatsApp that opens nothing. The handle is the part that works — it is
+  /// what People Search matches on.
+  Future<void> _share(BuildContext context) async {
+    final person = profile.person;
+    final handle = person.username == null ? person.name : person.handle;
+    await SharePlus.instance.share(
+      ShareParams(text: 'Find $handle on Wishtick'),
+    );
+  }
+
+  /// The overflow beside it.
+  ///
+  /// Only actions that already exist end up here. A menu is the easiest place
+  /// to promise something the app cannot do — "Block", "Report" — and an
+  /// entry that opens a snackbar saying "coming soon" is worse than no entry.
+  Future<void> _showMore(BuildContext context, WidgetRef ref) async {
+    final person = profile.person;
+    final connected = profile.relationship == WishmateRelationship.wishmates;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (person.username != null)
+              ListTile(
+                leading: const Icon(Icons.alternate_email),
+                title: const Text('Copy handle'),
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  await Clipboard.setData(ClipboardData(text: person.handle));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Handle copied')),
+                  );
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.ios_share),
+              title: const Text('Share this profile'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_share(context));
+              },
+            ),
+            if (connected)
+              ListTile(
+                leading: const Icon(Icons.person_remove_alt_1_outlined),
+                title: const Text('Remove WishMate'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_remove(context, ref));
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Where "Requested" sends you.
   ///
   /// A profile reports a *relationship*, not the WishLink row behind it, so
@@ -189,10 +261,14 @@ class _Hero extends ConsumerWidget {
 
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(gradient: context.gradients.header),
+      // Not `gradients.header`: that is the violet-leaning ink → plum of
+      // Home's masthead, and it reads blue at the status bar. Sampling
+      // `4177:217` down its left edge gives plumShadow → plumRich → plumMuted
+      // to the pixel — the same three stops this token already holds.
+      decoration: BoxDecoration(gradient: context.gradients.eventMasthead),
       padding: EdgeInsets.only(
         top: MediaQuery.paddingOf(context).top,
-        bottom: AppSpacing.xxl,
+        bottom: AppSpacing.xl,
       ),
       child: Column(
         children: [
@@ -208,9 +284,30 @@ class _Hero extends ConsumerWidget {
                 tooltip: 'Back',
               ),
               const Spacer(),
+              _HeroAction(
+                icon: Icons.ios_share,
+                tooltip: 'Share this profile',
+                // The frame gives this one a filled disc and leaves the
+                // overflow bare, which is what marks it as the primary of the
+                // pair. Sampled at 22% white over the plum.
+                fill: colors.textOnDark.withValues(alpha: 0.22),
+                onPressed: () => unawaited(_share(context)),
+              ),
+              _HeroAction(
+                icon: Icons.more_vert,
+                tooltip: 'More',
+                onPressed: () => unawaited(_showMore(context, ref)),
+              ),
+              const SizedBox(width: AppSpacing.sm),
             ],
           ),
-          PersonAvatar(person: person, diameter: AppSizes.avatarLg),
+          PersonAvatar(
+            person: person,
+            // 100 inside a 10-px halo, measured off `4177:267` at x 136→256
+            // (ring) and 146→246 (disc).
+            diameter: _avatarDiameter,
+            ringColor: colors.textOnDark.withValues(alpha: 0.13),
+          ),
           const SizedBox(height: AppSpacing.md),
           Text(
             person.name,
@@ -576,4 +673,48 @@ class _ProfileError extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// One of the two controls in the hero's top-right corner (`4177:217`).
+///
+/// A 32-px disc, filled for share and bare for the overflow, inside a tap
+/// target big enough to hit. The two are 32 apart on the frame, which is
+/// narrower than [AppSizes.minTapTarget] allows for a default [IconButton] —
+/// hence the explicit constraints rather than stock padding.
+class _HeroAction extends StatelessWidget {
+  const _HeroAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.fill,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final Color? fill;
+
+  static const _disc = 32.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onPressed,
+        radius: _disc,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Container(
+            width: _disc,
+            height: _disc,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: fill),
+            child: Icon(icon, size: AppSizes.iconMd, color: colors.textOnDark),
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -527,22 +527,28 @@ void main() {
       expect(find.byType(Image), findsWidgets);
     });
 
-    testWidgets('the swipe track is dead until an avatar is chosen', (
+    testWidgets('opens with the default already chosen, so Continue is live', (
       tester,
     ) async {
       await pumpOnboarding(tester);
       await tapVisible(tester, find.text('Select Avatar'));
 
+      // The form seeds [BundledAvatar.defaultChoice], and the picker starts on
+      // whatever the form holds — so there is no dead-track state to sit in.
+      // The track used to be dead here, which was the visible half of a worse
+      // problem: the profile screen drew avatar_01 either way, so somebody
+      // could back out believing they had chosen it and save nothing.
       expect(
         tester
             .widget<WishtickSwipeButton>(find.byType(WishtickSwipeButton))
             .onSwiped,
-        isNull,
+        isNotNull,
       );
 
-      // And a full swipe on a dead track goes nowhere.
+      // Continuing without touching a tile keeps the default rather than
+      // dropping it — this is the path most accounts actually take.
       await swipeToContinue(tester);
-      expect(find.byType(AvatarPickerScreen), findsOneWidget);
+      expect(find.byType(CreateProfileScreen), findsOneWidget);
     });
 
     testWidgets('a chosen avatar comes back to the profile form', (

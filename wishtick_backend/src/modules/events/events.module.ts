@@ -5,6 +5,7 @@ import { QUEUE } from 'src/infra/queue/queue.constants';
 import { MediaModule } from 'src/modules/media/media.module';
 import { ProfileModule } from 'src/modules/profile/profile.module';
 import { UsersModule } from 'src/modules/users/users.module';
+import { WishmatesModule } from 'src/modules/wishmates/wishmates.module';
 import { WishlistsModule } from 'src/modules/wishlists/wishlists.module';
 import { EventParticipationModule } from './event-participation.module';
 import { EventRemindersRegistrar } from './event-reminders.processor';
@@ -12,7 +13,6 @@ import { EventRemindersService } from './event-reminders.service';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { InviteCardRenderer } from './invite-card.renderer';
-import { InviteLinkingListener } from './invite-linking.listener';
 import { InviteNotificationsService } from './invite-notifications.service';
 import { InvitePreviewService } from './invite-preview.service';
 import { InvitesService } from './invites.service';
@@ -36,6 +36,9 @@ import { Event, EventSchema } from './schemas/event.schema';
     // wishlists, and wishlists reach back only through the tiny participation
     // port — never the whole module.
     WishlistsModule,
+    // For guest identities on the invite list. Also one-way, and it reaches
+    // events only through EventParticipationModule, so this is not a cycle.
+    WishmatesModule,
   ],
   controllers: [EventsController, PublicInvitesController, PublicEventsController],
   providers: [
@@ -48,7 +51,6 @@ import { Event, EventSchema } from './schemas/event.schema';
     InviteNotificationsService,
     InvitePreviewService,
     InviteCardRenderer,
-    InviteLinkingListener,
   ],
   exports: [EventsService, InvitesService, EventRemindersService],
 })

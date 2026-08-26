@@ -203,26 +203,23 @@ class EventsRepository {
         .toList();
   }
 
-  /// Invites in bulk. Duplicates are collapsed rather than rejected — a
-  /// contact list routinely repeats someone, and failing fifty invites over
-  /// one repeat helps nobody.
-  Future<BulkInviteResult> invite(
-    String eventId, {
-    required List<({String? email, String? phone, String? name})> recipients,
-  }) async {
+  /// Invites WishMates by user id — the only way the app invites anybody.
+  ///
+  /// Everyone here is already a connection, so there is no address to type and
+  /// none to mistype, and the invite is bound to a real account from the
+  /// start: no waiting for a signup to link it up by matching an email.
+  Future<BulkInviteResult> inviteWishmates(
+    String eventId,
+    List<String> userIds,
+  ) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/events/$eventId/invites',
       body: {
-        'recipients': recipients
-            .map((r) => {'email': ?r.email, 'phone': ?r.phone, 'name': ?r.name})
-            .toList(),
+        'recipients': userIds.map((id) => {'userId': id}).toList(),
       },
     );
     return BulkInviteResult.fromJson(json);
   }
-
-  Future<void> resend(String eventId, String inviteId) =>
-      _api.post<void>('/events/$eventId/invites/$inviteId/resend');
 
   Future<void> revoke(String eventId, String inviteId) =>
       _api.delete<void>('/events/$eventId/invites/$inviteId');

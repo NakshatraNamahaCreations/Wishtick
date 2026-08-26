@@ -70,7 +70,14 @@ class ProfileFormController extends Notifier<ProfileFormState> {
     // Seed from the session so a returning user sees what the server already
     // knows rather than an empty form.
     final user = ref.read(sessionProvider).user;
-    return ProfileFormState(draft: ProfileDraft(name: user?.name ?? ''));
+    return ProfileFormState(
+      draft: ProfileDraft(
+        name: user?.name ?? '',
+        // Selected from the start, because the screen draws it from the start.
+        avatar: BundledAvatar.defaultChoice,
+        // Selected from the start, because the screen draws it from the start.
+      ),
+    );
   }
 
   OnboardingRepository get _onboarding =>

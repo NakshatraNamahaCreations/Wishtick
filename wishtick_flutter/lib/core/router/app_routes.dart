@@ -170,6 +170,11 @@ abstract final class AppRoutes {
   /// add a wish, which is how a capsule fills up.
   static String memoryInvite(String slug) => '/m/$slug';
 
+  /// A public event's open invitation — one link for everybody, so whoever
+  /// opens it is identified by signing in rather than by the link. Resolves
+  /// itself into [invite] once the join succeeds.
+  static String publicEvent(String slug) => '/e/$slug';
+
   /// An event invite. Public and unauthenticated — the token is the
   /// authorization, and requiring a signup to answer an invitation is the
   /// fastest way to collect no RSVPs at all.
