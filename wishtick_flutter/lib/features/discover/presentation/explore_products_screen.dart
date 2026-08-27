@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
@@ -108,6 +109,24 @@ class _ExploreProductsScreenState extends ConsumerState<ExploreProductsScreen> {
     }
   }
 
+  /// What to put on screen for a failure.
+  ///
+  /// The server already writes a sentence for a human — "Product search is
+  /// temporarily unavailable. Please try again shortly." — and it is the only
+  /// part of the failure a shopper can act on. Interpolating the exception
+  /// itself put `ApiException(PRODUCT_SEARCH_UNAVAILABLE, 503):` in front of
+  /// it, which reads as a crash and tells them nothing.
+  static String _messageFor(Exception e) => switch (e) {
+    ApiException(:final code, :final message) => switch (code) {
+      ApiException.codeNetwork || ApiException.codeTimeout =>
+        'No connection. Check your network and retry.',
+      _ => message,
+    },
+    // Anything not from the API has no message written for a reader, so a
+    // generic line is better than whatever `toString` happens to produce.
+    _ => 'Something went wrong. Please try again.',
+  };
+
   Future<void> _loadFirstPage() async {
     // An occasion tile knows only its key; the filter behind it is the
     // server's to decide.
@@ -120,7 +139,7 @@ class _ExploreProductsScreenState extends ConsumerState<ExploreProductsScreen> {
         _filter = shelf.exploreQuery;
       } on Exception catch (e) {
         if (!mounted) return;
-        setState(() => _error = '$e');
+        setState(() => _error = _messageFor(e));
         return;
       }
     }
@@ -157,7 +176,7 @@ class _ExploreProductsScreenState extends ConsumerState<ExploreProductsScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '$e';
+        _error = _messageFor(e);
       });
     }
   }

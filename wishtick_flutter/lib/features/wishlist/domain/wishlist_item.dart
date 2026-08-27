@@ -92,6 +92,7 @@ class WishlistItem {
     required this.status,
     required this.position,
     required this.createdAt,
+    this.sourceProductId,
   });
 
   final String id;
@@ -122,6 +123,17 @@ class WishlistItem {
   final int position;
   final DateTime createdAt;
 
+  /// The catalogue row this was imported from; null when added by hand.
+  ///
+  /// The item's own title, price and image are a snapshot frozen at import.
+  /// This is the handle for the things a snapshot never carried — the seller,
+  /// the rating, the other sellers, the specification table — fetched through
+  /// `GET /products/id/:productId`.
+  final String? sourceProductId;
+
+  /// Whether the catalogue can be asked for more than the snapshot holds.
+  bool get hasCatalogueSource => sourceProductId != null;
+
   String? get coverImageUrl => imageUrls.isEmpty ? null : imageUrls.first;
 
   factory WishlistItem.fromJson(Map<String, dynamic> json) => WishlistItem(
@@ -148,5 +160,6 @@ class WishlistItem {
     status: WishlistItemStatus.fromWire(json['status'] as String),
     position: json['position'] as int? ?? 0,
     createdAt: DateTime.parse(json['createdAt'] as String),
+    sourceProductId: json['sourceProductId'] as String?,
   );
 }

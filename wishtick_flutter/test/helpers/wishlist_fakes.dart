@@ -65,6 +65,8 @@ WishlistItem buildItem({
   int position = 0,
   ItemImportance importance = ItemImportance.wouldLove,
   WishlistItemStatus status = WishlistItemStatus.available,
+  List<String> imageUrls = const [],
+  String? sourceProductId,
 }) {
   return WishlistItem(
     id: id,
@@ -73,7 +75,7 @@ WishlistItem buildItem({
     recipientName: recipientName,
     relation: relation,
     occasionKey: occasionKey,
-    imageUrls: const [],
+    imageUrls: imageUrls,
     productLink: productLink,
     price: ItemPrice(amountMinor: amountMinor, currency: 'INR'),
     category: null,
@@ -84,6 +86,7 @@ WishlistItem buildItem({
     status: status,
     position: position,
     createdAt: DateTime(2026, 6, 1),
+    sourceProductId: sourceProductId,
   );
 }
 
@@ -421,6 +424,7 @@ class FakeProductRepository implements ProductRepository {
   int searchCalls = 0;
   final resolveCalls = <String>[];
   final detailsCalls = <String>[];
+  final detailsByIdCalls = <String>[];
 
   @override
   Future<NormalizedProduct> details({
@@ -428,6 +432,21 @@ class FakeProductRepository implements ProductRepository {
     required String externalId,
   }) async {
     detailsCalls.add('$provider/$externalId');
+    final failure = detailsFailure;
+    if (failure != null) throw failure;
+    final result = detailsResult;
+    if (result == null) {
+      throw const ApiException(
+        code: ApiException.codeUnknown,
+        message: 'no details stubbed',
+      );
+    }
+    return result;
+  }
+
+  @override
+  Future<NormalizedProduct> detailsById(String productId) async {
+    detailsByIdCalls.add(productId);
     final failure = detailsFailure;
     if (failure != null) throw failure;
     final result = detailsResult;

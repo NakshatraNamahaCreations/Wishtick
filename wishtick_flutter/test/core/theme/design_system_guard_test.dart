@@ -39,8 +39,13 @@ void main() {
     // Color(0x…), Color.fromARGB(…), Colors.red — every way to *name* a colour.
     // Color.lerp/alphaBlend and friends only combine colours they were handed,
     // so they introduce no new value and are not matched.
+    //
+    // `Color(` is matched only in front of a numeric literal, for the same
+    // reason: `Color(someStoredValue)` converts a value it was handed — the
+    // invitation designer stores a host-picked ink as an int and rebuilds it
+    // per layer — and names no colour of its own.
     final literal = RegExp(
-      r'\bColor\s*\(|\bColor\.from\w+\s*\(|\bColors\s*\.\s*\w+',
+      r'\bColor\s*\(\s*[0-9]|\bColor\.from\w+\s*\(|\bColors\s*\.\s*\w+',
     );
     final offenders = <String>[];
 

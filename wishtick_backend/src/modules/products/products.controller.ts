@@ -70,6 +70,28 @@ export class ProductsController {
     return this.urls.resolve(dto.url);
   }
 
+  /**
+   * One product by our own id, for a caller holding an item's
+   * `sourceProductId` rather than a provider reference.
+   *
+   * Declared ahead of `:provider/:externalId` — both are two segments, and
+   * Nest matches in declaration order, so the other route would otherwise
+   * swallow this one with `provider: 'id'`.
+   */
+  @Get('id/:productId')
+  @ApiOperation({
+    summary: 'One product, by catalogue id',
+    description:
+      "Resolves the id to its provider reference and answers exactly as the provider route does — " +
+      'so a saved wishlist item can show the seller, rating and specifications its snapshot never carried.',
+  })
+  @ApiResponseDoc({ status: 404, description: 'PRODUCT_NOT_FOUND' })
+  getDetailsById(
+    @Param('productId') productId: string,
+  ): Promise<{ product: NormalizedProduct; freshness: ResultFreshness }> {
+    return this.products.getDetailsById(productId);
+  }
+
   @Get(':provider/:externalId')
   @ApiOperation({
     summary: 'One product',

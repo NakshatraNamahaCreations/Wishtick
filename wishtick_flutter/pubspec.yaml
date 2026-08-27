@@ -44,11 +44,19 @@ dependencies:
   share_plus: ^12.0.2
   url_launcher: ^6.3.2
 
+  # The chat composer's emoji keyboard. Chosen over hand-rolling one: a picker
+  # is a categorised, searchable, skin-tone-aware set of ~1800 codepoints with
+  # a recents list, and the hard part is knowing which of them the running
+  # platform can actually render — this package checks, and drops the ones that
+  # would show as tofu.
+  emoji_picker_flutter: ^3.1.0
+
   # Memory wishes (Sprint 8). A voice note needs position/duration streams and
   # a seek, which is what the story's transport row is made of; a video wish
   # needs a first frame to sit under the play button before it plays.
   just_audio: ^0.10.5
   video_player: ^2.10.1
+  google_fonts: ^8.2.1
 
 dev_dependencies:
   flutter_test:
@@ -72,6 +80,7 @@ flutter:
     - assets/images/Home_page_banners/
     - assets/images/Memory/
     - assets/images/Wishlist/
+    - assets/images/template_bg/
     - assets/avatar/
     - assets/onboarding/
     - assets/logo/

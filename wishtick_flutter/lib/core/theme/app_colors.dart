@@ -20,6 +20,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.cta,
     required this.onCta,
     required this.presenceOnline,
+    required this.inviteInks,
     required this.accent,
     required this.onAccent,
     required this.accentSubtle,
@@ -96,6 +97,14 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   /// the page colour, so it never sits on a surface it has to contrast with,
   /// and 'online' should not change hue when the lights go out.
   final Color presenceOnline;
+
+  /// The ink swatches offered in the invitation designer.
+  ///
+  /// A list rather than a field each: they are one palette presented as one
+  /// row, and nothing in the app refers to a single member of it. Identical in
+  /// light and dark on purpose — see [AppPalette.inviteInkBlack] — which is
+  /// also why [lerp] hands it across whole rather than blending it.
+  final List<Color> inviteInks;
 
   /// Brand pink. Hearts, wishlist affordances, inline emphasis.
   final Color accent;
@@ -248,6 +257,17 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     cta: AppPalette.plumDeep,
     onCta: AppPalette.ivory,
     presenceOnline: AppPalette.presenceGreen,
+    inviteInks: [
+      AppPalette.inviteInkBlack,
+      AppPalette.inviteInkWhite,
+      AppPalette.plumDeep,
+      AppPalette.plum,
+      AppPalette.pink,
+      AppPalette.inviteInkRose,
+      AppPalette.inviteInkGold,
+      AppPalette.inviteInkSage,
+      AppPalette.inviteInkDusk,
+    ],
     accent: AppPalette.pink,
     // Ink, not white: white on this pink falls below AA. Ink clears 4.5:1.
     onAccent: AppPalette.ink,
@@ -315,6 +335,17 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     cta: AppPalette.plum,
     onCta: AppPalette.ivory,
     presenceOnline: AppPalette.presenceGreen,
+    inviteInks: [
+      AppPalette.inviteInkBlack,
+      AppPalette.inviteInkWhite,
+      AppPalette.plumDeep,
+      AppPalette.plum,
+      AppPalette.pink,
+      AppPalette.inviteInkRose,
+      AppPalette.inviteInkGold,
+      AppPalette.inviteInkSage,
+      AppPalette.inviteInkDusk,
+    ],
     accent: AppPalette.pink,
     // [accent] is the same pink in both themes, so its foreground matches too.
     onAccent: AppPalette.navyDeep,
@@ -371,6 +402,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   @override
   WishtickColors copyWith({
     Brightness? brightness,
+    List<Color>? inviteInks,
     Color? primary,
     Color? onPrimary,
     Color? primaryDeep,
@@ -425,6 +457,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   }) {
     return WishtickColors(
       brightness: brightness ?? this.brightness,
+      inviteInks: inviteInks ?? this.inviteInks,
       primary: primary ?? this.primary,
       onPrimary: onPrimary ?? this.onPrimary,
       primaryDeep: primaryDeep ?? this.primaryDeep,
@@ -485,6 +518,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color c(Color a, Color b) => Color.lerp(a, b, t)!;
     return WishtickColors(
       brightness: t < 0.5 ? brightness : other.brightness,
+      // Handed across, not blended: these are the host's ink, and a card
+      // half-way through a theme animation must not repaint itself.
+      inviteInks: t < 0.5 ? inviteInks : other.inviteInks,
       primary: c(primary, other.primary),
       onPrimary: c(onPrimary, other.onPrimary),
       primaryDeep: c(primaryDeep, other.primaryDeep),

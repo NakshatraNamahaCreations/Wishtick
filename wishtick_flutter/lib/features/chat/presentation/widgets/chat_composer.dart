@@ -6,8 +6,8 @@ import '../../../../core/theme/theme_extensions.dart';
 /// The message field every chat screen sits on.
 ///
 /// Shared rather than copied: `316:640` (group) and `4177:6` (1:1) draw the
-/// same pill — attach, field, send — and the only difference is the smiley the
-/// 1:1 frame adds. Two copies would be two composers that slowly stop matching.
+/// same pill — field, send — and the only difference is the smiley the 1:1
+/// frame adds. Two copies would be two composers that slowly stop matching.
 class ChatComposer extends StatelessWidget {
   const ChatComposer({
     required this.controller,
@@ -23,8 +23,8 @@ class ChatComposer extends StatelessWidget {
   final bool busy;
   final VoidCallback onSend;
 
-  /// The smiley `4177:6` draws between the field and Send. Absent on the
-  /// group screen, which the frame gives an attach button and nothing else.
+  /// Opens the emoji keyboard. The smiley `4177:6` draws between the field and
+  /// Send; the group screen passes null and shows no smiley.
   final VoidCallback? onEmoji;
 
   @override
@@ -51,12 +51,10 @@ class ChatComposer extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
-                Icons.attach_file,
-                size: AppSizes.iconMd,
-                color: colors.textMuted,
-              ),
-              const SizedBox(width: AppSpacing.sm),
+              // No attach button. The frames draw one, but nothing has ever
+              // been behind it — it was a bare Icon with no onTap, in both
+              // chats — and an affordance that does nothing when pressed is
+              // worse than an absent one.
               Expanded(
                 child: TextField(
                   controller: controller,

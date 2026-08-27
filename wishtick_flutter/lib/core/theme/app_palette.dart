@@ -14,6 +14,27 @@ import 'package:flutter/material.dart';
 abstract final class AppPalette {
   // --- Plum (brand) ---------------------------------------------------------
   static const plum = Color(0xFF5B1A6E);
+
+  // --- Invitation ink -------------------------------------------------------
+
+  /// Type colours the host can paint their own invitation with.
+  ///
+  /// Named here because every colour value in the app is named here, but they
+  /// are *not* theme tokens: an invitation is artwork the host authors and
+  /// exports, and ink that shifted with the reader's light/dark setting would
+  /// mean the card in their gallery no longer matched the one they made.
+  /// [WishtickColors.inviteInks] therefore carries the identical list in both
+  /// themes.
+  ///
+  /// Deliberately a short curated row. These cards are read at a glance in a
+  /// chat thread over busy artwork, and a free colour wheel is the fastest
+  /// route to an invitation nobody can read.
+  static const inviteInkBlack = Color(0xFF1F1F1F);
+  static const inviteInkWhite = Color(0xFFFFFFFF);
+  static const inviteInkRose = Color(0xFFC4304B);
+  static const inviteInkGold = Color(0xFFB08423);
+  static const inviteInkSage = Color(0xFF3F7D58);
+  static const inviteInkDusk = Color(0xFF3D5A80);
   static const plumDeep = Color(0xFF3F0E4C);
   static const plumSoft = Color(0xFF7B3A8F);
 

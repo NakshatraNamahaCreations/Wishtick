@@ -54,6 +54,19 @@ class ProductRepository {
     return NormalizedProduct.fromJson(json['product'] as Map<String, dynamic>);
   }
 
+  /// The same, for a saved wishlist item, which knows only our catalogue id.
+  ///
+  /// An item stores a snapshot of the title, price and image taken at import;
+  /// everything else the catalogue holds — the seller, the rating, the other
+  /// sellers, the specification table — has to be fetched, and
+  /// `WishlistItem.sourceProductId` is the only reference it kept.
+  Future<NormalizedProduct> detailsById(String productId) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/products/id/$productId',
+    );
+    return NormalizedProduct.fromJson(json['product'] as Map<String, dynamic>);
+  }
+
   /// Resolves a pasted product URL — either a recognised affiliate network
   /// answers directly, or the page is scraped for Open Graph tags.
   Future<ResolvedUrlProduct> resolveUrl(String url) async {

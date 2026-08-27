@@ -214,6 +214,12 @@ void main() {
 
       expect(repo.addParticipantCalls.single.userId, 'u_9');
 
+      // A successful send now raises a confirmation over the sheet for two
+      // seconds, and it takes no taps while it is up. Waiting it out is what a
+      // user does too; tapping through it is not offered.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
       // Dismiss the sheet — the screen refetches on the way out. The sheet
       // adds people through the repository directly, so without that refetch
       // the list underneath still says nobody has access, and the host is
@@ -251,6 +257,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.addParticipantCalls.single.role, ParticipantRole.contributor);
+
+      // Let the sent confirmation run its course, so the test does not end
+      // with its timer still pending.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('the chat toggle is absent when the list has no chat', (

@@ -546,10 +546,12 @@ class DevWishlistRepository implements WishlistRepository {
       (p) => p.provider == provider && p.externalId == externalId,
       orElse: () => DevProductRepository.catalog.first,
     );
-    return addItem(
+    final created = await addItem(
       wishlistId,
       title: product.title,
       notes: notes,
+      recipientName: recipientName,
+      relation: relation,
       productLink: product.productUrl,
       priceAmountMinor: product.amountMinor,
       category: product.category,
@@ -557,6 +559,17 @@ class DevWishlistRepository implements WishlistRepository {
       quantity: quantity,
       mediaIds: product.imageUrls,
     );
+
+    // Stamped after the fact because `addItem` is the shared interface method
+    // and has no parameter for it. Without this the detail screen sees a null
+    // `sourceProductId` and never asks for the catalogue record, so dev mode
+    // would silently exercise a different path from a real backend.
+    final rows = _readItems();
+    final index = rows.indexWhere((r) => r['id'] == created.id);
+    if (index == -1) return created;
+    rows[index]['sourceProductId'] = product.externalId;
+    await _writeItems(rows);
+    return WishlistItem.fromJson(Map<String, dynamic>.from(rows[index]));
   }
 
   @override
@@ -1200,6 +1213,18 @@ class DevProductRepository implements ProductRepository {
     // already the whole record — the screen simply re-renders what it has.
     return catalog.firstWhere(
       (p) => p.externalId == externalId,
+      orElse: () => catalog.first,
+    );
+  }
+
+  @override
+  Future<NormalizedProduct> detailsById(String productId) async {
+    await Future<void>.delayed(_latency);
+    // The dev catalogue has no server-side ids, so a saved item's
+    // `sourceProductId` is its externalId here — see DevWishlistRepository,
+    // which writes it that way when importing.
+    return catalog.firstWhere(
+      (p) => p.externalId == productId,
       orElse: () => catalog.first,
     );
   }

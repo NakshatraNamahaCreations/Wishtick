@@ -22,6 +22,23 @@ export interface ItemView {
   status: WishlistItemStatus;
   position: number;
   createdAt: Date;
+
+  /**
+   * The catalogue row this item was imported from, or null for one added by
+   * hand.
+   *
+   * The item's own title/price/image are a snapshot taken at import and stay
+   * frozen — this does not change that. It is the handle a *detail* screen
+   * needs to fetch the things a snapshot never carried: the seller, the
+   * rating, the other sellers, the specification table. Fetch it through
+   * `GET /products/id/:productId`.
+   *
+   * An id rather than `provider`/`externalId` because those live on the
+   * product, not the item: returning them would mean joining the products
+   * collection for every item of every list, to serve one screen that shows
+   * one item.
+   */
+  sourceProductId: string | null;
 }
 
 export interface WishlistView {
@@ -122,6 +139,7 @@ export const toItemView = (item: WishlistItemDocument, maskForOwner = false): It
     status: hidden ? WishlistItemStatus.AVAILABLE : item.status,
     position: item.position,
     createdAt: item.createdAt,
+    sourceProductId: item.sourceProductId?.toString() ?? null,
   };
 };
 

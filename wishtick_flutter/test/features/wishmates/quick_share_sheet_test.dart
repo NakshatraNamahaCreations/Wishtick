@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
+import 'package:wishtick_flutter/features/wishlist/data/wishlist_repository.dart';
 import 'package:wishtick_flutter/features/wishmates/data/wishmates_repository.dart';
 import 'package:wishtick_flutter/features/wishmates/presentation/widgets/quick_share_sheet.dart';
 
+import '../../helpers/wishlist_fakes.dart';
 import '../../helpers/wishmates_fakes.dart';
 
 /// The quick-share sheet — the grid of WishMates that replaced typing an
@@ -30,6 +32,7 @@ void main() {
     WidgetTester tester,
     ShareTarget target, {
     ThemeData? theme,
+    FakeWishlistRepository? wishlists,
   }) async {
     tester.view
       ..physicalSize = const Size(393, 1200)
@@ -39,7 +42,13 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         key: UniqueKey(),
-        overrides: [wishmatesRepositoryProvider.overrideWithValue(repo)],
+        overrides: [
+          wishmatesRepositoryProvider.overrideWithValue(repo),
+          // A wishlist is shared by adding participants, so this is the
+          // repository the invite actually goes through.
+          if (wishlists != null)
+            wishlistRepositoryProvider.overrideWithValue(wishlists),
+        ],
         child: MaterialApp(
           theme: theme ?? AppTheme.light,
           home: Scaffold(body: QuickShareSheet(target: target)),
@@ -181,6 +190,78 @@ void main() {
     await pump(tester, publicList, theme: AppTheme.dark);
 
     expect(tester.takeException(), isNull);
+  });
+
+  group('the sent confirmation', () {
+    Future<void> sendTo(WidgetTester tester, List<String> names) async {
+      // A working one: without it the invite reaches the real repository and
+      // its network call, and nothing is ever confirmed.
+      await pump(tester, privateList, wishlists: FakeWishlistRepository());
+      for (final name in names) {
+        await tester.tap(find.text(name));
+        await tester.pump();
+      }
+      await tester.tap(find.textContaining('Send to'));
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('appears when the invite goes out', (tester) async {
+      await sendTo(tester, ['Priyal Sharma']);
+
+      expect(find.text('Invite sent'), findsOneWidget);
+
+      // Let it clear so the test does not end with a live timer.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('counts the people it went to', (tester) async {
+      await sendTo(tester, ['Priyal Sharma', 'Rohan Prasad']);
+
+      expect(find.text('Invite sent to 2 WishMates'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('takes itself away after two seconds, leaving the sheet', (
+      tester,
+    ) async {
+      await sendTo(tester, ['Priyal Sharma']);
+      expect(find.text('Invite sent'), findsOneWidget);
+
+      // Still up just before, gone just after: a dialog that never leaves
+      // traps the user behind a barrier they cannot tap through.
+      await tester.pump(const Duration(milliseconds: 1900));
+      expect(find.text('Invite sent'), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+      expect(find.text('Invite sent'), findsNothing);
+
+      // And it took only itself. Popping the sheet too would drop the user
+      // back to the wishlist with their other WishMates unpicked.
+      expect(find.byType(QuickShareSheet), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('says nothing when the send failed', (tester) async {
+      await pump(
+        tester,
+        privateList,
+        wishlists: FakeWishlistRepository()..failure = fakeApiFailure,
+      );
+
+      await tester.tap(find.text('Priyal Sharma'));
+      await tester.pump();
+      await tester.tap(find.textContaining('Send to'));
+      await tester.pump();
+      await tester.pump();
+
+      // Claiming an invite went out when it did not is worse than silence.
+      expect(find.text('Invite sent'), findsNothing);
+    });
   });
 
   group('the sheet is as tall as its contents', () {

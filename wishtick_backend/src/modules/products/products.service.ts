@@ -281,6 +281,30 @@ export class ProductsService {
   }
 
   /**
+   * The same answer as [getDetails], for a caller who has our catalogue id
+   * instead of a provider reference — a saved wishlist item, which stores
+   * `sourceProductId` and nothing else about where it came from.
+   *
+   * Resolves the id to its provider pair and delegates, so freshness, the
+   * provider call and the snapshot fallback all behave identically rather
+   * than being reimplemented here.
+   */
+  async getDetailsById(
+    productId: string,
+  ): Promise<{ product: NormalizedProduct; freshness: ResultFreshness }> {
+    if (!Types.ObjectId.isValid(productId)) {
+      throw new AppException(ErrorCode.PRODUCT_NOT_FOUND, 'Product not found', 404);
+    }
+
+    const snapshot = await this.findSnapshotById(new Types.ObjectId(productId));
+    if (!snapshot) {
+      throw new AppException(ErrorCode.PRODUCT_NOT_FOUND, 'Product not found', 404);
+    }
+
+    return this.getDetails(snapshot.provider, snapshot.externalId);
+  }
+
+  /**
    * The snapshot for an import, fetching it live if we have never seen it.
    * Falls back to a stored row when the provider is unavailable, so importing
    * still works during an outage.

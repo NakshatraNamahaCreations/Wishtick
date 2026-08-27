@@ -159,6 +159,10 @@ class _QuickShareSheetState extends ConsumerState<QuickShareSheet> {
         _sentTo.addAll(picked);
         _selected.clear();
       });
+      // Only on a clean send. The duplicate case below reports itself inline,
+      // and telling someone an invite went out when it did not would be worse
+      // than saying nothing.
+      unawaited(_confirmSent(picked.length));
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -173,6 +177,17 @@ class _QuickShareSheetState extends ConsumerState<QuickShareSheet> {
       });
     }
   }
+
+  /// Confirms the send, then takes itself away.
+  ///
+  /// Not a snackbar: the sheet is still up and a snackbar would slide in under
+  /// it. Not dismissible either — it is gone in [_kSentVisible] on its own, and
+  /// a tappable barrier only invites someone to fight it.
+  Future<void> _confirmSent(int count) => showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _SentDialog(count: count),
+  );
 
   Future<void> _copyLink(String url) async {
     await Clipboard.setData(ClipboardData(text: url));
@@ -275,6 +290,79 @@ class _QuickShareSheetState extends ConsumerState<QuickShareSheet> {
 
 /// How much of the screen the sheet may take before its grid starts scrolling.
 const _kMaxSheetFraction = 0.85;
+
+/// How long the "invite sent" confirmation stays up before dismissing itself.
+const _kSentVisible = Duration(seconds: 2);
+
+/// "Invite sent", shown over the sheet and gone again on its own.
+///
+/// A widget rather than a timer started beside the `showDialog` call, because
+/// the timer has to be cancelled when the dialog goes away: dismissed early —
+/// by the back button, or by the sheet closing under it — a live timer would
+/// pop whatever route had taken its place.
+class _SentDialog extends StatefulWidget {
+  const _SentDialog({required this.count});
+
+  /// How many people it went to, so the wording matches what was picked.
+  final int count;
+
+  @override
+  State<_SentDialog> createState() => _SentDialogState();
+}
+
+class _SentDialogState extends State<_SentDialog> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(_kSentVisible, () {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final message = widget.count == 1
+        ? 'Invite sent'
+        : 'Invite sent to ${widget.count} WishMates';
+
+    return AlertDialog(
+      backgroundColor: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.check_circle,
+            // The dialog's one piece of emphasis, so it reads at a glance in
+            // the two seconds it is up.
+            size: AppSizes.iconLg + AppSpacing.md,
+            color: colors.success,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: context.text.titleSmall?.copyWith(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// A spinner that occupies a row's worth of space rather than filling the
 /// sheet — a [Center] under [Flexible] would take every pixel offered and

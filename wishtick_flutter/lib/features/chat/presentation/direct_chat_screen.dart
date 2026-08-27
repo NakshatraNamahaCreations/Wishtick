@@ -18,6 +18,7 @@ import 'chat_controller.dart';
 import 'chat_list_screen.dart';
 import 'widgets/chat_bubbles.dart';
 import 'widgets/chat_composer.dart';
+import 'widgets/emoji_picker_sheet.dart';
 
 /// Resolves the 1:1 thread with one person, creating it on first open.
 ///
@@ -223,14 +224,10 @@ class _ThreadState extends ConsumerState<_Thread> {
           // `4177:6` draws a smiley between the field and Send. There is no
           // picker behind it yet, so it puts one in the field rather than
           // opening a sheet no frame specifies.
-          onEmoji: () {
-            final text = _composer.text;
-            _composer
-              ..text = '$text🙂'
-              ..selection = TextSelection.collapsed(
-                offset: _composer.text.length,
-              );
-          },
+          // Opens the keyboard rather than appending one fixed character,
+          // which is what this used to do.
+          onEmoji: () =>
+              unawaited(showEmojiPickerSheet(context, controller: _composer)),
         ),
       ],
     );

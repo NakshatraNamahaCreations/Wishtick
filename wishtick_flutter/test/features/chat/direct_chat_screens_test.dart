@@ -7,6 +7,7 @@ import 'package:wishtick_flutter/features/chat/data/chat_repository.dart';
 import 'package:wishtick_flutter/features/chat/data/chat_socket.dart';
 import 'package:wishtick_flutter/features/chat/presentation/chat_list_screen.dart';
 import 'package:wishtick_flutter/features/chat/presentation/direct_chat_screen.dart';
+import 'package:wishtick_flutter/features/chat/presentation/widgets/emoji_picker_sheet.dart';
 import 'package:wishtick_flutter/features/profile/data/profile_repository.dart';
 import 'package:wishtick_flutter/features/wishmates/data/wishmates_repository.dart';
 import 'package:wishtick_flutter/features/wishmates/domain/wishmate.dart';
@@ -290,6 +291,40 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('the composer', () {
+    testWidgets('offers no attach button — nothing was ever behind it', (
+      tester,
+    ) async {
+      chats.chat = buildDirectChat(id: 'chat_d1');
+      people.personProfile = buildProfile(
+        relationship: WishmateRelationship.wishmates,
+        person: buildWishmate(displayName: 'Rohan Prasad'),
+      );
+      await pump(tester, const DirectChatScreen(userId: 'u_rohan'));
+
+      // It was a bare Icon with no onTap: it looked like an affordance and did
+      // nothing when pressed, which is worse than not drawing it.
+      expect(find.byIcon(Icons.attach_file), findsNothing);
+    });
+
+    testWidgets('the smiley opens the emoji keyboard rather than typing one '
+        'fixed character', (tester) async {
+      chats.chat = buildDirectChat(id: 'chat_d1');
+      people.personProfile = buildProfile(
+        relationship: WishmateRelationship.wishmates,
+        person: buildWishmate(displayName: 'Rohan Prasad'),
+      );
+      await pump(tester, const DirectChatScreen(userId: 'u_rohan'));
+
+      await tester.tap(find.byIcon(Icons.emoji_emotions_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EmojiPickerSheet), findsOneWidget);
+      // The old behaviour appended a single hardcoded emoji to the field.
+      expect(find.text('🙂'), findsNothing);
     });
   });
 

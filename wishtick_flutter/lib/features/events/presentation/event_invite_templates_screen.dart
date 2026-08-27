@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../../core/media/media_repository.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/hex_color.dart';
@@ -10,7 +15,9 @@ import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../data/events_repository.dart';
 import '../domain/event.dart';
+import '../domain/invite_design.dart';
 import '../domain/invite_template.dart';
+import 'invite_designer_screen.dart';
 import 'widgets/invite_method_sheet.dart';
 
 /// Every design on offer. Not per-event: the catalogue is the same for
@@ -32,6 +39,54 @@ class EventInviteTemplatesScreen extends ConsumerStatefulWidget {
 
 class _EventInviteTemplatesScreenState
     extends ConsumerState<EventInviteTemplatesScreen> {
+  /// Opens the designer on a fixed background.
+  ///
+  /// The card the host draws is uploaded through the same `event_invite` media
+  /// path an uploaded file uses, and lands in the same `inviteMediaUrl`. There
+  /// is deliberately no third kind of invitation: a design *is* artwork, and
+  /// everywhere the invitation is shown already knows how to show artwork.
+  Future<void> _design(InviteBackground background) async {
+    await Navigator.of(context).push<InviteDesign>(
+      MaterialPageRoute(
+        builder: (_) => InviteDesignerScreen(
+          initial: InviteDesign.empty(background.key),
+          onDone: _saveCard,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveCard(Uint8List png, InviteDesign design) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final media = await ref
+          .read(mediaRepositoryProvider)
+          .uploadFile(
+            // `XFile.fromData` ignores its `name` on io, so the real filename
+            // has to travel separately — see MediaRepository.contentTypeFor.
+            file: XFile.fromData(png, name: 'invitation.png'),
+            purpose: MediaPurpose.eventInvite,
+            fileName: 'invitation.png',
+          );
+      await ref
+          .read(eventsRepositoryProvider)
+          .update(widget.eventId, inviteMediaId: media.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invitation saved.')));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Could not save that invitation. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// Null is the "All" tab.
   EventType? _filter;
 
@@ -145,6 +200,10 @@ class _EventInviteTemplatesScreenState
                     ),
                   ],
                 ),
+              ),
+              _DesignYourOwn(
+                backgrounds: InviteBackgrounds.forType(_filter),
+                onPick: (background) => unawaited(_design(background)),
               ),
               _FilterTabs(
                 selected: _filter,
@@ -378,6 +437,97 @@ class _TemplateCard extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: context.text.bodyMedium?.copyWith(color: colors.textPrimary),
         ),
+      ],
+    );
+  }
+}
+
+/// The bundled backgrounds, as a rail above the fixed designs.
+///
+/// Separate from the template grid because the two are different offers: a
+/// template is a finished layout the server fills in, and one of these is a
+/// blank canvas with the art already on it. Sharing a grid would make them look
+/// interchangeable when only one of them can be typed on.
+class _DesignYourOwn extends StatelessWidget {
+  const _DesignYourOwn({required this.backgrounds, required this.onPick});
+
+  final List<InviteBackground> backgrounds;
+  final ValueChanged<InviteBackground> onPick;
+
+  /// 9:16 thumbnails, so the rail previews the shape of the finished card.
+  static const _cardWidth = 108.0;
+  static final _railHeight = _cardWidth / InviteDesign.aspectRatio + 28;
+
+  @override
+  Widget build(BuildContext context) {
+    if (backgrounds.isEmpty) return const SizedBox.shrink();
+    final colors = context.colors;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xxl,
+            0,
+            AppSpacing.xxl,
+            AppSpacing.sm,
+          ),
+          child: Text(
+            'Design your own',
+            style: context.text.titleMedium?.copyWith(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: _railHeight,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+            itemCount: backgrounds.length,
+            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.md),
+            itemBuilder: (context, index) {
+              final background = backgrounds[index];
+              return Semantics(
+                button: true,
+                label: 'Design on ${background.label}',
+                child: GestureDetector(
+                  onTap: () => onPick(background),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        child: Image.asset(
+                          background.asset,
+                          width: _cardWidth,
+                          height: _cardWidth / InviteDesign.aspectRatio,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      SizedBox(
+                        width: _cardWidth,
+                        child: Text(
+                          background.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.text.bodySmall?.copyWith(
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
       ],
     );
   }
