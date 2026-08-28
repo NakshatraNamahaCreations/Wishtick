@@ -282,3 +282,18 @@ export class ExportGuestListQueryDto {
   @IsEnum(GuestListFormat)
   format?: GuestListFormat;
 }
+
+/**
+ * The ids a multi-select delete is asking to remove.
+ *
+ * Bulk rather than one call each, because the gesture is inherently plural:
+ * the host ticks several and presses delete once, and N round trips would let
+ * the list end up half-deleted with no single answer to report.
+ */
+export class BulkDeleteEventsDto {
+  @ApiProperty({ type: [String], description: 'Events to delete permanently' })
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsMongoId({ each: true })
+  ids!: string[];
+}

@@ -194,6 +194,23 @@ class EventsRepository {
     return InvitePreview.fromJson(json);
   }
 
+  /// Deletes events outright.
+  ///
+  /// Not cancel: the rows go, and any invite link for them stops resolving.
+  /// One call for the whole selection rather than one per event — the gesture
+  /// is plural, and N requests would let the list end up half-deleted with no
+  /// single answer to show.
+  ///
+  /// Returns how many were actually removed; ids the caller does not host are
+  /// skipped by the server rather than failing the batch.
+  Future<int> deleteMany(List<String> ids) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/events/bulk-delete',
+      body: {'ids': ids},
+    );
+    return json['deleted'] as int? ?? 0;
+  }
+
   // ── Guests ──────────────────────────────────────────────────────────────
 
   Future<List<EventInvite>> invites(String eventId) async {

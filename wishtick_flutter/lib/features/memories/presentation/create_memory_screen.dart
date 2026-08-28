@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +14,9 @@ import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
 import '../../events/presentation/widgets/relation_picker_sheet.dart';
+import '../../wishmates/domain/wishmate.dart';
+import '../../wishmates/presentation/widgets/person_avatar.dart';
+import '../../wishmates/presentation/widgets/wishmate_picker_sheet.dart';
 import 'create_memory_controller.dart';
 import 'widgets/occasion_grid.dart';
 
@@ -27,20 +32,85 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
   late final _title = TextEditingController(
     text: ref.read(createMemoryProvider).title,
   );
-  late final _person = TextEditingController(
-    text: ref.read(createMemoryProvider).personName,
-  );
   late final _description = TextEditingController(
     text: ref.read(createMemoryProvider).description,
   );
 
+  final _scrollController = ScrollController();
+
+  /// One per required field, so a too-early submit can scroll to the first
+  /// thing that is actually missing rather than to the top of the form.
+  final _fieldKeys = {
+    for (final field in MemoryField.values) field: GlobalKey(),
+  };
+
   bool _uploadingCover = false;
   String? _coverError;
 
+  /// Picks the WishMate the memory is for.
+  ///
+  /// A picker rather than a name field: the server refuses a recipient the
+  /// host is not linked to, so anything typed here could only be rejected —
+  /// and the account is what lets the capsule reach them when it opens.
+  Future<void> _pickRecipient() async {
+    final picked = await showWishmatePickerSheet(
+      context,
+      title: 'Who is this memory for?',
+      emptyMessage:
+          'A memory is made for a WishMate. Add someone first, and they will '
+          'appear here.',
+    );
+    if (picked == null || !mounted) return;
+    ref.read(createMemoryProvider.notifier).setRecipient(picked);
+  }
+
+  /// Save & Continue, pressed at any time — including while it looks disabled.
+  ///
+  /// A greyed-out button that does nothing is the whole complaint: on a form
+  /// long enough to scroll, the missing field is usually off screen, and the
+  /// button gives no clue which one it is. So it always answers — either by
+  /// moving on, or by saying what is missing, outlining it, and scrolling to
+  /// it.
+  void _onSaveAndContinue() {
+    final state = ref.read(createMemoryProvider);
+    if (state.step1Complete) {
+      unawaited(context.push<void>(AppRoutes.createMemoryUnlock));
+      return;
+    }
+
+    ref.read(createMemoryProvider.notifier).revealValidation();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(state.missingMessage)));
+
+    // The first one in screen order, so repeated presses walk down the form
+    // rather than jumping about.
+    final target = _fieldKeys[state.missingStep1.first]?.currentContext;
+    if (target != null) {
+      unawaited(
+        Scrollable.ensureVisible(
+          target,
+          duration: AppDurations.normal,
+          curve: Curves.easeOut,
+          // Not flush to the top: a field pinned to the very edge of the
+          // viewport reads as cut off rather than as the thing being pointed
+          // at.
+          alignment: 0.15,
+        ),
+      );
+    }
+  }
+
+  /// The error under a field, once a too-early submit has revealed them.
+  String? _errorFor(CreateMemoryState state, MemoryField field) =>
+      state.showValidation && state.missingStep1.contains(field)
+      ? 'Required'
+      : null;
+
   @override
   void dispose() {
+    _scrollController.dispose();
     _title.dispose();
-    _person.dispose();
     _description.dispose();
     super.dispose();
   }
@@ -92,6 +162,7 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
       backgroundColor: colors.background,
       appBar: circleBackAppBar(context, title: 'Create Memory'),
       body: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
           AppSpacing.sm,
@@ -106,8 +177,9 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
             textCapitalization: TextCapitalization.words,
             maxLength: 140,
             buildCounter: _noCounter,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Memory Name *',
+              errorText: _errorFor(state, MemoryField.title),
               hintText: "Ananya's Birthday",
             ),
             onChanged: notifier.setTitle,
@@ -121,24 +193,21 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
             children: [
               Expanded(
                 flex: 3,
-                child: TextField(
-                  controller: _person,
-                  textCapitalization: TextCapitalization.words,
-                  maxLength: 120,
-                  buildCounter: _noCounter,
-                  decoration: const InputDecoration(
-                    labelText: "Person's Name *",
-                    hintText: 'Ananya',
-                  ),
-                  onChanged: notifier.setPersonName,
+                child: _RecipientField(
+                  key: _fieldKeys[MemoryField.recipient],
+                  person: state.recipient,
+                  onTap: _pickRecipient,
+                  errorText: _errorFor(state, MemoryField.recipient),
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 flex: 2,
                 child: _RelationField(
+                  key: _fieldKeys[MemoryField.relation],
                   label: state.relationLabel,
                   onTap: _pickRelation,
+                  errorText: _errorFor(state, MemoryField.relation),
                 ),
               ),
             ],
@@ -149,8 +218,9 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
             textCapitalization: TextCapitalization.sentences,
             maxLines: 4,
             maxLength: kMemoryDescriptionMax,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Description *',
+              errorText: _errorFor(state, MemoryField.description),
               hintText:
                   "Let's make her day extra special. Join us in celebrating "
                   "Ananya's birthday.",
@@ -217,14 +287,9 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: state.step1Complete
-                  ? () => context.push<void>(AppRoutes.createMemoryUnlock)
-                  : null,
-              child: const Text('Save & Continue'),
-            ),
+          child: _SaveAndContinue(
+            enabled: state.step1Complete,
+            onPressed: _onSaveAndContinue,
           ),
         ),
       ),
@@ -250,10 +315,16 @@ class _SectionHeading extends StatelessWidget {
 
 /// Looks like a dropdown, opens the relation picker sheet (`2252:423`).
 class _RelationField extends StatelessWidget {
-  const _RelationField({required this.label, required this.onTap});
+  const _RelationField({
+    required this.label,
+    required this.onTap,
+    this.errorText,
+    super.key,
+  });
 
   final String? label;
   final VoidCallback onTap;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -262,7 +333,10 @@ class _RelationField extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: InputDecorator(
-        decoration: const InputDecoration(labelText: 'Relation *'),
+        decoration: InputDecoration(
+          labelText: 'Relation *',
+          errorText: errorText,
+        ),
         child: Row(
           children: [
             Expanded(
@@ -541,3 +615,106 @@ Widget? _noCounter(
   required bool isFocused,
   required int? maxLength,
 }) => null;
+
+/// The recipient row — a tap target that reads like the field it replaced.
+class _RecipientField extends StatelessWidget {
+  const _RecipientField({
+    required this.person,
+    required this.onTap,
+    this.errorText,
+    super.key,
+  });
+
+  final PersonIdentity? person;
+  final VoidCallback onTap;
+  final String? errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final chosen = person;
+
+    return Semantics(
+      button: true,
+      label: chosen == null ? 'Choose a WishMate' : chosen.name,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'WishMate *',
+            errorText: errorText,
+          ),
+          child: Row(
+            children: [
+              if (chosen != null) ...[
+                PersonAvatar(
+                  person: chosen,
+                  diameter: AppSizes.avatarSm,
+                  showPresence: false,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(
+                child: Text(
+                  chosen?.name ?? 'Choose',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.bodyLarge?.copyWith(
+                    color: chosen == null
+                        ? colors.textMuted
+                        : colors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The primary action, which answers a press even when it looks inactive.
+///
+/// A disabled [ElevatedButton] swallows the tap and says nothing, which on a
+/// form this long leaves the user pressing a grey rectangle with no idea which
+/// field is holding it. The button keeps its inactive look — it is honest
+/// about not being ready — but the press still lands, and [onPressed] is what
+/// decides whether to move on or explain.
+class _SaveAndContinue extends StatelessWidget {
+  const _SaveAndContinue({required this.enabled, required this.onPressed});
+
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            // Null while incomplete, purely so the theme paints it as
+            // disabled. The tap is caught above.
+            onPressed: enabled ? onPressed : null,
+            child: const Text('Save & Continue'),
+          ),
+        ),
+        if (!enabled)
+          Positioned.fill(
+            child: Semantics(
+              button: true,
+              label: 'Save & Continue',
+              hint: 'Some required fields are still empty',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onPressed,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}

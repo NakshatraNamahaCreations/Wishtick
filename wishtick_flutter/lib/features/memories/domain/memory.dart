@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../wishmates/domain/wishmate.dart';
+
 /// Where a capsule is in its life.
 ///
 /// `unlocked` is the only status in which wish content exists at all — the
@@ -128,6 +130,7 @@ class MemoryCapsule {
     required this.id,
     required this.title,
     required this.personName,
+    required this.person,
     required this.occasion,
     required this.status,
     required this.unlockAt,
@@ -149,7 +152,13 @@ class MemoryCapsule {
 
   final String id;
   final String title;
+
+  /// The recipient's name as it was when the capsule was made — see [person].
   final String personName;
+
+  /// The recipient, resolved. Null only for a capsule made before memories
+  /// were addressed to accounts; [personName] still names them.
+  final PersonIdentity? person;
 
   /// A `relation` taxonomy key, not a label.
   final String? relation;
@@ -207,6 +216,9 @@ class MemoryCapsule {
     id: json['id'] as String,
     title: json['title'] as String? ?? '',
     personName: json['personName'] as String? ?? '',
+    person: json['person'] == null
+        ? null
+        : PersonIdentity.fromJson(json['person'] as Map<String, dynamic>),
     relation: json['relation'] as String?,
     description: json['description'] as String?,
     occasion: json['occasion'] as String? ?? 'birthday',

@@ -1,5 +1,6 @@
 import 'package:wishtick_flutter/features/memories/data/memories_repository.dart';
 import 'package:wishtick_flutter/features/memories/domain/memory.dart';
+import 'package:wishtick_flutter/features/wishmates/domain/wishmate.dart';
 
 MemoryWish buildWish({
   required String id,
@@ -24,6 +25,7 @@ MemoryCapsule buildCapsule({
   String id = 'mem_1',
   String title = "Mridula's Birthday",
   String personName = 'Mridula',
+  PersonIdentity? person,
   MemoryStatus status = MemoryStatus.collecting,
   DateTime? unlockAt,
   int wishCount = 0,
@@ -36,6 +38,16 @@ MemoryCapsule buildCapsule({
   id: id,
   title: title,
   personName: personName,
+  person:
+      person ??
+      PersonIdentity(
+        userId: 'u_recipient',
+        username: 'mridula',
+        displayName: personName,
+        photoUrl: null,
+        online: false,
+        lastSeenAt: null,
+      ),
   occasion: 'birthday',
   status: status,
   // Far enough out that the countdown label is stable across a slow test run.
@@ -89,10 +101,19 @@ class FakeMemoriesRepository implements MemoriesRepository {
   @override
   Future<MemoryCapsule> get(String id) async => _byId(id);
 
+  /// Capsules somebody made about this user, for the "For You" rail.
+  List<MemoryCapsule> forMe = const [];
+
+  @override
+  Future<List<MemoryCapsule>> listForMe() async {
+    _maybeThrow();
+    return forMe;
+  }
+
   @override
   Future<MemoryCapsule> create({
     required String title,
-    required String personName,
+    required String recipientUserId,
     required String occasion,
     required DateTime unlockAt,
     required String timezone,
@@ -105,7 +126,7 @@ class FakeMemoriesRepository implements MemoriesRepository {
     _maybeThrow();
     createCalls.add({
       'title': title,
-      'personName': personName,
+      'recipientUserId': recipientUserId,
       'occasion': occasion,
       'unlockAt': unlockAt,
       'timezone': timezone,
@@ -115,14 +136,13 @@ class FakeMemoriesRepository implements MemoriesRepository {
       'includeYear': includeYear,
       'coverMediaId': coverMediaId,
     });
-    return buildCapsule(id: 'mem_new', title: title, personName: personName);
+    return buildCapsule(id: 'mem_new', title: title);
   }
 
   @override
   Future<MemoryCapsule> update(
     String id, {
     String? title,
-    String? personName,
     String? occasion,
     DateTime? unlockAt,
     String? timezone,

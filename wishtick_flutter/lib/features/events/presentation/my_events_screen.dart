@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../data/events_repository.dart';
 import '../domain/event.dart';
 import 'event_providers.dart';
 
@@ -46,6 +48,74 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
   bool _hosting = true;
   _When _when = _When.all;
 
+  /// The events ticked for deletion. Empty means the screen is in its normal
+  /// state — there is no separate "selection mode" flag to fall out of sync.
+  final _selected = <String>{};
+
+  bool _deleting = false;
+
+  bool get _selecting => _selected.isNotEmpty;
+
+  void _toggle(String id) => setState(() {
+    if (!_selected.remove(id)) _selected.add(id);
+  });
+
+  void _clearSelection() => setState(_selected.clear);
+
+  Future<void> _deleteSelected() async {
+    final count = _selected.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          count == 1 ? 'Delete this event?' : 'Delete $count events?',
+        ),
+        content: Text(
+          count == 1
+              ? 'It will be removed for good. Anyone holding an invitation '
+                    'link for it will find nothing there.'
+              : 'They will be removed for good. Anyone holding an invitation '
+                    'link for them will find nothing there.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      final deleted = await ref
+          .read(eventsRepositoryProvider)
+          .deleteMany(_selected.toList());
+      if (!mounted) return;
+      _clearSelection();
+      ref.invalidate(myEventsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            deleted == 1 ? 'Event deleted.' : '$deleted events deleted.',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -53,12 +123,24 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: circleBackAppBar(context, title: 'My Events & Invites'),
+      appBar: _selecting
+          ? _SelectionAppBar(
+              count: _selected.length,
+              busy: _deleting,
+              onCancel: _clearSelection,
+              onDelete: () => unawaited(_deleteSelected()),
+            )
+          : circleBackAppBar(context, title: 'My Events & Invites'),
       body: Column(
         children: [
           _Tabs(
             hosting: _hosting,
-            onSelect: (value) => setState(() => _hosting = value),
+            onSelect: (value) => setState(() {
+              _hosting = value;
+              // Selection belongs to the hosted grid; carrying it across would
+              // leave a delete armed against rows that are no longer on screen.
+              _selected.clear();
+            }),
           ),
           const SizedBox(height: AppSpacing.lg),
           _WhenPills(
@@ -68,7 +150,12 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
           const SizedBox(height: AppSpacing.lg),
           Expanded(
             child: _hosting
-                ? _HostedGrid(when: _when, now: now)
+                ? _HostedGrid(
+                    when: _when,
+                    now: now,
+                    selected: _selected,
+                    onToggle: _toggle,
+                  )
                 : _InvitedGrid(when: _when, now: now),
           ),
         ],
@@ -78,10 +165,19 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
 }
 
 class _HostedGrid extends ConsumerWidget {
-  const _HostedGrid({required this.when, required this.now});
+  const _HostedGrid({
+    required this.when,
+    required this.now,
+    required this.selected,
+    required this.onToggle,
+  });
 
   final _When when;
   final DateTime now;
+
+  /// Ids ticked for deletion. Non-empty puts the grid in selection mode.
+  final Set<String> selected;
+  final ValueChanged<String> onToggle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -107,11 +203,18 @@ class _HostedGrid extends ConsumerWidget {
                 title: event.title,
                 startsAt: event.startsAt,
                 imageUrl: event.inviteMediaUrl ?? event.coverUrl,
-                // The host's own event opens its guest list — the screen
-                // Sprint 7 built and nothing linked to.
-                onTap: () => unawaited(
-                  context.push<void>(AppRoutes.eventGuests(event.id)),
-                ),
+                selected: selected.contains(event.id),
+                // Once anything is ticked, a tap picks rather than opens.
+                // Leaving tap as "open" mid-selection is how people lose a
+                // selection they were half way through building.
+                onTap: selected.isEmpty
+                    ? () => unawaited(
+                        context.push<void>(AppRoutes.eventGuests(event.id)),
+                      )
+                    : () => onToggle(event.id),
+                // Long press is what starts it, the way every list that has
+                // ever had multi-select behaves.
+                onLongPress: () => onToggle(event.id),
                 footnote: _rsvpLine(event),
               ),
           ],
@@ -315,6 +418,8 @@ class _EventCard extends StatelessWidget {
     required this.startsAt,
     required this.imageUrl,
     required this.onTap,
+    this.onLongPress,
+    this.selected = false,
     this.footnote,
   });
 
@@ -322,6 +427,8 @@ class _EventCard extends StatelessWidget {
   final DateTime startsAt;
   final String? imageUrl;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool selected;
   final String? footnote;
 
   @override
@@ -330,17 +437,38 @@ class _EventCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: SizedBox(
-                width: double.infinity,
-                child: WishtickImage(url: imageUrl),
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: WishtickImage(url: imageUrl),
+                  ),
+                ),
+                if (selected)
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      border: Border.all(color: colors.primary, width: 3),
+                      // Dimmed as well as outlined: a border alone is easy to
+                      // miss on artwork that already has a strong edge.
+                      color: colors.primary.withValues(alpha: 0.18),
+                    ),
+                  ),
+                Positioned(
+                  top: AppSpacing.sm,
+                  right: AppSpacing.sm,
+                  child: _SelectionTick(selected: selected),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -396,4 +524,92 @@ class _Message extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// The tick in a card's corner while a selection is being built.
+///
+/// Always drawn once selection starts, filled or hollow, so the affordance is
+/// visible on every card rather than only on the ones already chosen.
+class _SelectionTick extends StatelessWidget {
+  const _SelectionTick({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    if (!selected) return const SizedBox.shrink();
+
+    return Container(
+      width: AppSizes.iconLg,
+      height: AppSizes.iconLg,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: colors.primary,
+        border: Border.all(color: colors.onPrimary, width: 2),
+      ),
+      child: Icon(Icons.check, size: AppSizes.iconSm, color: colors.onPrimary),
+    );
+  }
+}
+
+/// Replaces the title bar while a selection is being built.
+///
+/// A separate bar rather than a floating button: it takes over the one place
+/// on screen that is always visible, says how many are picked, and gives an
+/// unambiguous way out — which a bottom sheet over a scrolling grid does not.
+class _SelectionAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _SelectionAppBar({
+    required this.count,
+    required this.busy,
+    required this.onCancel,
+    required this.onDelete,
+  });
+
+  final int count;
+  final bool busy;
+  final VoidCallback onCancel;
+  final VoidCallback onDelete;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return AppBar(
+      backgroundColor: colors.background,
+      leading: IconButton(
+        onPressed: busy ? null : onCancel,
+        icon: const Icon(Icons.close),
+        tooltip: 'Cancel selection',
+      ),
+      title: Text(
+        '$count selected',
+        style: context.text.titleMedium?.copyWith(
+          color: colors.textPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      actions: [
+        if (busy)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: SizedBox(
+              width: AppSizes.iconMd,
+              height: AppSizes.iconMd,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+          )
+        else
+          IconButton(
+            onPressed: onDelete,
+            icon: Icon(Icons.delete_outline, color: colors.danger),
+            tooltip: 'Delete selected',
+          ),
+      ],
+    );
+  }
 }

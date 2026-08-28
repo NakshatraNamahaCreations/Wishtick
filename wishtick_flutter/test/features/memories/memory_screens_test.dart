@@ -12,6 +12,7 @@ import 'package:wishtick_flutter/features/memories/presentation/memory_experienc
 import 'package:wishtick_flutter/features/memories/presentation/widgets/memory_players.dart';
 
 import '../../helpers/memory_fakes.dart';
+import '../../helpers/wishmates_fakes.dart';
 
 void main() {
   late FakeMemoriesRepository repo;
@@ -71,9 +72,40 @@ void main() {
 
       expect(find.text('Every wish locked with Love'), findsOneWidget);
       expect(find.text('Upcoming Unlocks'), findsOneWidget);
+      expect(find.text('For You'), findsOneWidget);
       expect(find.text('Created By You'), findsOneWidget);
-      expect(find.text('Contributed By You'), findsOneWidget);
       expect(find.text("Ananya's Birthday"), findsWidgets);
+
+      // Below the fold now that "For You" sits above it.
+      await tester.scrollUntilVisible(
+        find.text('Contributed By You'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Contributed By You'), findsOneWidget);
+    });
+
+    testWidgets('a memory made for you lands in For You, above your own', (
+      tester,
+    ) async {
+      repo.forMe = [
+        buildCapsule(
+          id: 'm9',
+          title: 'A memory for you',
+          status: MemoryStatus.unlocked,
+          isHost: false,
+        ),
+      ];
+      await pump(tester, const MemoriesTabScreen());
+
+      expect(find.text('For You'), findsOneWidget);
+      expect(find.text('A memory for you'), findsWidgets);
+      // First, because it is the one thing on this tab the viewer has not
+      // already seen — the others are their own work.
+      expect(
+        tester.getTopLeft(find.text('For You')).dy,
+        lessThan(tester.getTopLeft(find.text('Created By You')).dy),
+      );
     });
 
     testWidgets('an opened capsule appears in the Unlocked row', (
@@ -300,16 +332,45 @@ void main() {
     void fillStep1() {
       notifier()
         ..setTitle("Ananya's Birthday")
-        ..setPersonName('Ananya')
+        ..setRecipient(buildIdentity(userId: 'u_ananya', displayName: 'Ananya'))
         ..setRelation('partner_wife', 'Wife')
         ..setDescription('Join us.');
     }
+
+    test('step 1 is not complete until a WishMate is chosen', () {
+      notifier()
+        ..setTitle("Ananya's Birthday")
+        ..setRelation('partner_wife', 'Wife')
+        ..setDescription('Join us.');
+
+      // A memory is made *for* an account, and the server refuses a recipient
+      // the host is not linked to — so there is nothing to submit yet.
+      expect(state().recipient, isNull);
+      expect(state().step1Complete, isFalse);
+
+      notifier().setRecipient(
+        buildIdentity(userId: 'u_ananya', displayName: 'Ananya'),
+      );
+      expect(state().step1Complete, isTrue);
+    });
+
+    test('submitting sends the recipient id, not a typed name', () async {
+      fillStep1();
+      notifier()
+        ..setUnlockDate(DateTime.now().add(const Duration(days: 3)))
+        ..setUnlockTime(const MemoryTimeOfDay(18, 30));
+
+      await notifier().submit();
+
+      expect(repo.createCalls.single['recipientUserId'], 'u_ananya');
+      expect(repo.createCalls.single.containsKey('personName'), isFalse);
+    });
 
     test('step 1 needs all four starred fields', () {
       expect(state().step1Complete, isFalse);
       notifier()
         ..setTitle("Ananya's Birthday")
-        ..setPersonName('Ananya')
+        ..setRecipient(buildIdentity(userId: 'u_ananya', displayName: 'Ananya'))
         ..setDescription('Join us.');
       // Relation is still missing.
       expect(state().step1Complete, isFalse);

@@ -45,9 +45,28 @@ export class MemoryCapsule {
   title!: string;
 
   /**
-   * Who the memory is *for*. A name, not a user reference: the frame types a
-   * name and a relation, and the recipient frequently has no account — the
-   * whole point is to surprise them with one.
+   * Who the memory is *for* — a WishMate of the host.
+   *
+   * This used to be a typed name, on the reasoning that the recipient often
+   * had no account. It is an account now, and the host must be linked to it:
+   * a memory is a private thing assembled about somebody, and "anyone may
+   * build one about anyone" is not a position worth defending. Being a real
+   * user is also what lets the capsule *reach* them when it opens, rather than
+   * depending on the host remembering to send a link.
+   *
+   * Nullable only for capsules written before that rule. Those keep working
+   * for their host and simply never appear in anyone's "For You".
+   */
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'User', default: null })
+  recipientUserId!: Types.ObjectId | null;
+
+  /**
+   * The recipient's name as it was when the capsule was made.
+   *
+   * Kept alongside [recipientUserId] rather than always resolved live, because
+   * this is the copy on a card that may not open for a year — and a display
+   * name the recipient changes in between should not silently retitle
+   * somebody's memory of them. Legacy capsules have only this.
    */
   @Prop({ type: String, required: true, trim: true, maxlength: 120 })
   personName!: string;
@@ -121,6 +140,8 @@ export const MemoryCapsuleSchema = SchemaFactory.createForClass(MemoryCapsule);
 MemoryCapsuleSchema.index({ 'share.slug': 1 }, { unique: true });
 // "Created By You" (`4104:1433`), newest first.
 MemoryCapsuleSchema.index({ hostId: 1, createdAt: -1 });
+// "For You": the recipient's own list, newest first.
+MemoryCapsuleSchema.index({ recipientUserId: 1, unlockAt: -1 });
 // The unlock sweeper's safety net — a delayed job is the primary trigger, but a
 // job lost to a Redis flush must still be caught.
 MemoryCapsuleSchema.index({ status: 1, unlockAt: 1 });

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../wishmates/domain/wishmate.dart';
 import '../data/memories_repository.dart';
 import '../domain/memory.dart';
 
@@ -41,12 +42,30 @@ class MemoryTimeOfDay {
   int get hashCode => Object.hash(hour, minute);
 }
 
+/// A required field on step 1, in the order it appears on screen.
+///
+/// One list rather than a set of booleans: the same order drives the sentence
+/// the toast reads out, which field gets outlined, and which one the screen
+/// scrolls to — three things that have to agree, and would not for long if
+/// each were written separately.
+enum MemoryField {
+  title('Memory name'),
+  recipient('WishMate'),
+  relation('Relation'),
+  description('Description');
+
+  const MemoryField(this.label);
+
+  /// How the field is named to the user, matching its label on the form.
+  final String label;
+}
+
 /// The draft a capsule is composed from, across both create steps.
 @immutable
 class CreateMemoryState {
   const CreateMemoryState({
     this.title = '',
-    this.personName = '',
+    this.recipient,
     this.relationKey,
     this.relationLabel,
     this.description = '',
@@ -62,11 +81,16 @@ class CreateMemoryState {
     this.created,
     this.error,
     this.busy = false,
+    this.showValidation = false,
   });
 
   // Step 1 (`4104:1539`)
   final String title;
-  final String personName;
+
+  /// Who the memory is for — picked from the host's WishMates rather than
+  /// typed. The server refuses a recipient the host is not linked to, so a
+  /// name would have nothing to check against.
+  final PersonIdentity? recipient;
   final String? relationKey;
   final String? relationLabel;
   final String description;
@@ -93,12 +117,35 @@ class CreateMemoryState {
     orElse: () => kMemoryOccasions.first,
   );
 
-  /// Everything `4104:1539` marks with an asterisk.
-  bool get step1Complete =>
-      title.trim().isNotEmpty &&
-      personName.trim().isNotEmpty &&
-      relationKey != null &&
-      description.trim().isNotEmpty;
+  /// Whether the form has been submitted once with something missing.
+  ///
+  /// Errors stay hidden until then: marking a field red before anyone has
+  /// touched it tells a user they have done something wrong on arrival.
+  final bool showValidation;
+
+  /// Everything `4104:1539` marks with an asterisk, in screen order.
+  List<MemoryField> get missingStep1 => [
+    if (title.trim().isEmpty) MemoryField.title,
+    if (recipient == null) MemoryField.recipient,
+    if (relationKey == null) MemoryField.relation,
+    if (description.trim().isEmpty) MemoryField.description,
+  ];
+
+  bool get step1Complete => missingStep1.isEmpty;
+
+  /// What the toast says when Save & Continue is pressed too early.
+  ///
+  /// Names the fields rather than saying "some fields are required": the whole
+  /// problem is that a greyed-out button tells you nothing, and a message that
+  /// also tells you nothing is no better.
+  String get missingMessage {
+    final labels = missingStep1.map((f) => f.label).toList();
+    if (labels.isEmpty) return '';
+    final list = labels.length == 1
+        ? labels.single
+        : '${labels.take(labels.length - 1).join(', ')} and ${labels.last}';
+    return 'Add the $list to continue.';
+  }
 
   bool get step2Complete => unlockDate != null && unlockTime != null;
 
@@ -124,7 +171,7 @@ class CreateMemoryState {
 
   CreateMemoryState copyWith({
     String? title,
-    String? personName,
+    PersonIdentity? recipient,
     String? relationKey,
     String? relationLabel,
     String? description,
@@ -140,11 +187,12 @@ class CreateMemoryState {
     MemoryCapsule? created,
     String? error,
     bool? busy,
+    bool? showValidation,
     bool clearError = false,
     bool clearUnlockDate = false,
   }) => CreateMemoryState(
     title: title ?? this.title,
-    personName: personName ?? this.personName,
+    recipient: recipient ?? this.recipient,
     relationKey: relationKey ?? this.relationKey,
     relationLabel: relationLabel ?? this.relationLabel,
     description: description ?? this.description,
@@ -160,6 +208,7 @@ class CreateMemoryState {
     created: created ?? this.created,
     error: clearError ? null : (error ?? this.error),
     busy: busy ?? this.busy,
+    showValidation: showValidation ?? this.showValidation,
   );
 }
 
@@ -171,8 +220,14 @@ class CreateMemoryController extends Notifier<CreateMemoryState> {
   void setTitle(String value) =>
       state = state.copyWith(title: value, clearError: true);
 
-  void setPersonName(String value) =>
-      state = state.copyWith(personName: value, clearError: true);
+  /// Turns on the red outlines, after a too-early submit.
+  ///
+  /// One-way: once a user has been shown what is missing, hiding it again as
+  /// they fix one field would take the list away mid-repair.
+  void revealValidation() => state = state.copyWith(showValidation: true);
+
+  void setRecipient(PersonIdentity value) =>
+      state = state.copyWith(recipient: value, clearError: true);
 
   void setRelation(String key, String label) =>
       state = state.copyWith(relationKey: key, relationLabel: label);
@@ -217,7 +272,7 @@ class CreateMemoryController extends Notifier<CreateMemoryState> {
           .read(memoriesRepositoryProvider)
           .create(
             title: state.title.trim(),
-            personName: state.personName.trim(),
+            recipientUserId: state.recipient!.userId,
             occasion: state.occasionKey,
             unlockAt: unlockAt,
             // The server requires an IANA zone and Dart cannot report one —

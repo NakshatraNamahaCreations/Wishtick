@@ -101,7 +101,16 @@ void main() {
       await passSplash(tester);
 
       expect(find.byType(WelcomeScreen), findsOneWidget);
-      expect(find.text('Continue'), findsOneWidget);
+      // The carousel's copy and its button are drawn into the artwork, so the
+      // slide's own name is what proves the first one is up.
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.label == WelcomeScreen.slides.first.action,
+        ),
+        findsOneWidget,
+      );
       // No stored session, so the server is never asked who we are.
       expect(auth.meCalls, 0);
     });

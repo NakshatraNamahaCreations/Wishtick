@@ -81,6 +81,10 @@ flutter:
     - assets/images/Memory/
     - assets/images/Wishlist/
     - assets/images/template_bg/
+    - assets/onboarding_carousel/1.webp
+    - assets/onboarding_carousel/2.webp
+    - assets/onboarding_carousel/3.webp
+    - assets/onboarding_carousel/4.webp
     - assets/avatar/
     - assets/onboarding/
     - assets/logo/

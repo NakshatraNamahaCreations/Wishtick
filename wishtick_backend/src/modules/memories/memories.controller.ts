@@ -47,6 +47,14 @@ export class MemoriesController {
     return this.memories.listMine(userId);
   }
 
+  @Get('for-me')
+  @ApiOperation({
+    summary: '"For You" — unlocked capsules somebody made about the caller',
+  })
+  listForMe(@CurrentUser('id') userId: string): Promise<MemoryCapsuleView[]> {
+    return this.memories.listForMe(userId);
+  }
+
   @Get('contributed')
   @ApiOperation({ summary: '"Contributed By You" (`4104:1433`)' })
   listContributed(@CurrentUser('id') userId: string): Promise<MemoryCapsuleView[]> {

@@ -8,6 +8,15 @@ final myMemoriesProvider = FutureProvider.autoDispose<List<MemoryCapsule>>(
   (ref) => ref.watch(memoriesRepositoryProvider).listMine(),
 );
 
+/// "For You" — unlocked capsules somebody made *about* the signed-in user.
+///
+/// Sealed ones are deliberately absent: the server withholds them, because
+/// listing a capsule before it opens would tell its recipient both that it
+/// exists and who is building it.
+final memoriesForMeProvider = FutureProvider.autoDispose<List<MemoryCapsule>>(
+  (ref) => ref.watch(memoriesRepositoryProvider).listForMe(),
+);
+
 /// "Contributed By You" (`4104:1433`).
 final contributedMemoriesProvider =
     FutureProvider.autoDispose<List<MemoryCapsule>>(

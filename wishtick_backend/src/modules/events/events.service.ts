@@ -280,6 +280,55 @@ export class EventsService {
     return toEventView(event, { isHost: true, shareBaseUrl: this.shareBaseUrl });
   }
 
+  /**
+   * Deletes events outright, with everything that hangs off them.
+   *
+   * Not [cancel]: that keeps the row so a guest holding an invite link still
+   * sees "cancelled" rather than a dead page. Delete is for the host who wants
+   * it *gone* — a draft they abandoned, a test event, a duplicate — and the
+   * cost is exactly that: any invite link stops resolving.
+   *
+   * Ownership is checked per id, and anything the caller does not host is
+   * skipped rather than failing the batch. A multi-select that refuses
+   * wholesale because one row went stale is worse than one that deletes what
+   * it can and says how many.
+   */
+  async deleteMany(ids: string[], userId: string): Promise<{ deleted: number }> {
+    const valid = ids.filter((id) => Types.ObjectId.isValid(id));
+    if (valid.length === 0) return { deleted: 0 };
+
+    const owned = await this.model
+      .find({
+        _id: { $in: valid.map((id) => new Types.ObjectId(id)) },
+        hostId: new Types.ObjectId(userId),
+      })
+      .select('_id')
+      .exec();
+    if (owned.length === 0) return { deleted: 0 };
+
+    const eventIds = owned.map((e) => e._id);
+
+    // Order matters. Reminders first: a job that fires against a deleted event
+    // would log an error for a party nobody is having.
+    for (const id of eventIds) {
+      await this.reminders.cancel(id.toString());
+    }
+
+    // Then the things that point at it. A wishlist left holding a dangling
+    // eventId is worse than a deleted event: EVENT_ONLY resolves through that
+    // id, so the list would answer 404 to everyone — including its owner — with
+    // nothing on screen to explain why. Detached rather than deleted: the list
+    // is the host's own, and they did not ask to lose it.
+    await this.wishlists
+      .updateMany({ eventId: { $in: eventIds } }, { $set: { eventId: null } })
+      .exec();
+    await this.invites.deleteMany({ eventId: { $in: eventIds } }).exec();
+    await this.model.deleteMany({ _id: { $in: eventIds } }).exec();
+
+    this.logger.log(`Deleted ${eventIds.length} event(s) for ${userId}`);
+    return { deleted: eventIds.length };
+  }
+
   // ── RSVP counts ───────────────────────────────────────────────────────────
 
   /**

@@ -32,6 +32,7 @@ interface Actor {
 }
 
 interface MemoryView {
+  person: { userId: string; displayName: string | null } | null;
   id: string;
   title: string;
   personName: string;
@@ -67,16 +68,44 @@ describe('Memories (e2e)', () => {
 
   const IN_A_WEEK = (): string => new Date(Date.now() + 7 * 86_400_000).toISOString();
 
+  /** Links two accounts, which a memory's recipient now has to be. */
+  const becomeWishmates = async (a: Actor, b: Actor): Promise<void> => {
+    await request(app.getHttpServer())
+      .post(`${V1}/people/${b.userId}/request`)
+      .set(auth(a.token))
+      .expect(201);
+    const received = await request(app.getHttpServer())
+      .get(`${V1}/wishlinks/received`)
+      .set(auth(b.token))
+      .expect(200);
+    const linkId = (received.body as Envelope<{ linkId: string }[]>).data[0].linkId;
+    await request(app.getHttpServer())
+      .post(`${V1}/wishlinks/${linkId}/accept`)
+      .set(auth(b.token))
+      .expect(201);
+  };
+
+  /** A host with a WishMate to make memories for. */
+  const hostAndRecipient = async (): Promise<{ host: Actor; recipient: Actor }> => {
+    const host = await newUser();
+    const recipient = await newUser();
+    await becomeWishmates(host, recipient);
+    return { host, recipient };
+  };
+
   const createMemory = async (
     host: Actor,
     over: Record<string, unknown> = {},
+    recipient?: Actor,
   ): Promise<MemoryView> => {
+    const forWhom = recipient ?? (await hostAndRecipient()).recipient;
+    if (!recipient) await becomeWishmates(host, forWhom);
     const res = await request(app.getHttpServer())
       .post(`${V1}/memories`)
       .set(auth(host.token))
       .send({
         title: "Ananya's Birthday",
-        personName: 'Ananya',
+        recipientUserId: forWhom.userId,
         relation: 'partner_wife',
         occasion: 'birthday',
         unlockAt: IN_A_WEEK(),
@@ -132,15 +161,22 @@ describe('Memories (e2e)', () => {
 
   describe('creating a capsule (4104:1539, 2198:73)', () => {
     it('round-trips the fields the create flow collects', async () => {
-      const host = await newUser();
-      const created = await createMemory(host, {
-        description: "Let's make her day extra special.",
-        occasionDate: '2026-07-17T00:00:00.000Z',
-        includeYear: true,
-      });
+      const { host, recipient } = await hostAndRecipient();
+      const created = await createMemory(
+        host,
+        {
+          description: "Let's make her day extra special.",
+          occasionDate: '2026-07-17T00:00:00.000Z',
+          includeYear: true,
+        },
+        recipient,
+      );
 
       expect(created.title).toBe("Ananya's Birthday");
-      expect(created.personName).toBe('Ananya');
+      // Named from the recipient's own account, and carrying their id so the
+      // capsule can reach them when it opens.
+      expect(created.person?.userId).toBe(recipient.userId);
+      expect(created.personName).toBe('Aarav Sharma');
       expect(created.occasion).toBe('birthday');
       expect(created.status).toBe('collecting');
       expect(created.isHost).toBe(true);
@@ -149,13 +185,13 @@ describe('Memories (e2e)', () => {
     });
 
     it('refuses an unlock instant in the past', async () => {
-      const host = await newUser();
+      const { host } = await hostAndRecipient();
       const res = await request(app.getHttpServer())
         .post(`${V1}/memories`)
         .set(auth(host.token))
         .send({
           title: 'Too late',
-          personName: 'Ananya',
+          recipientUserId: host.userId,
           occasion: 'birthday',
           unlockAt: new Date(Date.now() - 60_000).toISOString(),
           timezone: 'Asia/Kolkata',
@@ -166,7 +202,7 @@ describe('Memories (e2e)', () => {
     });
 
     it('refuses an unlock instant beyond the ceiling', async () => {
-      const host = await newUser();
+      const { host, recipient } = await hostAndRecipient();
       const farOff = new Date();
       farOff.setFullYear(farOff.getFullYear() + 6);
       await request(app.getHttpServer())
@@ -174,7 +210,7 @@ describe('Memories (e2e)', () => {
         .set(auth(host.token))
         .send({
           title: 'Far future',
-          personName: 'Ananya',
+          recipientUserId: recipient.userId,
           occasion: 'birthday',
           unlockAt: farOff.toISOString(),
           timezone: 'Asia/Kolkata',
@@ -183,9 +219,9 @@ describe('Memories (e2e)', () => {
     });
 
     it('attaches a cover, and refuses one uploaded for something else', async () => {
-      const host = await newUser();
+      const { host, recipient } = await hostAndRecipient();
       const coverId = await uploadMedia(host, MediaPurpose.MEMORY_COVER);
-      const withCover = await createMemory(host, { coverMediaId: coverId });
+      const withCover = await createMemory(host, { coverMediaId: coverId }, recipient);
       expect(withCover.coverUrl).toEqual(expect.any(String));
 
       const wrongPurpose = await uploadMedia(host, MediaPurpose.WISHLIST_COVER);
@@ -194,7 +230,7 @@ describe('Memories (e2e)', () => {
         .set(auth(host.token))
         .send({
           title: 'Wrong cover',
-          personName: 'Ananya',
+          recipientUserId: recipient.userId,
           occasion: 'birthday',
           unlockAt: IN_A_WEEK(),
           timezone: 'Asia/Kolkata',
@@ -202,6 +238,63 @@ describe('Memories (e2e)', () => {
         })
         .expect(400);
       expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEDIA_TYPE_NOT_ALLOWED);
+    });
+
+    it('refuses a recipient who is not a WishMate', async () => {
+      const host = await newUser();
+      const stranger = await newUser();
+
+      const res = await request(app.getHttpServer())
+        .post(`${V1}/memories`)
+        .set(auth(host.token))
+        .send({
+          title: 'Uninvited',
+          recipientUserId: stranger.userId,
+          occasion: 'birthday',
+          unlockAt: IN_A_WEEK(),
+          timezone: 'Asia/Kolkata',
+        })
+        .expect(403);
+
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.FORBIDDEN);
+    });
+
+    it('refuses a pending request — asking is not being linked', async () => {
+      const host = await newUser();
+      const other = await newUser();
+      await request(app.getHttpServer())
+        .post(`${V1}/people/${other.userId}/request`)
+        .set(auth(host.token))
+        .expect(201);
+
+      // Sent, not accepted. A memory assembled about somebody who has not
+      // agreed to be connected is exactly what this rule is for.
+      await request(app.getHttpServer())
+        .post(`${V1}/memories`)
+        .set(auth(host.token))
+        .send({
+          title: 'Presumptuous',
+          recipientUserId: other.userId,
+          occasion: 'birthday',
+          unlockAt: IN_A_WEEK(),
+          timezone: 'Asia/Kolkata',
+        })
+        .expect(403);
+    });
+
+    it('refuses a memory addressed to yourself', async () => {
+      const host = await newUser();
+      await request(app.getHttpServer())
+        .post(`${V1}/memories`)
+        .set(auth(host.token))
+        .send({
+          title: 'For me',
+          recipientUserId: host.userId,
+          occasion: 'birthday',
+          unlockAt: IN_A_WEEK(),
+          timezone: 'Asia/Kolkata',
+        })
+        .expect(400);
     });
 
     it('answers 404 — not 403 — for a stranger editing it', async () => {
@@ -292,6 +385,52 @@ describe('Memories (e2e)', () => {
   });
 
   describe('unlocking', () => {
+    it('reaches the recipient only once it opens', async () => {
+      const { host, recipient } = await hostAndRecipient();
+      const memory = await createMemory(host, {}, recipient);
+
+      const forMe = () =>
+        request(app.getHttpServer())
+          .get(`${V1}/memories/for-me`)
+          .set(auth(recipient.token))
+          .expect(200);
+
+      // Sealed: absent. Listing it early would tell the recipient both that a
+      // memory about them exists and who is building it — the two things the
+      // time-lock is there to keep.
+      expect((await forMe()).body.data).toHaveLength(0);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/unlock`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const mine = (await forMe()).body as Envelope<MemoryView[]>;
+      expect(mine.data).toHaveLength(1);
+      expect(mine.data[0].id).toBe(memory.id);
+      // Theirs to read, not to run: they did not make it.
+      expect(mine.data[0].isHost).toBe(false);
+    });
+
+    it('a memory about someone else never appears in your For You', async () => {
+      const { host, recipient } = await hostAndRecipient();
+      const bystander = await newUser();
+      const memory = await createMemory(host, {}, recipient);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/unlock`)
+        .set(auth(host.token))
+        .expect(200);
+
+      for (const actor of [bystander, host]) {
+        const res = await request(app.getHttpServer())
+          .get(`${V1}/memories/for-me`)
+          .set(auth(actor.token))
+          .expect(200);
+        // The host's own capsule belongs in "Created by you", not here.
+        expect((res.body as Envelope<MemoryView[]>).data).toHaveLength(0);
+      }
+    });
+
     it('opens on the host’s say-so and hands over every wish', async () => {
       const host = await newUser();
       const friend = await newUser();

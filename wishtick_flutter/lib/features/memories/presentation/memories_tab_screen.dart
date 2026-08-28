@@ -22,6 +22,7 @@ class MemoriesTabScreen extends ConsumerWidget {
     final colors = context.colors;
     final mine = ref.watch(myMemoriesProvider);
     final contributed = ref.watch(contributedMemoriesProvider);
+    final forMe = ref.watch(memoriesForMeProvider);
     final unlocked = ref.watch(unlockedMemoriesProvider);
     final upcoming = ref.watch(upcomingMemoriesProvider);
 
@@ -34,6 +35,7 @@ class MemoriesTabScreen extends ConsumerWidget {
         onRefresh: () async {
           ref.invalidate(myMemoriesProvider);
           ref.invalidate(contributedMemoriesProvider);
+          ref.invalidate(memoriesForMeProvider);
           await ref.read(myMemoriesProvider.future);
         },
         child: ListView(
@@ -59,6 +61,15 @@ class MemoriesTabScreen extends ConsumerWidget {
                 title: 'Upcoming Unlocks',
                 capsules: upcoming.value ?? const [],
                 emptyLine: 'Nothing sealed just yet.',
+              ),
+              // Before "Created By You": a memory somebody made *about* you is
+              // the one thing on this tab you have not already seen.
+              _Carousel(
+                title: 'For You',
+                capsules: forMe.value ?? const [],
+                emptyLine:
+                    'When a WishMate opens a memory they made for you, it '
+                    'appears here.',
               ),
               _Carousel(
                 title: 'Created By You',

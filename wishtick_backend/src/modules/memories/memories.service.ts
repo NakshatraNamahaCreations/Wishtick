@@ -13,6 +13,9 @@ import type { AppConfig } from 'src/config/configuration';
 import { QUEUE } from 'src/infra/queue/queue.constants';
 import { MediaPurpose } from 'src/modules/media/schemas/media.schema';
 import { MediaService } from 'src/modules/media/media.service';
+import { UsersService } from 'src/modules/users/users.service';
+import { WishmatesService } from 'src/modules/wishmates/wishmates.service';
+import { WishmateRelationship, type PublicIdentity } from 'src/modules/wishmates/wishmates.views';
 import type { CreateMemoryDto, UpdateMemoryDto } from './dto/memory.dto';
 import { MEMORY_UNLOCK_JOB, unlockJobId, type MemoryUnlockJobData } from './memory.jobs';
 import { MEMORY_MAX_UNLOCK_YEARS, MEMORY_TRANSITIONS, MemoryStatus } from './memory.types';
@@ -42,6 +45,8 @@ export class MemoriesService {
     private readonly wishModel: Model<MemoryWishDocument>,
     @InjectQueue(QUEUE.SCHEDULER) private readonly scheduler: Queue,
     private readonly media: MediaService,
+    private readonly wishmates: WishmatesService,
+    private readonly users: UsersService,
     private readonly emitter: EventEmitter2,
     private readonly config: ConfigService<AppConfig, true>,
   ) {
@@ -65,10 +70,14 @@ export class MemoriesService {
       );
     }
 
+    const recipient = await this.assertWishmate(userId, dto.recipientUserId);
+
     const capsule = await this.capsuleModel.create({
       hostId: new Types.ObjectId(userId),
       title: dto.title,
-      personName: dto.personName,
+      recipientUserId: new Types.ObjectId(dto.recipientUserId),
+      // Snapshotted, not resolved on read — see the note on the schema field.
+      personName: recipient.displayName ?? recipient.username ?? 'A WishMate',
       relation: dto.relation ?? null,
       description: dto.description ?? null,
       occasion: dto.occasion,
@@ -92,7 +101,6 @@ export class MemoriesService {
     this.assertMutable(capsule);
 
     if (dto.title !== undefined) capsule.title = dto.title;
-    if (dto.personName !== undefined) capsule.personName = dto.personName;
     if (dto.relation !== undefined) capsule.relation = dto.relation;
     if (dto.description !== undefined) capsule.description = dto.description;
     if (dto.occasion !== undefined) capsule.occasion = dto.occasion;
@@ -162,6 +170,25 @@ export class MemoriesService {
     const capsules = await this.capsuleModel
       .find({ _id: { $in: capsuleIds }, hostId: { $ne: new Types.ObjectId(userId) } })
       .sort({ unlockAt: 1 })
+      .exec();
+    return Promise.all(capsules.map((c) => this.assemble(c, userId)));
+  }
+
+  /**
+   * "For You" — capsules somebody else made *about* the caller.
+   *
+   * Only once they have opened. A sealed capsule is a surprise, and listing it
+   * early would tell the recipient both that it exists and who made it, which
+   * is the one thing the time-lock is for.
+   */
+  async listForMe(userId: string): Promise<MemoryCapsuleView[]> {
+    const capsules = await this.capsuleModel
+      .find({
+        recipientUserId: new Types.ObjectId(userId),
+        status: MemoryStatus.UNLOCKED,
+      })
+      .sort({ unlockAt: -1 })
+      .limit(MAX_OPEN_CAPSULES)
       .exec();
     return Promise.all(capsules.map((c) => this.assemble(c, userId)));
   }
@@ -284,7 +311,73 @@ export class MemoriesService {
     viewerId: string | null,
   ): Promise<MemoryCapsuleView> {
     const wishes = await this.wishesOf(capsule._id);
-    return toMemoryCapsuleView(capsule, wishes, { viewerId, shareBaseUrl: this.web });
+    return toMemoryCapsuleView(capsule, wishes, {
+      viewerId,
+      shareBaseUrl: this.web,
+      person: await this.recipientOf(capsule),
+    });
+  }
+
+  /**
+   * The recipient's identity for the view.
+   *
+   * Falls back to the name snapshotted on the capsule when the account has no
+   * profile row — somebody who signed up and filled nothing in is still a
+   * perfectly good recipient, and a null here would leave the card that says
+   * who the memory is for blank.
+   */
+  private async recipientOf(capsule: MemoryCapsuleDocument): Promise<PublicIdentity | null> {
+    const id = capsule.recipientUserId;
+    if (!id) return null;
+
+    const [identity] = await this.wishmates.identitiesOf([id.toString()]);
+    return (
+      identity ?? {
+        userId: id.toString(),
+        username: null,
+        displayName: capsule.personName,
+        photoUrl: null,
+        avatarKey: null,
+        online: false,
+        lastSeenAt: null,
+      }
+    );
+  }
+
+  /**
+   * Refuses a recipient the caller is not linked to.
+   *
+   * Checked on the server rather than left to the picker: the client only ever
+   * offers WishMates, but "the client only offers X" has never been a reason
+   * the server may accept Y — and a memory names a real person and collects
+   * what other people say about them.
+   */
+  private async assertWishmate(hostId: string, recipientUserId: string): Promise<PublicIdentity> {
+    if (hostId === recipientUserId) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'A memory is made for someone else', 400);
+    }
+
+    const relationship = await this.wishmates.relationshipWith(hostId, recipientUserId);
+    if (relationship !== WishmateRelationship.WISHMATES) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'You can only make a memory for a WishMate', 403);
+    }
+
+    const [identity] = await this.wishmates.identitiesOf([recipientUserId]);
+    if (identity?.displayName) return identity;
+
+    // Linked but with no profile row, or one with no display name — an account
+    // that signed up and filled little in. Real enough to receive a memory, and
+    // the signup name is a better thing to write on the card than a placeholder.
+    const user = await this.users.findById(recipientUserId);
+    return {
+      userId: recipientUserId,
+      username: identity?.username ?? null,
+      displayName: user?.name?.trim() || null,
+      photoUrl: identity?.photoUrl ?? null,
+      avatarKey: identity?.avatarKey ?? null,
+      online: identity?.online ?? false,
+      lastSeenAt: identity?.lastSeenAt ?? null,
+    };
   }
 
   private async resolveCover(userId: string, mediaId: string): Promise<string | null> {

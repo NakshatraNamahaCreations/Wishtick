@@ -1,3 +1,4 @@
+import type { PublicIdentity } from 'src/modules/wishmates/wishmates.views';
 import { MEMORY_CONTENT_VISIBLE, MemoryStatus } from './memory.types';
 import type { MemoryCapsuleDocument } from './schemas/memory-capsule.schema';
 import type { MemoryWishDocument } from './schemas/memory-wish.schema';
@@ -26,6 +27,13 @@ export interface MemoryCapsuleView {
   id: string;
   title: string;
   personName: string;
+
+  /**
+   * The recipient, resolved. Null for a capsule made before memories were
+   * addressed to accounts — [personName] still names them.
+   */
+  person: PublicIdentity | null;
+
   relation: string | null;
   description: string | null;
   occasion: string;
@@ -94,7 +102,11 @@ export const toMemoryWishView = (wish: MemoryWishDocument): MemoryWishView => ({
 export const toMemoryCapsuleView = (
   capsule: MemoryCapsuleDocument,
   wishes: MemoryWishDocument[],
-  opts: { viewerId: string | null; shareBaseUrl?: string },
+  opts: {
+    viewerId: string | null;
+    shareBaseUrl?: string;
+    person?: PublicIdentity | null;
+  },
 ): MemoryCapsuleView => {
   const isHost = opts.viewerId !== null && capsule.hostId.toString() === opts.viewerId;
   const unlocked = MEMORY_CONTENT_VISIBLE.includes(capsule.status);
@@ -103,6 +115,7 @@ export const toMemoryCapsuleView = (
     id: capsule._id.toString(),
     title: capsule.title,
     personName: capsule.personName,
+    person: opts.person ?? null,
     relation: capsule.relation,
     description: capsule.description,
     occasion: capsule.occasion,

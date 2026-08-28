@@ -39,6 +39,9 @@ void main() {
     // test surface defaults to unasked — meaning a test that never sets this
     // cannot tell a real inset from none at all. See the test that does.
     double topInset = 0,
+    // The welcome artwork is full-bleed 9:16, so these tests need a phone
+    // rather than the default 800x600 landscape window.
+    Size surface = const Size(393, 852),
   }) async {
     SharedPreferences.setMockInitialValues({
       ThemeModeController.prefsKey: themeMode,
@@ -50,6 +53,11 @@ void main() {
       ..physicalSize = const Size(393, 852)
       ..devicePixelRatio = 1.0
       ..padding = FakeViewPadding(top: topInset);
+    addTearDown(tester.view.reset);
+
+    tester.view
+      ..physicalSize = surface
+      ..devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
@@ -72,14 +80,26 @@ void main() {
     return auth;
   }
 
+  /// The hit area over the button drawn into a slide's artwork.
+  ///
+  /// Matched on the Semantics *widget* rather than with `bySemanticsLabel`:
+  /// that finder resolves to the merged route-level node, whose box is the
+  /// whole screen, so tapping it lands in the middle of the picture and misses
+  /// the button entirely.
+  Finder slideButton(String action) => find.byWidgetPredicate(
+    (w) => w is Semantics && w.properties.label == action,
+  );
+
+  Future<void> tapSlideButton(WidgetTester tester, String action) async {
+    await tester.tap(slideButton(action));
+    await tester.pumpAndSettle();
+  }
+
   /// Walks the carousel to the last slide and taps through to sign-in.
   Future<void> reachMobileScreen(WidgetTester tester) async {
-    for (var i = 0; i < WelcomeScreen.slides.length - 1; i++) {
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
+    for (final slide in WelcomeScreen.slides) {
+      await tapSlideButton(tester, slide.action);
     }
-    await tester.tap(find.text('Get Started'));
-    await tester.pumpAndSettle();
   }
 
   Future<void> enterNumber(WidgetTester tester, String number) async {
@@ -101,28 +121,38 @@ void main() {
       await pumpApp(tester);
 
       expect(find.byType(WelcomeScreen), findsOneWidget);
-      expect(find.text('Make Every\nWish Count!'), findsOneWidget);
-      expect(find.text('Continue'), findsOneWidget);
+      // The artwork carries its own headline and body, so there is nothing to
+      // find as text — the drawn button's name is the only string this screen
+      // still owns.
+      expect(slideButton(WelcomeScreen.slides.first.action), findsOneWidget);
     });
 
     testWidgets('advances through all four slides', (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
-      expect(find.text('Every Ocassion\nMade Special!'), findsOneWidget);
+      for (final slide in WelcomeScreen.slides.take(3)) {
+        await tapSlideButton(tester, slide.action);
+      }
 
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
-      expect(find.text('Great Gifts\nBring Us Together!'), findsOneWidget);
+      expect(slideButton('Start Wishticking'), findsOneWidget);
+      // And the earlier slides are gone rather than stacked behind it.
+      expect(slideButton('Create Wishlist'), findsNothing);
+    });
 
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
-      expect(find.text('The Little Moments\nMatter Most !'), findsOneWidget);
+    testWidgets('every slide names its own button, so a reader can act on '
+        'artwork it cannot read', (tester) async {
+      await pumpApp(tester);
 
-      // The final slide's button changes label.
-      expect(find.text('Get Started'), findsOneWidget);
-      expect(find.text('Continue'), findsNothing);
+      for (final slide in WelcomeScreen.slides) {
+        expect(
+          slideButton(slide.action),
+          findsOneWidget,
+          reason: '${slide.figmaNodeId} has no reachable button',
+        );
+        if (slide != WelcomeScreen.slides.last) {
+          await tapSlideButton(tester, slide.action);
+        }
+      }
     });
 
     testWidgets('leads into the sign-in screen', (tester) async {
@@ -133,196 +163,144 @@ void main() {
       expect(find.text('Ready to Celebrate?'), findsOneWidget);
     });
 
-    /// The 6×6 circular dots, in tree order — distinguished from any other
-    /// circular decoration on the page by that fixed size.
-    List<Color?> dotColors(WidgetTester tester) {
-      return tester
-          .widgetList<Container>(find.byType(Container))
-          .where((c) {
-            final decoration = c.decoration;
-            return decoration is BoxDecoration &&
-                decoration.shape == BoxShape.circle &&
-                c.constraints?.minWidth == 6 &&
-                c.constraints?.minHeight == 6;
-          })
-          .map((c) => (c.decoration! as BoxDecoration).color)
-          .toList();
-    }
-
-    testWidgets('the dots track the current slide', (tester) async {
+    testWidgets('the hit area sits on the button drawn into the artwork', (
+      tester,
+    ) async {
       await pumpApp(tester);
-      final colors = WishtickColors.light;
 
-      expect(dotColors(tester), [
-        colors.primary,
-        colors.border,
-        colors.border,
-        colors.border,
-      ]);
+      // The whole point of the approach: a rect measured off the picture. If
+      // it drifted to the middle of the screen every tap would still "work"
+      // in a test that only counts taps, so this pins *where* it is.
+      final slide = WelcomeScreen.slides.first;
+      final screen = tester.getRect(find.byType(WelcomeScreen));
+      final hit = tester.getRect(
+        find.descendant(
+          of: slideButton(slide.action),
+          matching: find.byType(GestureDetector),
+        ),
+      );
 
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
-
-      expect(dotColors(tester), [
-        colors.border,
-        colors.primary,
-        colors.border,
-        colors.border,
-      ]);
+      // Low on the screen, where every one of the four designs draws it.
+      expect(hit.center.dy / screen.height, greaterThan(0.80));
+      expect(hit.center.dy / screen.height, lessThan(0.98));
+      // And roughly button-shaped rather than a stray full-screen box — the
+      // failure mode when a finder resolves to a merged semantics node.
+      expect(hit.width, lessThan(screen.width));
+      expect(hit.height, lessThan(screen.height * 0.15));
+      expect(hit.height, greaterThan(24));
     });
 
-    testWidgets(
-      'the dots are grouped with the body copy, not a separate sibling '
-      'below the whole slide',
-      (tester) async {
-        await pumpApp(tester);
+    testWidgets('no aspect ratio crops the artwork or strands the button', (
+      tester,
+    ) async {
+      // 20:9 is the shape that broke it first: `cover` scaled the 9:16 design
+      // to the height and cut the headline off the left edge and the logo off
+      // the right. Nothing in these images is croppable, so the fit shows all
+      // of it and letterboxes the difference.
+      for (final surface in const [
+        Size(393, 852), // a tall phone, 20:9
+        Size(1000, 800), // a tablet, wider than the art
+        Size(360, 640), // 9:16 exactly
+      ]) {
+        await pumpApp(tester, surface: surface);
 
-        // Regression guard: the dots used to be a sibling *after* a PageView
-        // whose page centred headline+body within its full height — so the
-        // gap to the dots was mostly empty flex space, not a fixed distance,
-        // and grew or shrank with device height. Asserting the dots live
-        // inside the same scrollable as the body text pins the structural
-        // fix (see the note in welcome_screen.dart) rather than a raw pixel
-        // gap, which shifts under any unrelated layout change.
-        final slideScrollable = find.ancestor(
-          of: find.text(
-            'Create your personal wishlist and help your loved ones '
-            "choose gifts you'll truly cherish.",
-          ),
-          matching: find.byType(SingleChildScrollView),
-        );
+        final screen = tester.getRect(find.byType(WelcomeScreen));
+
+        // The fit itself, because `getRect` on the Image returns its *box* —
+        // which is the whole screen under either fit — and so cannot tell a
+        // cropped painting from an uncropped one.
         expect(
-          find.descendant(of: slideScrollable, matching: find.byType(Row)),
-          findsOneWidget,
-          reason: 'the dots row should be inside the slide, not after it',
-        );
-      },
-    );
-
-    testWidgets(
-      'the dots sit right above Continue — the fixed gap only, no leftover '
-      'centring slack',
-      (tester) async {
-        await pumpApp(tester);
-
-        // Regression guard for a second bug the fix above didn't catch on
-        // its own: a Column's mainAxisAlignment does nothing inside a
-        // SingleChildScrollView (the scroll view hands it unbounded height,
-        // so it always shrink-wraps to the top) — so grouping the dots with
-        // the text still left slack piling up *below* them, between the
-        // dots and the button, instead of above the headline where it
-        // belongs. The fix needs a LayoutBuilder + ConstrainedBox for
-        // `end` alignment to have anywhere to push into — see the note in
-        // welcome_screen.dart.
-        final dotsBottom = tester.getBottomLeft(find.byType(Row).last).dy;
-        final buttonTop = tester
-            .getTopLeft(find.widgetWithText(ElevatedButton, 'Continue'))
-            .dy;
-
-        // AppSpacing.xl (20) is the *only* fixed gap between them; a few
-        // pixels either side covers font-metric rounding, not slack.
-        expect(buttonTop - dotsBottom, closeTo(20, 4));
-      },
-    );
-
-    testWidgets(
-      'the hero image keeps its size regardless of the status bar inset',
-      (tester) async {
-        // Regression guard for a bug the *previous* fix introduced: wrapping
-        // the whole screen in SafeArea shrank the image's box by the inset,
-        // and BoxFit.cover needed less crop to fill a shorter box — exposing
-        // a flat band near the subject's lap that the original crop was
-        // hiding. The image must render at the *same* size whether or not a
-        // status bar is present; legibility over it is a scrim's job (the
-        // next test), not the image's own size.
-        const inset = 40.0;
-
-        await pumpApp(tester);
-        final heightNoInset = tester.getSize(find.byType(Image)).height;
-
-        await pumpApp(tester, topInset: inset);
-        final heightWithInset = tester.getSize(find.byType(Image)).height;
-
-        expect(heightWithInset, heightNoInset);
-      },
-    );
-
-    testWidgets(
-      'a scrim covers the status bar area so its icons stay legible over '
-      'the photo',
-      (tester) async {
-        const inset = 40.0;
-        await pumpApp(tester, topInset: inset);
-
-        // The image runs full-bleed under the status bar on purpose (see the
-        // test above) — legibility comes from a gradient sized to the inset,
-        // not from pushing the photo down.
-        final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
-          find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
-        );
-        expect(
-          region.value,
-          SystemUiOverlayStyle.light,
-          reason: 'icons need to read against the scrim, not the photo',
+          tester.widget<Image>(find.byType(Image).first).fit,
+          BoxFit.contain,
+          reason: '$surface',
         );
 
-        final scrim = tester.widget<Container>(
-          find
-              .descendant(
-                of: find.byType(Stack),
-                matching: find.byType(Container),
-              )
-              .first,
-        );
-        expect(scrim.constraints?.maxHeight, inset);
-        expect(
-          (scrim.decoration! as BoxDecoration).gradient,
-          isA<LinearGradient>(),
-        );
-      },
-    );
-
-    testWidgets(
-      'the hero photo fades into the page colour at its bottom edge, not a '
-      'hard cut',
-      (tester) async {
-        await pumpApp(tester);
-
-        final fade = tester.widget<FractionallySizedBox>(
+        final hit = tester.getRect(
           find.descendant(
-            of: find.byType(Stack),
-            matching: find.byType(FractionallySizedBox),
+            of: slideButton(WelcomeScreen.slides.first.action),
+            matching: find.byType(GestureDetector),
           ),
         );
         expect(
-          fade.heightFactor,
-          0.12,
-          reason: 'matches the fade sampled from the Figma export',
+          hit.bottom,
+          lessThanOrEqualTo(screen.bottom + 1),
+          reason: '$surface',
         );
+        expect(hit.top, greaterThanOrEqualTo(screen.top), reason: '$surface');
 
-        final decoratedBox = tester.widget<DecoratedBox>(
-          find.descendant(
-            of: find.byType(FractionallySizedBox),
-            matching: find.byType(DecoratedBox),
-          ),
-        );
-        final gradient =
-            (decoratedBox.decoration as BoxDecoration).gradient!
-                as LinearGradient;
+        // And the hit area must sit where the *painted* artwork puts it. This
+        // is the assertion that fails if the fit and the position maths ever
+        // disagree: under `cover` on a tall phone the design is wider than the
+        // screen, so the button starts further left than its fraction of the
+        // screen width — a tappable area no longer over the button.
+        final art = WelcomeScreen.artworkAspectRatio;
+        final drawnWidth = surface.width / surface.height > art
+            ? surface.height * art
+            : surface.width;
+        final originX = (surface.width - drawnWidth) / 2;
         expect(
-          gradient.colors.first,
-          WishtickColors.light.background.withValues(alpha: 0),
+          hit.left,
+          closeTo(
+            originX + WelcomeScreen.slides.first.button.left * drawnWidth,
+            0.5,
+          ),
+          reason: '$surface',
         );
-        expect(gradient.colors.last, WishtickColors.light.background);
-      },
-    );
+      }
+    });
 
-    testWidgets('the page is the app beige, not white', (tester) async {
-      await pumpApp(tester);
+    testWidgets('the letterbox is the same white the artwork ends in', (
+      tester,
+    ) async {
+      await pumpApp(tester, surface: const Size(393, 852));
 
+      // Every slide's top and bottom rows are pure white — see
+      // welcome_artwork_test.dart — so a band of anything else would draw a
+      // seam straight across the design.
       expect(
         tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
-        WishtickColors.light.background,
+        WishtickColors.light.artworkCanvas,
+      );
+      expect(WishtickColors.light.artworkCanvas, const Color(0xFFFFFFFF));
+      // And it must not follow the theme: the artwork cannot.
+      expect(
+        WishtickColors.dark.artworkCanvas,
+        WishtickColors.light.artworkCanvas,
+      );
+    });
+
+    testWidgets('the status bar icons are dark, because the band behind them '
+        'is white', (tester) async {
+      await pumpApp(tester, topInset: 40);
+
+      // On a phone taller than 9:16 the status bar sits over the letterbox,
+      // which is white; light icons would be invisible there. All four designs
+      // are light at the top, so dark reads against the artwork too.
+      final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+      );
+      expect(region.value, SystemUiOverlayStyle.dark);
+    });
+
+    testWidgets('nothing is drawn over the artwork', (tester) async {
+      await pumpApp(tester);
+
+      // The headline, body and button are all in the picture. A Text or a
+      // painted button here would double whatever the artwork already says —
+      // which is exactly what the previous layout did.
+      expect(
+        find.descendant(
+          of: find.byType(WelcomeScreen),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(WelcomeScreen),
+          matching: find.byType(ElevatedButton),
+        ),
+        findsNothing,
       );
     });
   });

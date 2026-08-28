@@ -788,6 +788,121 @@ describe('Events & invites (e2e)', () => {
    * URL sit in a group chat. Everything after the join is the existing invite
    * machinery, so these tests care mostly about who is turned away.
    */
+  describe('deleting events (multi-select)', () => {
+    const bulkDelete = (actor: Actor, ids: string[]) =>
+      request(app.getHttpServer())
+        .post(`${V1}/events/bulk-delete`)
+        .set(auth(actor.token))
+        .send({ ids });
+
+    it('removes the events and everything hanging off them', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const keep = await createEvent(host);
+      const drop = await createEvent(host);
+      await publish(host, drop.id);
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${drop.id}/invites`)
+        .set(auth(host.token))
+        .send({ recipients: [{ userId: guest.userId }] })
+        .expect(200);
+
+      const res = await bulkDelete(host, [drop.id]).expect(200);
+      expect((res.body as Envelope<{ deleted: number }>).data.deleted).toBe(1);
+
+      // Gone, not cancelled — the host asked for it to be removed.
+      await request(app.getHttpServer())
+        .get(`${V1}/events/${drop.id}`)
+        .set(auth(host.token))
+        .expect(404);
+
+      // The invite went with it. A row pointing at an event that no longer
+      // exists would sit in the guest's list forever with nothing to open.
+      const invited = await request(app.getHttpServer())
+        .get(`${V1}/events/invited`)
+        .set(auth(guest.token))
+        .expect(200);
+      expect((invited.body as Envelope<{ id: string }[]>).data).toHaveLength(0);
+
+      // And the one that was not selected is untouched.
+      await request(app.getHttpServer())
+        .get(`${V1}/events/${keep.id}`)
+        .set(auth(host.token))
+        .expect(200);
+    });
+
+    it('deletes several at once', async () => {
+      const host = await newUser();
+      const ids = [
+        (await createEvent(host)).id,
+        (await createEvent(host)).id,
+        (await createEvent(host)).id,
+      ];
+
+      const res = await bulkDelete(host, ids).expect(200);
+      expect((res.body as Envelope<{ deleted: number }>).data.deleted).toBe(3);
+
+      const mine = await request(app.getHttpServer())
+        .get(`${V1}/events/mine`)
+        .set(auth(host.token))
+        .expect(200);
+      expect((mine.body as Envelope<unknown[]>).data).toHaveLength(0);
+    });
+
+    it('skips what the caller does not host rather than failing the batch', async () => {
+      const host = await newUser();
+      const stranger = await newUser();
+      const mine = await createEvent(host);
+      const theirs = await createEvent(stranger);
+
+      const res = await bulkDelete(host, [mine.id, theirs.id]).expect(200);
+
+      // One deleted, one silently skipped. Refusing the whole request over a
+      // row that went stale would leave the host unable to clear anything.
+      expect((res.body as Envelope<{ deleted: number }>).data.deleted).toBe(1);
+      await request(app.getHttpServer())
+        .get(`${V1}/events/${theirs.id}`)
+        .set(auth(stranger.token))
+        .expect(200);
+    });
+
+    it('frees a wishlist the event was holding rather than orphaning it', async () => {
+      const host = await newUser();
+      const wishlist = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists`)
+          .set(auth(host.token))
+          .send({ title: 'Gift ideas', visibility: WishlistVisibility.EVENT_ONLY })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      const event = await createEvent(host, {
+        wishlistIds: [wishlist.data.id],
+      });
+
+      await bulkDelete(host, [event.id]).expect(200);
+
+      const after = await request(app.getHttpServer())
+        .get(`${V1}/wishlists/${wishlist.data.id}`)
+        .set(auth(host.token))
+        .expect(200);
+
+      // Still the host's, and no longer pointing at anything. A dangling
+      // eventId leaves the list stuck in a visibility that can never resolve —
+      // EVENT_ONLY admits accepted invitees of an event that is gone, so it is
+      // permanently invisible to everyone but its owner while still claiming
+      // to belong to a party.
+      expect((after.body as Envelope<{ eventId: string | null }>).data.eventId).toBeNull();
+    });
+
+    it('refuses more ids than a multi-select could produce', async () => {
+      const host = await newUser();
+      await bulkDelete(
+        host,
+        Array.from({ length: 51 }, () => newObjectId()),
+      ).expect(400);
+    });
+  });
+
   describe('join by share link', () => {
     const publicEvent = async (host: Actor, over: Record<string, unknown> = {}) => {
       const event = await createEvent(host, { visibility: 'public', ...over });

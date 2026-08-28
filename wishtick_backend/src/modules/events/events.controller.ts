@@ -24,6 +24,7 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import { Public } from 'src/common/decorators/public.decorator';
 import {
+  BulkDeleteEventsDto,
   BulkInviteDto,
   CreateEventDto,
   ExportGuestListQueryDto,
@@ -175,6 +176,22 @@ export class EventsController {
     const event = await this.events.findOwnedOrFail(id, userId);
     await this.previews.refreshEventCard(event).catch(() => undefined);
     return view;
+  }
+
+  @Post('events/bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Delete events permanently (multi-select)',
+    description:
+      'Unlike cancel, the rows are removed — any invite link for them stops ' +
+      'resolving. Ids the caller does not host are skipped, not rejected.',
+  })
+  bulkDelete(
+    @CurrentUser('id') userId: string,
+    @Body() dto: BulkDeleteEventsDto,
+  ): Promise<{ deleted: number }> {
+    return this.events.deleteMany(dto.ids, userId);
   }
 
   @Delete('events/:id')

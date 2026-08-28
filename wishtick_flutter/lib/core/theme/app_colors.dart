@@ -21,6 +21,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     required this.onCta,
     required this.presenceOnline,
     required this.inviteInks,
+    required this.artworkCanvas,
     required this.accent,
     required this.onAccent,
     required this.accentSubtle,
@@ -97,6 +98,15 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   /// the page colour, so it never sits on a surface it has to contrast with,
   /// and 'online' should not change hue when the lights go out.
   final Color presenceOnline;
+
+  /// What sits behind a composed, full-bleed illustration.
+  ///
+  /// White in *both* themes, unlike every other surface here. The welcome
+  /// carousel's four designs are fixed images with pure-white top and bottom
+  /// edges; on a phone taller than the 9:16 they were drawn at, the letterbox
+  /// abuts those edges. A canvas that followed the theme would draw a visible
+  /// seam across artwork that cannot follow it back.
+  final Color artworkCanvas;
 
   /// The ink swatches offered in the invitation designer.
   ///
@@ -257,6 +267,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     cta: AppPalette.plumDeep,
     onCta: AppPalette.ivory,
     presenceOnline: AppPalette.presenceGreen,
+    artworkCanvas: AppPalette.white,
     inviteInks: [
       AppPalette.inviteInkBlack,
       AppPalette.inviteInkWhite,
@@ -335,6 +346,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     cta: AppPalette.plum,
     onCta: AppPalette.ivory,
     presenceOnline: AppPalette.presenceGreen,
+    artworkCanvas: AppPalette.white,
     inviteInks: [
       AppPalette.inviteInkBlack,
       AppPalette.inviteInkWhite,
@@ -403,6 +415,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   WishtickColors copyWith({
     Brightness? brightness,
     List<Color>? inviteInks,
+    Color? artworkCanvas,
     Color? primary,
     Color? onPrimary,
     Color? primaryDeep,
@@ -458,6 +471,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     return WishtickColors(
       brightness: brightness ?? this.brightness,
       inviteInks: inviteInks ?? this.inviteInks,
+      artworkCanvas: artworkCanvas ?? this.artworkCanvas,
       primary: primary ?? this.primary,
       onPrimary: onPrimary ?? this.onPrimary,
       primaryDeep: primaryDeep ?? this.primaryDeep,
@@ -521,6 +535,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
       // Handed across, not blended: these are the host's ink, and a card
       // half-way through a theme animation must not repaint itself.
       inviteInks: t < 0.5 ? inviteInks : other.inviteInks,
+      artworkCanvas: c(artworkCanvas, other.artworkCanvas),
       primary: c(primary, other.primary),
       onPrimary: c(onPrimary, other.onPrimary),
       primaryDeep: c(primaryDeep, other.primaryDeep),

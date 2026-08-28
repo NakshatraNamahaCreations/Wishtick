@@ -36,9 +36,25 @@ class MemoriesRepository {
     return MemoryCapsule.fromJson(json);
   }
 
+  /// Creates a capsule for a WishMate.
+  ///
+  /// [recipientUserId], not a typed name: the server refuses a recipient the
+  /// caller is not linked to, and being a real account is what lets the capsule
+  /// reach them when it opens.
+  /// "For You" — unlocked capsules somebody made about the caller.
+  ///
+  /// Only the opened ones: a sealed capsule is a surprise, and the server keeps
+  /// it out of this list rather than trusting the client not to draw it.
+  Future<List<MemoryCapsule>> listForMe() async {
+    final json = await _api.get<List<dynamic>>('/memories/for-me');
+    return json
+        .map((e) => MemoryCapsule.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<MemoryCapsule> create({
     required String title,
-    required String personName,
+    required String recipientUserId,
     required String occasion,
     required DateTime unlockAt,
     required String timezone,
@@ -52,7 +68,7 @@ class MemoriesRepository {
       '/memories',
       body: {
         'title': title,
-        'personName': personName,
+        'recipientUserId': recipientUserId,
         'occasion': occasion,
         'unlockAt': unlockAt.toUtc().toIso8601String(),
         'timezone': timezone,
@@ -70,7 +86,6 @@ class MemoriesRepository {
   Future<MemoryCapsule> update(
     String id, {
     String? title,
-    String? personName,
     String? occasion,
     DateTime? unlockAt,
     String? timezone,
@@ -84,7 +99,6 @@ class MemoriesRepository {
       '/memories/$id',
       body: {
         'title': ?title,
-        'personName': ?personName,
         'occasion': ?occasion,
         'unlockAt': ?unlockAt?.toUtc().toIso8601String(),
         'timezone': ?timezone,

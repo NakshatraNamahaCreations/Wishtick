@@ -79,11 +79,19 @@ InviteTemplate buildTemplate({
 );
 
 class FakeEventsRepository implements EventsRepository {
-  FakeEventsRepository({List<EventInvite>? invites, WishtickEventDetail? event})
-    : guests = invites ?? [],
-      event = event ?? buildEvent();
+  FakeEventsRepository({
+    List<EventInvite>? invites,
+    WishtickEventDetail? event,
+    List<WishtickEventDetail>? hosted,
+  }) : guests = invites ?? [],
+       event = event ?? buildEvent(),
+       hosted = hosted ?? [event ?? buildEvent()];
 
   WishtickEventDetail event;
+
+  /// What "My Events" lists. Separate from [event], which is the single
+  /// capsule the detail screens read.
+  List<WishtickEventDetail> hosted;
 
   /// Not named `invites` — that collides with `EventsRepository.invites()`.
   List<EventInvite> guests;
@@ -110,7 +118,10 @@ class FakeEventsRepository implements EventsRepository {
   }
 
   @override
-  Future<List<WishtickEventDetail>> listMine() async => [event];
+  Future<List<WishtickEventDetail>> listMine() async {
+    _maybeThrow();
+    return hosted;
+  }
 
   /// Empty by default: these tests exercise the host's side, and inventing an
   /// invitation would put a guest rail in front of screens that have none.
@@ -223,6 +234,17 @@ class FakeEventsRepository implements EventsRepository {
     _maybeThrow();
     invitedUserIds.addAll(userIds);
     return const BulkInviteResult(created: [], duplicates: 0, skipped: 0);
+  }
+
+  /// Ids handed to the last bulk delete, in the order they were sent.
+  final deletedIds = <String>[];
+
+  @override
+  Future<int> deleteMany(List<String> ids) async {
+    _maybeThrow();
+    deletedIds.addAll(ids);
+    hosted = hosted.where((e) => !ids.contains(e.id)).toList();
+    return ids.length;
   }
 
   @override

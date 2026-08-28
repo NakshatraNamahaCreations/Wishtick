@@ -23,11 +23,15 @@ export class CreateMemoryDto {
   @Transform(trim)
   title!: string;
 
-  @ApiProperty({ example: 'Ananya', description: 'Who the memory is for' })
-  @IsString()
-  @Length(1, 120)
-  @Transform(trim)
-  personName!: string;
+  /**
+   * Who the memory is for — a WishMate of the caller.
+   *
+   * A user id, not a name: the server checks the link before it will create
+   * the capsule, and a name could not be checked against anything.
+   */
+  @ApiProperty({ description: 'A WishMate of the caller' })
+  @IsMongoId()
+  recipientUserId!: string;
 
   @ApiPropertyOptional({ description: 'A `relation` taxonomy key (`2252:423`)' })
   @IsOptional()
@@ -83,13 +87,6 @@ export class UpdateMemoryDto {
   @Length(1, 140)
   @Transform(trim)
   title?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @Length(1, 120)
-  @Transform(trim)
-  personName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
