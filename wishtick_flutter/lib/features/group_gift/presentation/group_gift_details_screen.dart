@@ -50,16 +50,30 @@ class _GroupGiftDetailsScreenState
           idempotencyKey: newIdempotencyKey(),
         );
     if (!ok || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          gift.hostUpiId == null
-              ? 'Pledged. The host will share where to send it.'
-              : 'Pledged — now send ${formatInrMinor(draft.amountMinor)} '
-                    'to ${gift.hostUpiId}.',
-        ),
+    // The designed confirmation (`316:298`), not a snackbar. Where to send the
+    // money is the one thing a contributor must not lose, and a toast took it
+    // away again after a few seconds with nothing else on the screen showing
+    // it.
+    await context.push<void>(
+      AppRoutes.groupGiftContributed(gift.id),
+      extra: (
+        amountMinor: draft.amountMinor,
+        hostName: _hostName(gift),
+        hostUpiId: gift.hostUpiId,
       ),
     );
+  }
+
+  /// The host's display name, from the participant list.
+  ///
+  /// The initiator is added to `participantIds` when the group is created, so
+  /// this resolves for every group gift; the fallback is only for a row the
+  /// server could not name.
+  static String? _hostName(GroupGift gift) {
+    for (final p in gift.participants) {
+      if (p.userId == gift.hostId) return p.name;
+    }
+    return null;
   }
 
   /// Bought, so a thank-you is possible.

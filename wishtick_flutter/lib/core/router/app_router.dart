@@ -12,6 +12,7 @@ import '../../features/chat/presentation/direct_chat_screen.dart';
 import '../../features/chat/presentation/group_chat_screen.dart';
 import '../../features/events/presentation/create_event_details_screen.dart';
 import '../../features/events/presentation/create_event_screen.dart';
+import '../../features/events/presentation/event_detail_screen.dart';
 import '../../features/events/presentation/event_guest_detail_screen.dart';
 import '../../features/events/presentation/event_guests_screen.dart';
 import '../../features/events/presentation/event_invite_preview_screen.dart';
@@ -30,11 +31,14 @@ import '../../features/gifting/presentation/order_controller.dart';
 import '../../features/gifting/presentation/order_delivered_screen.dart';
 import '../../features/gifting/presentation/track_order_screen.dart';
 import '../../features/group_gift/domain/group_gift.dart';
+import '../../features/group_gift/presentation/contribution_success_screen.dart';
 import '../../features/group_gift/presentation/create_group_gift_screen.dart';
 import '../../features/group_gift/presentation/group_gift_add_item_screen.dart';
 import '../../features/group_gift/presentation/group_gift_charges_screen.dart';
 import '../../features/group_gift/presentation/group_gift_created_screen.dart';
 import '../../features/group_gift/presentation/group_gift_details_screen.dart';
+import '../../features/group_gift/presentation/group_gift_invite_detail_screen.dart';
+import '../../features/group_gift/presentation/group_gift_invites_screen.dart';
 import '../../features/group_gift/presentation/group_gift_participants_screen.dart';
 import '../../features/group_gift/presentation/group_gift_settle_screen.dart';
 import '../../features/group_gift/presentation/group_gift_summary_screen.dart';
@@ -425,6 +429,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Group gifting (Sprint 6b). Creation is four screens deep, so each step
       // is a child route — backing out of charges lands on the summary rather
       // than abandoning a group that already exists server-side.
+      // Ahead of '/group-gifts/:id', which would otherwise match this with an
+      // id of "invites" and try to load a group that does not exist.
+      GoRoute(
+        path: AppRoutes.groupGiftInvites,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const GroupGiftInvitesScreen(),
+        routes: [
+          GoRoute(
+            path: ':inviteId',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => GroupGiftInviteDetailScreen(
+              inviteId: state.pathParameters['inviteId']!,
+            ),
+          ),
+        ],
+      ),
       GoRoute(
         path: '/group-gifts/:id',
         parentNavigatorKey: _rootNavigatorKey,
@@ -455,6 +475,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             parentNavigatorKey: _rootNavigatorKey,
             builder: (context, state) => GroupGiftChargesScreen(
               groupGiftId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: 'contributed',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => ContributionSuccessScreen(
+              receipt: state.extra! as ContributionReceipt,
             ),
           ),
           GoRoute(
@@ -517,6 +544,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.createEventDetails,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const CreateEventDetailsScreen(),
+      ),
+      // Declared after the more specific `/events/:id/...` routes below would
+      // be ambiguous, so it sits here and they stay siblings rather than its
+      // children — a child route would put the detail screen underneath the
+      // guest list in the back stack, which is not where it came from when
+      // reached by deep link.
+      GoRoute(
+        path: '/events/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            EventDetailScreen(eventId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/events/:id/invite',

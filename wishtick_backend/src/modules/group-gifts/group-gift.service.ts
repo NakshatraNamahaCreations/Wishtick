@@ -31,6 +31,10 @@ import {
 import { WishlistItemStatus } from 'src/modules/wishlists/wishlist.types';
 import { WishlistsService } from 'src/modules/wishlists/wishlists.service';
 import type { OpenGraphPreview } from 'src/modules/wishlists/wishlist.views';
+import {
+  UserProfile,
+  type UserProfileDocument,
+} from 'src/modules/profile/schemas/user-profile.schema';
 import { UsersService } from 'src/modules/users/users.service';
 import type { UserDocument } from 'src/modules/users/schemas/user.schema';
 import { ChatService } from 'src/modules/chat/chat.service';
@@ -96,6 +100,8 @@ export class GroupGiftService {
     private readonly access: AccessPolicyService,
     private readonly wishlists: WishlistsService,
     private readonly users: UsersService,
+    @InjectModel(UserProfile.name)
+    private readonly profiles: Model<UserProfileDocument>,
     private readonly preview: GroupGiftPreviewService,
     private readonly chat: ChatService,
     private readonly imports: ProductImportService,
@@ -116,6 +122,11 @@ export class GroupGiftService {
    */
   async create(itemId: string, userId: string, dto: CreateGroupGiftDto): Promise<GroupGiftView> {
     const item = await this.gifting.loadGiftableItem(itemId, userId);
+
+    // Which party this is for, decided once and here. See the note on
+    // `GroupGift.eventId`.
+    const list = await this.wishlists.findOrFail(item.wishlistId.toString());
+    const eventId = list.eventId;
 
     const itemPrice = dto.targetAmountMinor ?? item.price?.amountMinor ?? null;
     // Charges are agreed on the way to "Proceed to Contribution", so they are
@@ -183,6 +194,7 @@ export class GroupGiftService {
                 {
                   itemId: item._id,
                   wishlistId: item.wishlistId,
+                  eventId,
                   initiatorId: new Types.ObjectId(userId),
                   recipientId: item.ownerId,
                   giftId: holder._id,
@@ -1150,8 +1162,8 @@ export class GroupGiftService {
         throw new AppException(ErrorCode.SHARE_PASSCODE_INVALID, 'Incorrect passcode', 403);
       }
     }
-    const { users, recentContributions } = await this.resolveViewData(gift);
-    return toPublicGroupGiftView({ gift, users, recentContributions });
+    const { names, recentContributions } = await this.resolveViewData(gift);
+    return toPublicGroupGiftView({ gift, names, recentContributions });
   }
 
   /**
@@ -1303,7 +1315,7 @@ export class GroupGiftService {
   }
 
   private async resolveViewData(gift: GroupGiftDocument): Promise<{
-    users: Map<string, UserDocument>;
+    names: Map<string, string>;
     items: Map<string, WishlistItemDocument>;
     recentContributions: ContributionDocument[];
   }> {
@@ -1332,14 +1344,41 @@ export class GroupGiftService {
 
     const userDocs = await this.users.findManyByIds([...ids]);
     return {
-      users: new Map(userDocs.map((u) => [u._id.toString(), u])),
+      names: await this.resolveNames([...ids], userDocs),
       items: new Map(itemDocs.map((i) => [i._id.toString(), i])),
       recentContributions,
     };
   }
 
+  /**
+   * What to call each of these people.
+   *
+   * The profile's display name first, the account's `name` only as a fallback.
+   * Phone signup never sets the latter — the name people actually type is
+   * saved on their profile — so reading it alone rendered every participant
+   * and every contributor as "A friend". Same precedence as ProfileService.
+   */
+  private async resolveNames(
+    ids: string[],
+    userDocs: UserDocument[],
+  ): Promise<Map<string, string>> {
+    const profiles = await this.profiles
+      .find({ userId: { $in: ids.map((id) => new Types.ObjectId(id)) } })
+      .exec();
+    const names = new Map<string, string>();
+    for (const u of userDocs) {
+      const name = u.name?.trim();
+      if (name) names.set(u._id.toString(), name);
+    }
+    for (const p of profiles) {
+      const name = p.displayName?.trim();
+      if (name) names.set(p.userId.toString(), name);
+    }
+    return names;
+  }
+
   private async assembleView(gift: GroupGiftDocument, userId: string): Promise<GroupGiftView> {
-    const { users, items, recentContributions } = await this.resolveViewData(gift);
+    const { names, items, recentContributions } = await this.resolveViewData(gift);
     const mine = await this.contributionModel
       .aggregate<{ total: number }>([
         {
@@ -1354,7 +1393,7 @@ export class GroupGiftService {
       .exec();
     return toGroupGiftView({
       gift,
-      users,
+      names,
       items,
       recentContributions,
       myContributionMinor: mine[0]?.total ?? 0,

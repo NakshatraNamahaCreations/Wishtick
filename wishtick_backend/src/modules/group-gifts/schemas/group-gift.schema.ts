@@ -134,6 +134,21 @@ export class GroupGift {
   @Prop({ type: SchemaTypes.ObjectId, ref: 'Wishlist', required: true })
   wishlistId!: Types.ObjectId;
 
+  /**
+   * The one event this gift is being collected for, or null.
+   *
+   * Copied from the item's wishlist when the group is created, and never
+   * recomputed. Derived-on-read would have been less to store, but detaching
+   * the list from the event afterwards would silently move every gift on it —
+   * and a group people have already paid into belongs to the party it was
+   * started for, whatever happens to the list later.
+   *
+   * At most one, by construction rather than by rule: `Wishlist.eventId` is
+   * itself singular, so there is never a second candidate to choose between.
+   */
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'Event', default: null })
+  eventId!: Types.ObjectId | null;
+
   /** Who started it and may purchase/cancel it. */
   @Prop({ type: SchemaTypes.ObjectId, ref: 'User', required: true })
   initiatorId!: Types.ObjectId;
@@ -287,6 +302,8 @@ export const GroupGiftSchema = SchemaFactory.createForClass(GroupGift);
 GroupGiftSchema.index({ 'share.slug': 1 }, { unique: true });
 // One item's group gift, and the initiator's / recipient's lists.
 GroupGiftSchema.index({ itemId: 1 });
+// The invite screen's "N active gifts" row, per event.
+GroupGiftSchema.index({ eventId: 1, status: 1 }, { sparse: true });
 GroupGiftSchema.index({ initiatorId: 1, createdAt: -1 });
 GroupGiftSchema.index({ recipientId: 1, createdAt: -1 });
 // Deadline sweeps (a later sprint) and status filters.

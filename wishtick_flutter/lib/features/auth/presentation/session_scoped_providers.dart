@@ -12,6 +12,8 @@ import '../../gifting/presentation/gift_list_providers.dart';
 import '../../gifting/presentation/order_controller.dart';
 import '../../group_gift/presentation/create_group_gift_controller.dart';
 import '../../group_gift/presentation/group_gift_controller.dart';
+import '../../group_gift/presentation/group_gift_invite_detail_screen.dart';
+import '../../group_gift/presentation/group_gift_invites_screen.dart';
 import '../../group_gift/presentation/settlement_controller.dart';
 import '../../home/presentation/home_controller.dart';
 import '../../memories/presentation/add_wish_controller.dart';
@@ -90,6 +92,8 @@ void invalidateSessionScopedProviders(Ref ref) {
   // Group gifts
   ref.invalidate(createGroupGiftProvider);
   ref.invalidate(groupGiftProvider);
+  ref.invalidate(groupGiftInvitesProvider);
+  ref.invalidate(groupGiftInviteDetailProvider);
   ref.invalidate(settlementProvider);
 
   // Events & invitations

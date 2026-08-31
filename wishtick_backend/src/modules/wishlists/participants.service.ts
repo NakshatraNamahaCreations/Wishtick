@@ -71,6 +71,52 @@ export class ParticipantsService {
     );
   }
 
+  /**
+   * Adds somebody on the strength of an invitation they accepted elsewhere.
+   *
+   * Unlike [add], the *caller* is the person being added, so there is no
+   * `assertCanManage` — the authority is the invitation, which the caller of
+   * this method has already verified. It exists because a group-gift invitee
+   * has to be able to gift from the underlying wishlist before they can join,
+   * and a private list grants that to nobody by default.
+   *
+   * Idempotent, and never a downgrade: somebody already on the list keeps
+   * whatever role the owner gave them rather than being quietly reduced to the
+   * one an invitation implies.
+   */
+  async addForInvite(wishlistId: string, userId: string, role: ParticipantRole): Promise<void> {
+    const wishlist = await this.wishlists.findOrFail(wishlistId);
+    // The owner needs nothing; adding them would also make them a participant
+    // on their own list, which the policy treats as a different relationship.
+    if (wishlist.ownerId.toString() === userId) return;
+
+    const existing = await this.model
+      .findOne({ wishlistId: wishlist._id, userId: new Types.ObjectId(userId) })
+      .exec();
+
+    if (existing) {
+      // A revoked row is revived: the invitation is a fresh decision by the
+      // person who was removed, and refusing it silently would be a dead end
+      // they cannot see the cause of.
+      if (existing.revokedAt) {
+        existing.revokedAt = null;
+        existing.state = ParticipantState.ACCEPTED;
+        existing.acceptedAt = new Date();
+        await existing.save();
+      }
+      return;
+    }
+
+    await this.model.create({
+      wishlistId: wishlist._id,
+      userId: new Types.ObjectId(userId),
+      role,
+      state: ParticipantState.ACCEPTED,
+      acceptedAt: new Date(),
+      invitedBy: new Types.ObjectId(userId),
+    });
+  }
+
   async add(
     wishlistId: string,
     ctx: AccessContext,

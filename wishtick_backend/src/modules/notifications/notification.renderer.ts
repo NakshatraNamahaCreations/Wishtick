@@ -91,6 +91,12 @@ const CONTENT: Record<NotificationType, (p: Record<string, unknown>) => Content>
       `Collected so far: ${money(p, 'collectedAmountMinor')} of ${money(p, 'targetAmountMinor')}.`,
     ],
   }),
+  [NotificationType.GROUP_GIFT_INVITE]: (p) => ({
+    subject: `${who(p, 'inviterName')} asked you to chip in`,
+    title: 'Join a group gift',
+    lines: [`${who(p, 'inviterName')} invited you to chip in for ${s(p, 'itemTitle', 'a gift')}.`],
+    cta: { label: 'See the invitation', url: s(p, 'url') },
+  }),
   [NotificationType.GROUP_GIFT_JOINED]: (p) => ({
     subject: `A new member joined`,
     title: 'Someone joined the group gift',

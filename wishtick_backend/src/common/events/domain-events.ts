@@ -70,6 +70,14 @@ export interface GroupGiftDriftDetectedEvent {
 
 /** Someone joined a group gift as a member. The chat posts a "user joined" note. */
 export const GROUP_GIFT_JOINED = 'group_gift.joined';
+export const GROUP_GIFT_INVITED = 'group_gift.invited';
+
+/** A WishMate was asked to chip in. */
+export interface GroupGiftInvitedEvent {
+  groupGiftId: string;
+  invitedUserId: string;
+  invitedById: string;
+}
 
 export interface GroupGiftJoinedEvent {
   groupGiftId: string;

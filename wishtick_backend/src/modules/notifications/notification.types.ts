@@ -46,6 +46,7 @@ export enum NotificationType {
   GROUP_GIFT_FUNDED = 'group_gift_funded',
   GROUP_GIFT_CONTRIBUTION = 'group_gift_contribution',
   GROUP_GIFT_JOINED = 'group_gift_joined',
+  GROUP_GIFT_INVITE = 'group_gift_invite',
   GROUP_GIFT_PURCHASED = 'group_gift_purchased',
   GROUP_GIFT_FULFILLED = 'group_gift_fulfilled',
   EVENT_REMINDER = 'event_reminder',
@@ -124,6 +125,15 @@ export const NOTIFICATION_SPECS: Record<NotificationType, NotificationSpec> = {
     priority: NotificationPriority.DIGEST,
     category: NotificationCategory.GROUP_GIFTS,
     template: 'group-gift-contribution',
+  },
+  [NotificationType.GROUP_GIFT_INVITE]: {
+    // Not DIGEST, unlike the rest of this category: an invitation is a
+    // question waiting on an answer, and batching it into tomorrow's summary
+    // is how a collection closes before the person asked has seen it.
+    channels: [NotificationChannel.IN_APP, NotificationChannel.PUSH],
+    priority: NotificationPriority.NORMAL,
+    category: NotificationCategory.GROUP_GIFTS,
+    template: 'group-gift-invite',
   },
   [NotificationType.GROUP_GIFT_JOINED]: {
     channels: [NotificationChannel.IN_APP],

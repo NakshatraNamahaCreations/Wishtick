@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/features/events/data/events_repository.dart';
@@ -66,6 +67,49 @@ void main() {
     // list of parties is a mis-tap waiting to happen.
     expect(find.byIcon(Icons.delete_outline), findsNothing);
     expect(find.textContaining('selected'), findsNothing);
+  });
+
+  testWidgets('a plain tap opens the event, not the guest list', (
+    tester,
+  ) async {
+    // A real router, so the push lands somewhere observable. Asserting on
+    // `AppRoutes` instead would only prove the two constants differ — not
+    // which of them the grid actually asks for.
+    final router = GoRouter(
+      initialLocation: '/',
+      routes: [
+        GoRoute(path: '/', builder: (_, _) => const MyEventsScreen()),
+        GoRoute(
+          path: '/events/:id',
+          builder: (_, state) => Text('detail:${state.pathParameters['id']}'),
+        ),
+        GoRoute(
+          path: '/events/:id/guests',
+          builder: (_, _) => const Text('guests'),
+        ),
+      ],
+    );
+    tester.view
+      ..physicalSize = const Size(393, 900)
+      ..devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        key: UniqueKey(),
+        overrides: [eventsRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Ananya's Birthday"));
+    await tester.pumpAndSettle();
+
+    // The event itself, carrying its own id — the grid used to open the guest
+    // list, which left a host unable to look at their own party.
+    expect(find.text('detail:e1'), findsOneWidget);
+    expect(find.text('guests'), findsNothing);
   });
 
   testWidgets('a long press starts a selection and the bar counts it', (

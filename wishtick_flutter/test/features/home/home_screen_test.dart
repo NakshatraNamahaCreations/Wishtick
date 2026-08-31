@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wishtick_flutter/core/theme/app_dimens.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/features/addresses/data/addresses_repository.dart';
+import 'package:wishtick_flutter/features/group_gift/data/group_gift_repository.dart';
 import 'package:wishtick_flutter/features/group_gift/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/home/data/home_repository.dart';
 import 'package:wishtick_flutter/features/home/presentation/home_screen.dart';
@@ -13,6 +14,8 @@ import 'package:wishtick_flutter/features/home/presentation/widgets/home_header.
 import 'package:wishtick_flutter/features/notifications/data/notifications_repository.dart';
 import 'package:wishtick_flutter/features/wishlist/data/wishlist_repository.dart';
 
+// Only the fake repository: home_fakes owns this file's buildGroupGift.
+import '../../helpers/group_gift_fakes.dart' show FakeGroupGiftRepository;
 import '../../helpers/home_fakes.dart';
 import '../../helpers/profile_fakes.dart';
 import '../../helpers/wishlist_fakes.dart';
@@ -40,6 +43,12 @@ void main() {
           ),
           notificationsRepositoryProvider.overrideWithValue(
             FakeNotificationsRepository(),
+          ),
+          // The pending-invites banner asks for them on every Home build.
+          // Unoverridden it reaches the real ApiClient, and Riverpod retrying
+          // the failure leaves a timer pending past the end of the test.
+          groupGiftRepositoryProvider.overrideWithValue(
+            FakeGroupGiftRepository(),
           ),
         ],
         child: MaterialApp(

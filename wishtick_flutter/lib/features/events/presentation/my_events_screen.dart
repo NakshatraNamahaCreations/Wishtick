@@ -207,9 +207,12 @@ class _HostedGrid extends ConsumerWidget {
                 // Once anything is ticked, a tap picks rather than opens.
                 // Leaving tap as "open" mid-selection is how people lose a
                 // selection they were half way through building.
+                // Opens the event, not the guest list. The grid used to jump
+                // straight to the guests, so a host could not look at their own
+                // party at all — not the artwork, the date or the description.
                 onTap: selected.isEmpty
                     ? () => unawaited(
-                        context.push<void>(AppRoutes.eventGuests(event.id)),
+                        context.push<void>(AppRoutes.eventDetail(event.id)),
                       )
                     : () => onToggle(event.id),
                 // Long press is what starts it, the way every list that has

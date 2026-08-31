@@ -31,8 +31,14 @@ import {
   ListMyGroupGiftsQueryDto,
   ShareGroupGiftDto,
   ThankYouDto,
+  InviteToGroupGiftDto,
 } from './dto/group-gift.dto';
 import { ImportProductDto } from 'src/modules/products/dto/product.dto';
+import {
+  GroupGiftInvitesService,
+  type GroupGiftInviteDetailView,
+  type GroupGiftInviteView,
+} from './group-gift-invites.service';
 import { GroupGiftService } from './group-gift.service';
 import type { GroupGiftShareView, GroupGiftView } from './group-gift.views';
 
@@ -46,7 +52,10 @@ const DEFAULT_MINE_LIMIT = 10;
 @Controller()
 @ApiBearerAuth()
 export class GroupGiftController {
-  constructor(private readonly groupGifts: GroupGiftService) {}
+  constructor(
+    private readonly groupGifts: GroupGiftService,
+    private readonly invites: GroupGiftInvitesService,
+  ) {}
 
   @Post('items/:itemId/group-gift')
   @HttpCode(HttpStatus.CREATED)
@@ -291,6 +300,74 @@ export class GroupGiftController {
     @Body() dto: ThankYouDto,
   ): Promise<GroupGiftView> {
     return this.groupGifts.setThankYou(id, userId, dto.note);
+  }
+
+  @Post('group-gifts/:id/invites')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Ask WishMates to chip in',
+    description:
+      'Any member may invite, not just the initiator. Ids that cannot be ' +
+      'invited — already asked, already in, not a WishMate, or the recipient ' +
+      '— are skipped rather than failing the batch.',
+  })
+  invite(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: InviteToGroupGiftDto,
+  ): Promise<{ invited: number; skipped: number }> {
+    return this.invites.invite(id, userId, dto.userIds);
+  }
+
+  @Get('group-gift-invites/mine')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Group gifts you have been asked to chip in on' })
+  myInvites(@CurrentUser('id') userId: string): Promise<GroupGiftInviteView[]> {
+    return this.invites.listMine(userId);
+  }
+
+  @Get('group-gift-invites/:inviteId')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'One invitation, with the gift behind it',
+    description:
+      'Authorised by the invitation rather than by wishlist access: the invitee is not a ' +
+      'participant yet and may not be able to see the list the group hangs off, but must ' +
+      'still see what they are being asked to fund.',
+  })
+  inviteDetail(
+    @CurrentUser('id') userId: string,
+    @Param('inviteId') inviteId: string,
+  ): Promise<GroupGiftInviteDetailView> {
+    return this.invites.detail(inviteId, userId);
+  }
+
+  @Post('group-gift-invites/:inviteId/accept')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Accept an invitation',
+    description:
+      'Joins the group and grants the gifting access joining needs, which a ' +
+      'share link alone could not do on a private wishlist.',
+  })
+  acceptInvite(
+    @CurrentUser('id') userId: string,
+    @Param('inviteId') inviteId: string,
+  ): Promise<GroupGiftInviteView> {
+    return this.invites.respond(inviteId, userId, true);
+  }
+
+  @Post('group-gift-invites/:inviteId/decline')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Decline an invitation' })
+  declineInvite(
+    @CurrentUser('id') userId: string,
+    @Param('inviteId') inviteId: string,
+  ): Promise<GroupGiftInviteView> {
+    return this.invites.respond(inviteId, userId, false);
   }
 
   @Post('group-gifts/:id/share')

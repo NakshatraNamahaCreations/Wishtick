@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
@@ -900,6 +901,192 @@ describe('Events & invites (e2e)', () => {
         host,
         Array.from({ length: 51 }, () => newObjectId()),
       ).expect(400);
+    });
+  });
+
+  describe('group gifts on an invitation (291:1008)', () => {
+    /// A wishlist with one priced item, attached to the event.
+    const wishlistOn = async (
+      host: Actor,
+      eventId: string,
+    ): Promise<{ wishlistId: string; itemId: string }> => {
+      const wishlist = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists`)
+          .set(auth(host.token))
+          .send({ title: 'Gift ideas', visibility: WishlistVisibility.PUBLIC })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      const item = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists/${wishlist.data.id}/items`)
+          .set(auth(host.token))
+          .send({ title: 'A telescope', price: { amountMinor: 500000 } })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      await request(app.getHttpServer())
+        .patch(`${V1}/events/${eventId}`)
+        .set(auth(host.token))
+        .send({ wishlistIds: [wishlist.data.id] })
+        .expect(200);
+      return { wishlistId: wishlist.data.id, itemId: item.data.id };
+    };
+
+    const startGroupGift = (gifter: Actor, itemId: string, title: string) =>
+      request(app.getHttpServer())
+        .post(`${V1}/items/${itemId}/group-gift`)
+        .set(auth(gifter.token))
+        .set({ 'Idempotency-Key': randomUUID() })
+        .send({ title, targetAmountMinor: 500000 });
+
+    it('a gift started on the event’s wishlist shows on the invitation', async () => {
+      const host = await newUser();
+      const gifter = await newUser();
+      const guest = await newUser();
+      const event = await createEvent(host);
+      await publish(host, event.id);
+      const { itemId } = await wishlistOn(host, event.id);
+
+      await startGroupGift(gifter, itemId, 'Telescope fund').expect(201);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({ recipients: [{ userId: guest.userId }] })
+        .expect(200);
+      const token = await InviteTokenHelper.only(app, host.token, event.id);
+
+      const view = (
+        await request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).expect(200)
+      ).body as Envelope<{ groupGifts: { id: string; title: string }[] }>;
+
+      // The row `291:1008` draws. Title and id only — the amounts and who has
+      // paid stay behind the group's own endpoint.
+      expect(view.data.groupGifts).toHaveLength(1);
+      expect(view.data.groupGifts[0].title).toBe('Telescope fund');
+      expect(Object.keys(view.data.groupGifts[0]).sort()).toEqual(['id', 'title']);
+    });
+
+    it('an event with no group gift lists none rather than omitting the field', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const event = await createEvent(host);
+      await publish(host, event.id);
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({ recipients: [{ userId: guest.userId }] })
+        .expect(200);
+      const token = await InviteTokenHelper.only(app, host.token, event.id);
+
+      const view = (
+        await request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).expect(200)
+      ).body as Envelope<{ groupGifts: unknown[] }>;
+
+      expect(view.data.groupGifts).toEqual([]);
+    });
+
+    it('a gift on a list attached to no event belongs to no event', async () => {
+      const host = await newUser();
+      const gifter = await newUser();
+      const guest = await newUser();
+      const event = await createEvent(host);
+      await publish(host, event.id);
+
+      // A wishlist that is never attached — the item is giftable, the group is
+      // real, but it is not for this party.
+      const wishlist = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists`)
+          .set(auth(host.token))
+          .send({ title: 'Unrelated', visibility: WishlistVisibility.PUBLIC })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      const item = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists/${wishlist.data.id}/items`)
+          .set(auth(host.token))
+          .send({ title: 'A kettle', price: { amountMinor: 500000 } })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      await startGroupGift(gifter, item.data.id, 'Kettle fund').expect(201);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({ recipients: [{ userId: guest.userId }] })
+        .expect(200);
+      const token = await InviteTokenHelper.only(app, host.token, event.id);
+
+      const view = (
+        await request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).expect(200)
+      ).body as Envelope<{ groupGifts: unknown[] }>;
+
+      expect(view.data.groupGifts).toEqual([]);
+    });
+
+    it('a cancelled group drops off the invitation', async () => {
+      const host = await newUser();
+      const gifter = await newUser();
+      const guest = await newUser();
+      const event = await createEvent(host);
+      await publish(host, event.id);
+      const { itemId } = await wishlistOn(host, event.id);
+      const gift = (await startGroupGift(gifter, itemId, 'Telescope fund').expect(201))
+        .body as Envelope<{ id: string }>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gift.data.id}/cancel`)
+        .set(auth(gifter.token))
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({ recipients: [{ userId: guest.userId }] })
+        .expect(200);
+      const token = await InviteTokenHelper.only(app, host.token, event.id);
+
+      const view = (
+        await request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).expect(200)
+      ).body as Envelope<{ groupGifts: unknown[] }>;
+
+      // Still linked to the event, but not something an invitee can join —
+      // and a row inviting them to would be worse than no row.
+      expect(view.data.groupGifts).toEqual([]);
+    });
+
+    it('detaching the wishlist afterwards leaves the gift where it was', async () => {
+      const host = await newUser();
+      const gifter = await newUser();
+      const guest = await newUser();
+      const event = await createEvent(host);
+      await publish(host, event.id);
+      const { itemId } = await wishlistOn(host, event.id);
+      await startGroupGift(gifter, itemId, 'Telescope fund').expect(201);
+
+      // The list moves off the event. The group people have already committed
+      // to belongs to the party it was started for — deriving the link on read
+      // would silently take it away.
+      await request(app.getHttpServer())
+        .patch(`${V1}/events/${event.id}`)
+        .set(auth(host.token))
+        .send({ wishlistIds: [] })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({ recipients: [{ userId: guest.userId }] })
+        .expect(200);
+      const token = await InviteTokenHelper.only(app, host.token, event.id);
+
+      const view = (
+        await request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).expect(200)
+      ).body as Envelope<{ groupGifts: { title: string }[] }>;
+
+      expect(view.data.groupGifts).toHaveLength(1);
+      expect(view.data.groupGifts[0].title).toBe('Telescope fund');
     });
   });
 

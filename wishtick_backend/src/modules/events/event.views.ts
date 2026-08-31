@@ -107,6 +107,16 @@ export interface PublicInviteView {
    * appears only once they have RSVP'd, and a private one never does.
    */
   wishlists: { slug: string; title: string }[];
+
+  /**
+   * Group gifts being collected for this event — `291:1008`'s "Group Gifts"
+   * row.
+   *
+   * Id and title only. An invitee may see that a group is running and open it,
+   * but the amounts, the participants and who has paid are the group's own
+   * business and stay behind its own endpoint.
+   */
+  groupGifts: { id: string; title: string }[];
 }
 
 export const toEventView = (

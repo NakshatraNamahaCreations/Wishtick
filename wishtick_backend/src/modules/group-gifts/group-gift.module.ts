@@ -12,14 +12,17 @@ import {
   WishlistItemSchema,
 } from 'src/modules/wishlists/schemas/wishlist-item.schema';
 import { WishlistsModule } from 'src/modules/wishlists/wishlists.module';
+import { WishmatesModule } from 'src/modules/wishmates/wishmates.module';
 import { GroupGiftCardRenderer } from './group-gift-card.renderer';
 import { GroupGiftController } from './group-gift.controller';
 import { GroupGiftPreviewService } from './group-gift-preview.service';
 import { GroupGiftReconcileRegistrar } from './group-gift-reconcile.processor';
 import { GroupGiftReconcileService } from './group-gift-reconcile.service';
+import { GroupGiftInvitesService } from './group-gift-invites.service';
 import { GroupGiftService } from './group-gift.service';
 import { PublicGroupGiftsController } from './public-group-gifts.controller';
 import { Contribution, ContributionSchema } from './schemas/contribution.schema';
+import { GroupGiftInvite, GroupGiftInviteSchema } from './schemas/group-gift-invite.schema';
 import { GroupGift, GroupGiftSchema } from './schemas/group-gift.schema';
 import { Settlement, SettlementSchema } from './schemas/settlement.schema';
 import { SettlementController } from './settlement.controller';
@@ -29,6 +32,7 @@ import { SettlementService } from './settlement.service';
   imports: [
     MongooseModule.forFeature([
       { name: GroupGift.name, schema: GroupGiftSchema },
+      { name: GroupGiftInvite.name, schema: GroupGiftInviteSchema },
       { name: Contribution.name, schema: ContributionSchema },
       { name: Settlement.name, schema: SettlementSchema },
       // Registered here too so the service can re-read item status inside the
@@ -54,10 +58,15 @@ import { SettlementService } from './settlement.service';
     // ChatService, to provision the group-gift chat on create. One-way: group
     // gifts depend on chat; chat only reads the group-gift document.
     ChatModule,
+    // One question only, and the same one chat asks: are these two connected?
+    // Only WishMates can be invited to chip in, and that is checked here
+    // rather than trusted from the picker.
+    WishmatesModule,
   ],
   controllers: [GroupGiftController, SettlementController, PublicGroupGiftsController],
   providers: [
     GroupGiftService,
+    GroupGiftInvitesService,
     GroupGiftPreviewService,
     GroupGiftCardRenderer,
     GroupGiftReconcileService,

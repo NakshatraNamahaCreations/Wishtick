@@ -148,5 +148,19 @@ export const INACTIVE_GROUP_GIFT_STATUSES: GroupGiftStatus[] = [
   GroupGiftStatus.REFUNDING,
 ];
 
+/**
+ * Statuses in which there is nothing left to invite anyone to.
+ *
+ * Wider than [INACTIVE_GROUP_GIFT_STATUSES]: a group that has already been
+ * bought or handed over is perfectly valid, but asking a friend to chip in on
+ * it would be asking for money towards a gift that is already given.
+ */
+export const CLOSED_GROUP_GIFT_STATUSES: GroupGiftStatus[] = [
+  GroupGiftStatus.CANCELLED,
+  GroupGiftStatus.REFUNDING,
+  GroupGiftStatus.PURCHASED,
+  GroupGiftStatus.FULFILLED,
+];
+
 /** Statuses in which the group gift still accepts new contributions. */
 export const CONTRIBUTABLE_GROUP_GIFT_STATUSES: GroupGiftStatus[] = [GroupGiftStatus.OPEN];

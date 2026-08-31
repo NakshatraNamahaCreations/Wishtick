@@ -1,5 +1,6 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/format/currency.dart';
@@ -9,6 +10,7 @@ import '../../../core/widgets/wishtick_error_text.dart';
 import '../domain/group_gift.dart';
 import 'group_gift_controller.dart';
 import 'widgets/group_gift_widgets.dart';
+import 'widgets/invite_wishmates_action.dart';
 
 /// "Participants (N)" (`316:536`).
 class GroupGiftParticipantsScreen extends ConsumerStatefulWidget {
@@ -32,14 +34,6 @@ class _GroupGiftParticipantsScreenState
     });
   }
 
-  Future<void> _invite(String url) async {
-    await Clipboard.setData(ClipboardData(text: url));
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Invite link copied')));
-  }
-
   /// Sums each named member's confirmed contributions.
   ///
   /// Anonymous ones carry no contributor and so land nowhere — deliberately:
@@ -60,7 +54,6 @@ class _GroupGiftParticipantsScreenState
     final state = ref.watch(groupGiftProvider(widget.groupGiftId));
     final gift = state.gift;
     final colors = context.colors;
-    final shareUrl = gift?.share?.url;
 
     return Scaffold(
       appBar: AppBar(
@@ -111,9 +104,17 @@ class _GroupGiftParticipantsScreenState
               color: colors.background,
               child: GroupGiftFooter(
                 label: 'Invite Friends & Family',
-                // Only the host has a share block; a member has no link to
-                // hand out.
-                onPressed: shareUrl == null ? null : () => _invite(shareUrl),
+                // Every member may invite, not only the host: a group gift is
+                // a group, and making the one person who started it the only
+                // route in is how a collection stalls when they go quiet.
+                onPressed: () => unawaited(
+                  inviteWishmatesToGroupGift(
+                    context,
+                    groupGiftId: widget.groupGiftId,
+                    title: gift.title,
+                    shareUrl: gift.share?.url,
+                  ),
+                ),
               ),
             ),
     );
@@ -139,23 +140,31 @@ class _GoalCard extends StatelessWidget {
         color: colors.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
+      // Thirds, not three natural widths: the amounts here run to the whole
+      // cost of the gift, and ₹17,347 three times over does not fit a 393pt
+      // phone. Unconstrained, the third column ran off the right edge.
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _Stat(
-            label: 'Total Goal',
-            value: formatInrMinor(gift.targetAmountMinor),
-            color: colors.textPrimary,
+          Expanded(
+            child: _Stat(
+              label: 'Total Goal',
+              value: formatInrMinor(gift.targetAmountMinor),
+              color: colors.textPrimary,
+            ),
           ),
-          _Stat(
-            label: 'Collected',
-            value: formatInrMinor(gift.collectedAmountMinor),
-            color: colors.payment,
+          Expanded(
+            child: _Stat(
+              label: 'Collected',
+              value: formatInrMinor(gift.collectedAmountMinor),
+              color: colors.payment,
+            ),
           ),
-          _Stat(
-            label: 'Left to go',
-            value: formatInrMinor(left < 0 ? 0 : left),
-            color: colors.accent,
+          Expanded(
+            child: _Stat(
+              label: 'Left to go',
+              value: formatInrMinor(left < 0 ? 0 : left),
+              color: colors.accent,
+            ),
           ),
         ],
       ),

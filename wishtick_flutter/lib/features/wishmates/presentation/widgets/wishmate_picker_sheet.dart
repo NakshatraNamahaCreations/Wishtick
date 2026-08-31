@@ -43,12 +43,14 @@ class _WishmatePickerSheet extends ConsumerWidget {
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,
-      builder: (context, controller) => Container(
-        decoration: BoxDecoration(
-          color: colors.background,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(AppRadius.sheet),
-          ),
+      // Material, not a coloured Container: a ListTile paints its ink on the
+      // nearest Material ancestor, so a plain box between the two swallows the
+      // ripple and every tap in the list looks like it did nothing.
+      builder: (context, controller) => Material(
+        color: colors.background,
+        clipBehavior: Clip.antiAlias,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
         ),
         child: Column(
           children: [

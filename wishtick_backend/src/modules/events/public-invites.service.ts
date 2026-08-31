@@ -5,6 +5,7 @@ import { Model, Types } from 'mongoose';
 import { AppException } from 'src/common/errors/app.exception';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import type { AppConfig } from 'src/config/configuration';
+import { EventGroupGiftsService } from 'src/modules/group-gifts/event-group-gifts.service';
 import { UsersService } from 'src/modules/users/users.service';
 import {
   UserProfile,
@@ -31,6 +32,7 @@ export class PublicInvitesService {
     private readonly invites: InvitesService,
     private readonly access: AccessPolicyService,
     private readonly users: UsersService,
+    private readonly groupGifts: EventGroupGiftsService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
@@ -61,10 +63,11 @@ export class PublicInvitesService {
   async getByToken(token: string, viewerUserId?: string): Promise<PublicInviteView> {
     const { invite, event } = await this.resolve(token);
 
-    const [hostFirstName, inviteeName, wishlists] = await Promise.all([
+    const [hostFirstName, inviteeName, wishlists, groupGifts] = await Promise.all([
       this.hostFirstName(event),
       this.inviteeName(invite),
       this.visibleWishlists(event, viewerUserId),
+      this.groupGifts.forEvent(event._id),
     ]);
 
     return {
@@ -84,6 +87,7 @@ export class PublicInvitesService {
       host: { firstName: hostFirstName },
       invitee: { name: inviteeName, rsvp: invite.rsvp, plusOnes: invite.plusOnes },
       wishlists,
+      groupGifts,
     };
   }
 

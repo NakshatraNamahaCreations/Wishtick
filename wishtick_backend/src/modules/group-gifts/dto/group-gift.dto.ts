@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsMongoId,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -261,4 +263,13 @@ export class ShareUpiDto {
   @IsOptional()
   @IsBoolean()
   saveToProfile?: boolean;
+}
+
+/** The WishMates a member is asking to chip in. */
+export class InviteToGroupGiftDto {
+  @ApiProperty({ type: [String], description: 'WishMates of the caller' })
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsMongoId({ each: true })
+  userIds!: string[];
 }

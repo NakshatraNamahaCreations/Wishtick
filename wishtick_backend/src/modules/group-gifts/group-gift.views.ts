@@ -1,5 +1,4 @@
 import type { WishlistItemDocument } from 'src/modules/wishlists/schemas/wishlist-item.schema';
-import type { UserDocument } from 'src/modules/users/schemas/user.schema';
 import type { ContributionDocument } from './schemas/contribution.schema';
 import type { GroupGiftDocument } from './schemas/group-gift.schema';
 
@@ -135,7 +134,15 @@ export interface PublicGroupGiftView {
   recentContributions: ContributionView[];
 }
 
-const displayName = (user: UserDocument | undefined): string => user?.name?.trim() || 'A friend';
+/**
+ * A person's name, already resolved by the caller.
+ *
+ * Was `user.name`, which phone signup never sets — the name people actually
+ * type lands on their profile's `displayName` — so every participant and every
+ * contributor rendered as "A friend".
+ */
+const displayName = (names: Map<string, string>, userId: string): string =>
+  names.get(userId)?.trim() || 'A friend';
 
 /** Clamp to [0,100]; a capped over-target group never shows more than 100%. */
 const percent = (collected: number, target: number): number =>
@@ -148,7 +155,7 @@ const percent = (collected: number, target: number): number =>
  */
 const toContributionView = (
   c: ContributionDocument,
-  users: Map<string, UserDocument>,
+  names: Map<string, string>,
 ): ContributionView => ({
   id: c._id.toString(),
   amountMinor: c.amountMinor,
@@ -157,16 +164,13 @@ const toContributionView = (
   createdAt: c.createdAt,
   contributor: c.anonymous
     ? null
-    : { userId: c.userId.toString(), name: displayName(users.get(c.userId.toString())) },
+    : { userId: c.userId.toString(), name: displayName(names, c.userId.toString()) },
 });
 
-const toParticipants = (
-  gift: GroupGiftDocument,
-  users: Map<string, UserDocument>,
-): ParticipantView[] =>
+const toParticipants = (gift: GroupGiftDocument, names: Map<string, string>): ParticipantView[] =>
   gift.participantIds.map((id) => ({
     userId: id.toString(),
-    name: displayName(users.get(id.toString())),
+    name: displayName(names, id.toString()),
   }));
 
 /**
@@ -202,14 +206,14 @@ const toItemViews = (
 
 export function toGroupGiftView(input: {
   gift: GroupGiftDocument;
-  users: Map<string, UserDocument>;
+  names: Map<string, string>;
   items: Map<string, WishlistItemDocument>;
   recentContributions: ContributionDocument[];
   myContributionMinor: number;
   canManage: boolean;
   shareBaseUrl: string;
 }): GroupGiftView {
-  const { gift, users, items, recentContributions, myContributionMinor, canManage, shareBaseUrl } =
+  const { gift, names, items, recentContributions, myContributionMinor, canManage, shareBaseUrl } =
     input;
   const view: GroupGiftView = {
     id: gift._id.toString(),
@@ -256,13 +260,13 @@ export function toGroupGiftView(input: {
     chatId: gift.chatId ? gift.chatId.toString() : null,
     recipientName: (() => {
       const primary = items.get(gift.itemId.toString());
-      return primary ? displayName(users.get(primary.ownerId.toString())) : null;
+      return primary ? displayName(names, primary.ownerId.toString()) : null;
     })(),
     thankYouNote: gift.thankYouNote,
     thankYouAt: gift.thankYouAt,
     createdAt: gift.createdAt,
-    participants: toParticipants(gift, users),
-    recentContributions: recentContributions.map((c) => toContributionView(c, users)),
+    participants: toParticipants(gift, names),
+    recentContributions: recentContributions.map((c) => toContributionView(c, names)),
     myContributionMinor,
   };
   if (canManage) {
@@ -278,10 +282,10 @@ export function toGroupGiftView(input: {
 
 export function toPublicGroupGiftView(input: {
   gift: GroupGiftDocument;
-  users: Map<string, UserDocument>;
+  names: Map<string, string>;
   recentContributions: ContributionDocument[];
 }): PublicGroupGiftView {
-  const { gift, users, recentContributions } = input;
+  const { gift, names, recentContributions } = input;
   return {
     status: gift.status,
     targetAmountMinor: gift.targetAmountMinor,
@@ -292,7 +296,7 @@ export function toPublicGroupGiftView(input: {
     deadline: gift.deadline,
     message: gift.message,
     ogImageUrl: gift.ogImageUrl,
-    participants: toParticipants(gift, users),
-    recentContributions: recentContributions.map((c) => toContributionView(c, users)),
+    participants: toParticipants(gift, names),
+    recentContributions: recentContributions.map((c) => toContributionView(c, names)),
   };
 }

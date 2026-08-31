@@ -109,6 +109,18 @@ class InviteWishlistLink {
       );
 }
 
+/// A group gift running for the event, as `291:1008` lists it.
+@immutable
+class InviteGroupGift {
+  const InviteGroupGift({required this.id, required this.title});
+
+  final String id;
+  final String title;
+
+  factory InviteGroupGift.fromJson(Map<String, dynamic> json) =>
+      InviteGroupGift(id: json['id'] as String, title: json['title'] as String);
+}
+
 /// What an invite token resolves to (`PublicInviteView`).
 ///
 /// Heavily redacted: the host is a first name and nothing else, and there is no
@@ -123,6 +135,7 @@ class PublicInvite {
     required this.rsvp,
     required this.plusOnes,
     required this.wishlists,
+    required this.groupGifts,
   });
 
   final InviteEvent event;
@@ -131,6 +144,10 @@ class PublicInvite {
   final RsvpResponse rsvp;
   final int plusOnes;
   final List<InviteWishlistLink> wishlists;
+
+  /// Open groups an invitee could still join. Id and title only — the amounts
+  /// and who has paid stay behind the group's own endpoint.
+  final List<InviteGroupGift> groupGifts;
 
   bool get hasResponded => rsvp != RsvpResponse.pending;
 
@@ -145,6 +162,9 @@ class PublicInvite {
       plusOnes: invitee['plusOnes'] as int? ?? 0,
       wishlists: (json['wishlists'] as List<dynamic>? ?? const [])
           .map((e) => InviteWishlistLink.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      groupGifts: (json['groupGifts'] as List<dynamic>? ?? const [])
+          .map((e) => InviteGroupGift.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }

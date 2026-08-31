@@ -11,6 +11,10 @@ WishtickEventDetail buildEvent({
   EventStatus status = EventStatus.draft,
   InviteTemplateChoice? inviteTemplate,
   String? inviteMediaUrl,
+  String? description,
+  String? venue = 'Mysore Socials',
+  List<String> wishlistIds = const [],
+  RsvpCounts? rsvpCounts,
 }) => WishtickEventDetail(
   id: id,
   title: title,
@@ -19,9 +23,11 @@ WishtickEventDetail buildEvent({
   timezone: 'Asia/Kolkata',
   visibility: EventVisibility.private,
   status: status,
-  wishlistIds: const [],
+  wishlistIds: wishlistIds,
   createdAt: DateTime.utc(2026, 7, 1),
-  venue: 'Mysore Socials',
+  description: description,
+  rsvpCounts: rsvpCounts,
+  venue: venue,
   personName: 'Siya',
   relation: 'friend',
   inviteTemplate: inviteTemplate,
@@ -129,7 +135,10 @@ class FakeEventsRepository implements EventsRepository {
   Future<List<InvitedEvent>> listInvited() async => const [];
 
   @override
-  Future<WishtickEventDetail> get(String id) async => event;
+  Future<WishtickEventDetail> get(String id) async {
+    _maybeThrow();
+    return event;
+  }
 
   @override
   Future<WishtickEventDetail> create({

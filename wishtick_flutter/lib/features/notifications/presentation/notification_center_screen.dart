@@ -68,6 +68,10 @@ class _NotificationCenterScreenState
     'thank_you' => AppRoutes.thankYou(row.refId),
     'memory_unlocked' => AppRoutes.memory(row.refId),
     'event_reminder' => AppRoutes.myEvents,
+    // The refId is a pair, not an id — two members asking the same friend
+    // must collapse to one row — so this goes to the list rather than trying
+    // to address one group.
+    'group_gift_invite' => AppRoutes.groupGiftInvites,
     'group_gift_funded' ||
     'group_gift_contribution' ||
     'group_gift_joined' ||

@@ -10,6 +10,7 @@ import '../../../../core/router/deep_links.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../events/data/events_repository.dart';
+import '../../../group_gift/data/group_gift_repository.dart';
 import '../../../wishlist/data/wishlist_repository.dart';
 import '../../../wishlist/domain/wishlist_participant.dart';
 import '../../domain/wishmate.dart';
@@ -36,8 +37,15 @@ sealed class ShareTarget {
   /// The line under the title of a shareable thing, used as the message body.
   String get shareMessage;
 
-  /// Invites these WishMates. Throws [ApiException] like any repository call.
-  Future<void> invite(WidgetRef ref, List<String> userIds);
+  /// Invites these WishMates and answers how many were actually invited.
+  ///
+  /// A count rather than nothing: a group gift's server skips who it cannot
+  /// invite — already asked, already in, or the recipient — instead of failing
+  /// the batch, and "Invite sent to 3 WishMates" over one real invitation is a
+  /// lie the sender acts on.
+  ///
+  /// Throws [ApiException] like any repository call.
+  Future<int> invite(WidgetRef ref, List<String> userIds);
 }
 
 /// A wishlist. Adds each WishMate as a participant, which is what a private
@@ -74,7 +82,7 @@ class WishlistShareTarget extends ShareTarget {
   String get shareMessage => 'Take a look at my wishlist "$title" on Wishtick';
 
   @override
-  Future<void> invite(WidgetRef ref, List<String> userIds) async {
+  Future<int> invite(WidgetRef ref, List<String> userIds) async {
     final repo = ref.read(wishlistRepositoryProvider);
     // Sequentially rather than in parallel: the server answers a duplicate with
     // a 409, and a burst of them would surface as whichever failed first rather
@@ -82,6 +90,7 @@ class WishlistShareTarget extends ShareTarget {
     for (final userId in userIds) {
       await repo.addParticipant(wishlistId, userId: userId, role: role);
     }
+    return userIds.length;
   }
 }
 
@@ -110,8 +119,44 @@ class EventShareTarget extends ShareTarget {
   String get shareMessage => 'You’re invited to $title';
 
   @override
-  Future<void> invite(WidgetRef ref, List<String> userIds) =>
-      ref.read(eventsRepositoryProvider).inviteWishmates(eventId, userIds);
+  Future<int> invite(WidgetRef ref, List<String> userIds) async {
+    await ref.read(eventsRepositoryProvider).inviteWishmates(eventId, userIds);
+    return userIds.length;
+  }
+}
+
+/// A group gift. Sends real invitations, which is the only way into a group
+/// hanging off a private wishlist — a link-holder there cannot gift at all, so
+/// following one lands on a 404. Accepting grants the access joining needs.
+class GroupGiftShareTarget extends ShareTarget {
+  const GroupGiftShareTarget({
+    required this.groupGiftId,
+    required this.title,
+    required this.url,
+  });
+
+  final String groupGiftId;
+  final String title;
+
+  /// The host's share link, when they have one. Members do not.
+  final String? url;
+
+  @override
+  String get subject => title;
+
+  @override
+  String? get shareUrl => url;
+
+  @override
+  String get shareMessage => 'Chip in with me for $title on Wishtick';
+
+  @override
+  Future<int> invite(WidgetRef ref, List<String> userIds) async {
+    final result = await ref
+        .read(groupGiftRepositoryProvider)
+        .invite(groupGiftId, userIds);
+    return result.invited;
+  }
 }
 
 /// The Instagram-style quick share: a grid of WishMates, tap to pick, one send.
@@ -152,17 +197,21 @@ class _QuickShareSheetState extends ConsumerState<QuickShareSheet> {
 
     final picked = _selected.toList();
     try {
-      await widget.target.invite(ref, picked);
+      final sent = await widget.target.invite(ref, picked);
       if (!mounted) return;
       setState(() {
         _sending = false;
         _sentTo.addAll(picked);
         _selected.clear();
+        // Nothing new went out — the same outcome the DUPLICATE branch below
+        // reports, reached without an error because the server skips rather
+        // than refusing.
+        if (sent == 0) _error = 'Some of them already had access.';
       });
       // Only on a clean send. The duplicate case below reports itself inline,
       // and telling someone an invite went out when it did not would be worse
       // than saying nothing.
-      unawaited(_confirmSent(picked.length));
+      if (sent > 0) unawaited(_confirmSent(sent));
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {

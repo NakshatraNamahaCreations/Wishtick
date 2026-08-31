@@ -10,6 +10,7 @@ import {
   GROUP_GIFT_CONTRIBUTION_RECEIVED,
   GROUP_GIFT_FULFILLED,
   GROUP_GIFT_FUNDED,
+  GROUP_GIFT_INVITED,
   GROUP_GIFT_JOINED,
   GROUP_GIFT_PURCHASED,
   MEMORY_UNLOCKED,
@@ -19,6 +20,7 @@ import {
   type GroupGiftContributionReceivedEvent,
   type GroupGiftFulfilledEvent,
   type GroupGiftFundedEvent,
+  type GroupGiftInvitedEvent,
   type GroupGiftJoinedEvent,
   type GroupGiftPurchasedEvent,
   type MemoryUnlockedEvent,
@@ -161,6 +163,25 @@ export class NotificationListener {
           amountMinor: e.amountMinor,
           collectedAmountMinor: e.collectedAmountMinor,
           targetAmountMinor: e.targetAmountMinor,
+        },
+      });
+    });
+  }
+
+  @OnEvent(GROUP_GIFT_INVITED)
+  async onGroupGiftInvited(e: GroupGiftInvitedEvent): Promise<void> {
+    await this.guard('group-gift-invited', async () => {
+      const gg = await this.groupGiftModel.findById(e.groupGiftId).exec();
+      if (!gg) return;
+      await this.notifications.enqueue({
+        userId: e.invitedUserId,
+        type: NotificationType.GROUP_GIFT_INVITE,
+        // Keyed on the pair, so two members asking the same friend produces
+        // one notification rather than two.
+        refId: `${e.groupGiftId}:${e.invitedUserId}`,
+        payload: {
+          itemTitle: await this.itemTitle(gg.itemId.toString()),
+          inviterName: await this.userName(e.invitedById),
         },
       });
     });

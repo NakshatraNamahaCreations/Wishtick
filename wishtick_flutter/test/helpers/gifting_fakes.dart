@@ -86,6 +86,7 @@ PublicInvite buildInvite({
   RsvpResponse rsvp = RsvpResponse.pending,
   EventStatus status = EventStatus.published,
   List<InviteWishlistLink> wishlists = const [],
+  List<InviteGroupGift> groupGifts = const [],
 }) => PublicInvite(
   event: InviteEvent(
     title: title,
@@ -102,6 +103,7 @@ PublicInvite buildInvite({
   rsvp: rsvp,
   plusOnes: 0,
   wishlists: wishlists,
+  groupGifts: groupGifts,
 );
 
 /// Scriptable stand-in for gifting and orders. Failures are set per call so a

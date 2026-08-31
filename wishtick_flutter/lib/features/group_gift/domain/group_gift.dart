@@ -180,6 +180,123 @@ class GroupGiftContribution {
       );
 }
 
+/// An invitation to chip in, as the person asked sees it.
+///
+/// Carries the group's title rather than only its id: the list is the first
+/// thing the invitee sees, and "A group gift" is not enough to answer with.
+@immutable
+class GroupGiftInvite {
+  const GroupGiftInvite({
+    required this.id,
+    required this.groupGiftId,
+    required this.groupTitle,
+    required this.status,
+    required this.invitedById,
+    required this.inviterName,
+    required this.createdAt,
+  });
+
+  factory GroupGiftInvite.fromJson(Map<String, dynamic> json) =>
+      GroupGiftInvite(
+        id: json['id'] as String,
+        groupGiftId: json['groupGiftId'] as String,
+        groupTitle: json['groupTitle'] as String? ?? 'A group gift',
+        status: json['status'] as String? ?? 'pending',
+        invitedById: json['invitedById'] as String? ?? '',
+        inviterName: json['inviterName'] as String? ?? 'A friend',
+        createdAt:
+            DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+            DateTime.now(),
+      );
+
+  final String id;
+  final String groupGiftId;
+  final String groupTitle;
+  final String status;
+  final String invitedById;
+
+  /// Who asked. An invitation from nobody in particular is one people ignore.
+  final String inviterName;
+  final DateTime createdAt;
+}
+
+/// One invitation with the gift behind it — what the detail screen shows.
+///
+/// Its own type rather than a [GroupGift]: the invitee is not a participant
+/// yet and cannot read the group the ordinary way, so the server hands back
+/// only what is needed to answer.
+@immutable
+class GroupGiftInviteDetail {
+  const GroupGiftInviteDetail({
+    required this.invite,
+    required this.itemTitle,
+    required this.imageUrl,
+    required this.currency,
+    required this.targetAmountMinor,
+    required this.collectedAmountMinor,
+    required this.percentFunded,
+    required this.contributorCount,
+    required this.contributors,
+  });
+
+  factory GroupGiftInviteDetail.fromJson(Map<String, dynamic> json) =>
+      GroupGiftInviteDetail(
+        invite: GroupGiftInvite.fromJson(json),
+        itemTitle: json['itemTitle'] as String? ?? 'A gift',
+        imageUrl: json['imageUrl'] as String?,
+        currency: json['currency'] as String? ?? 'INR',
+        targetAmountMinor: json['targetAmountMinor'] as int? ?? 0,
+        collectedAmountMinor: json['collectedAmountMinor'] as int? ?? 0,
+        percentFunded: json['percentFunded'] as int? ?? 0,
+        contributorCount: json['contributorCount'] as int? ?? 0,
+        contributors: (json['contributors'] as List<dynamic>? ?? const [])
+            .map(
+              (e) => GroupGiftInviteContributor.fromJson(
+                e as Map<String, dynamic>,
+              ),
+            )
+            .toList(),
+      );
+
+  final GroupGiftInvite invite;
+  final String itemTitle;
+  final String? imageUrl;
+  final String currency;
+  final int targetAmountMinor;
+  final int collectedAmountMinor;
+  final int percentFunded;
+  final int contributorCount;
+  final List<GroupGiftInviteContributor> contributors;
+
+  /// What is still missing, never negative.
+  int get remainingMinor {
+    final left = targetAmountMinor - collectedAmountMinor;
+    return left < 0 ? 0 : left;
+  }
+}
+
+/// One person who has already put money in.
+@immutable
+class GroupGiftInviteContributor {
+  const GroupGiftInviteContributor({
+    required this.userId,
+    required this.name,
+    required this.amountMinor,
+  });
+
+  factory GroupGiftInviteContributor.fromJson(Map<String, dynamic> json) =>
+      GroupGiftInviteContributor(
+        userId: json['userId'] as String?,
+        name: json['name'] as String? ?? 'A friend',
+        amountMinor: json['amountMinor'] as int? ?? 0,
+      );
+
+  /// Null when the contribution was anonymous — the name is 'Someone'.
+  final String? userId;
+  final String name;
+  final int amountMinor;
+}
+
 /// The public share link. Present only for the host.
 @immutable
 class GroupGiftShare {

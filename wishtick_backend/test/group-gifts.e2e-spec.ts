@@ -707,4 +707,419 @@ describe('Group gifting (e2e)', () => {
       expect(stored!.collectedAmountMinor).toBe(3000);
     });
   });
+
+  describe('inviting WishMates to chip in', () => {
+    /** Links two accounts, which an invitee has to be. */
+    const becomeWishmates = async (a: Actor, b: Actor): Promise<void> => {
+      await request(app.getHttpServer())
+        .post(`${V1}/people/${b.userId}/request`)
+        .set(auth(a.token))
+        .expect(201);
+      const received = await request(app.getHttpServer())
+        .get(`${V1}/wishlinks/received`)
+        .set(auth(b.token))
+        .expect(200);
+      const linkId = (received.body as Envelope<{ linkId: string }[]>).data[0].linkId;
+      await request(app.getHttpServer())
+        .post(`${V1}/wishlinks/${linkId}/accept`)
+        .set(auth(b.token))
+        .expect(201);
+    };
+
+    /**
+     * The scenario the invite exists for: a PRIVATE list the initiator can gift
+     * from and the invitee cannot. On a public list the access grant would be a
+     * no-op and the test would prove nothing.
+     */
+    const privateListSharedWith = async (
+      owner: Actor,
+      initiator: Actor,
+    ): Promise<{ wishlistId: string; itemId: string }> => {
+      const { wishlistId, itemId } = await wishlistWithItem(owner, WishlistVisibility.PRIVATE);
+      await request(app.getHttpServer())
+        .post(`${V1}/wishlists/${wishlistId}/participants`)
+        .set(auth(owner.token))
+        .send({ userId: initiator.userId, role: 'contributor' })
+        .expect(201);
+      return { wishlistId, itemId };
+    };
+
+    const inviteTo = (member: Actor, ggId: string, userIds: string[]) =>
+      request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${ggId}/invites`)
+        .set(auth(member.token))
+        .send({ userIds });
+
+    it('accepting joins the group and grants the access joining needs', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      await becomeWishmates(initiator, friend);
+      const { itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      // Before: the list is private and they are not on it, so the group is
+      // not even visible to them. This is the hole a bare share link left.
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/join`)
+        .set(auth(friend.token))
+        .expect(404);
+
+      const res = await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      expect((res.body as Envelope<{ invited: number }>).data.invited).toBe(1);
+
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string; groupGiftId: string; status: string }[]>;
+      expect(mine.data).toHaveLength(1);
+      expect(mine.data[0].groupGiftId).toBe(gg.data.id);
+      expect(mine.data[0].status).toBe('pending');
+
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gift-invites/${mine.data[0].id}/accept`)
+        .set(auth(friend.token))
+        .expect(200);
+
+      // A member now, and able to put money in — which is the whole point.
+      const view = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gifts/${gg.data.id}`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ participants: { userId: string }[] }>;
+      expect(view.data.participants.map((p) => p.userId)).toContain(friend.userId);
+
+      await contribute(friend, gg.data.id, { amountMinor: 10000 }).expect(201);
+    });
+
+    it('shows the invitee the gift they are being asked to fund', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const backer = await newUser();
+      const friend = await newUser();
+      await becomeWishmates(initiator, friend);
+      await becomeWishmates(initiator, backer);
+      const { wishlistId, itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      // Someone already in, so "who has chipped in" has something to say.
+      await inviteTo(initiator, gg.data.id, [backer.userId]).expect(200);
+      const backerInvites = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(backer.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gift-invites/${backerInvites.data[0].id}/accept`)
+        .set(auth(backer.token))
+        .expect(200);
+      await contribute(backer, gg.data.id, { amountMinor: 125000 }).expect(201);
+
+      await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string; inviterName: string }[]>;
+      // Who asked — an invitation from nobody in particular is one people ignore.
+      expect(mine.data[0].inviterName).toMatch(/^Friend /);
+
+      const detail = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/${mine.data[0].id}`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{
+        itemTitle: string;
+        targetAmountMinor: number;
+        collectedAmountMinor: number;
+        percentFunded: number;
+        inviterName: string;
+        contributors: { name: string; amountMinor: number }[];
+      }>;
+
+      expect(detail.data.itemTitle).toBe('Espresso machine');
+      expect(detail.data.targetAmountMinor).toBe(500000);
+      expect(detail.data.collectedAmountMinor).toBe(125000);
+      expect(detail.data.percentFunded).toBe(25);
+      expect(detail.data.inviterName).toMatch(/^Friend /);
+      expect(detail.data.contributors).toHaveLength(1);
+      expect(detail.data.contributors[0].amountMinor).toBe(125000);
+
+      // And none of that gave them the private list itself.
+      await request(app.getHttpServer())
+        .get(`${V1}/wishlists/${wishlistId}`)
+        .set(auth(friend.token))
+        .expect(404);
+    });
+
+    it('an invitation addressed to somebody else shows nothing', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      const nosy = await newUser();
+      await becomeWishmates(initiator, friend);
+      const { itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+      await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+
+      await request(app.getHttpServer())
+        .get(`${V1}/group-gift-invites/${mine.data[0].id}`)
+        .set(auth(nosy.token))
+        .expect(404);
+    });
+
+    it('declining leaves them out, and out of the wishlist too', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      await becomeWishmates(initiator, friend);
+      const { wishlistId, itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+      await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gift-invites/${mine.data[0].id}/decline`)
+        .set(auth(friend.token))
+        .expect(200);
+
+      // Saying no must not have handed them the owner's private list.
+      await request(app.getHttpServer())
+        .get(`${V1}/wishlists/${wishlistId}`)
+        .set(auth(friend.token))
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/join`)
+        .set(auth(friend.token))
+        .expect(404);
+    });
+
+    it('answering twice is refused rather than silently re-run', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      await becomeWishmates(initiator, friend);
+      const { itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+      await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gift-invites/${mine.data[0].id}/accept`)
+        .set(auth(friend.token))
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gift-invites/${mine.data[0].id}/decline`)
+        .set(auth(friend.token))
+        .expect(409);
+    });
+
+    it('skips who it cannot invite instead of failing the whole batch', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      const stranger = await newUser();
+      await becomeWishmates(initiator, friend);
+      // The recipient is a WishMate too, which is the realistic case — people
+      // buy gifts for their friends. Without that link the recipient would be
+      // skipped for merely being a stranger, and the rule that actually
+      // matters here would never be exercised.
+      await becomeWishmates(initiator, owner);
+      const { itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      // A WishMate, someone who is not, and the recipient — who must never be
+      // asked to fund their own surprise.
+      const res = await inviteTo(initiator, gg.data.id, [
+        friend.userId,
+        stranger.userId,
+        owner.userId,
+      ]).expect(200);
+
+      const out = (res.body as Envelope<{ invited: number; skipped: number }>).data;
+      expect(out.invited).toBe(1);
+      expect(out.skipped).toBe(2);
+    });
+
+    it('a second ask for the same person is skipped, not doubled', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      await becomeWishmates(initiator, friend);
+      const { itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      const again = await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+
+      expect((again.body as Envelope<{ invited: number }>).data.invited).toBe(0);
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<unknown[]>;
+      // One row, one notification — not two of each.
+      expect(mine.data).toHaveLength(1);
+    });
+
+    it('someone outside the group cannot invite to it', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const outsider = await newUser();
+      const friend = await newUser();
+      await becomeWishmates(outsider, friend);
+      const { itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      // 404, not 403 — someone outside has no business learning it exists.
+      await inviteTo(outsider, gg.data.id, [friend.userId]).expect(404);
+    });
+
+    it('an invitation addressed to somebody else cannot be answered', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      const nosy = await newUser();
+      await becomeWishmates(initiator, friend);
+      const { itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+      await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gift-invites/${mine.data[0].id}/accept`)
+        .set(auth(nosy.token))
+        .expect(404);
+    });
+  });
+
+  describe('naming the people in the group', () => {
+    /**
+     * Signs up the way the app actually does: no name.
+     *
+     * The other helpers pass one, which set `User.name` and hid the bug — the
+     * phone-OTP flow the app uses never sends it, and the name people type
+     * lands on their profile instead.
+     */
+    const namelessUser = async (): Promise<Actor> => {
+      const email = `ggn${++seq}.${Date.now()}@example.com`;
+      const { user, tokens } = await authService.signup(
+        { email, password: PASSWORD },
+        { ip: '127.0.0.1', userAgent: 'e2e' },
+      );
+      return { token: tokens.accessToken, userId: user.id };
+    };
+
+    it('uses the profile display name, not just the account name', async () => {
+      const owner = await newUser();
+      const host = await namelessUser();
+      await request(app.getHttpServer())
+        .patch(`${V1}/me`)
+        .set(auth(host.token))
+        .send({ displayName: 'Rohan' })
+        .expect(200);
+
+      const { itemId } = await wishlistWithItem(owner);
+      const gg = (await createGroupGift(host, itemId, { targetAmountMinor: 500000 }).expect(201))
+        .body as Envelope<{ id: string }>;
+
+      const view = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gifts/${gg.data.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ participants: { userId: string; name: string }[] }>;
+
+      const me = view.data.participants.find((p) => p.userId === host.userId);
+      // "A friend" is the fallback for someone the server cannot name. It was
+      // showing for everyone, including the host on their own group.
+      expect(me?.name).toBe('Rohan');
+    });
+
+    it('keeps the account name when the profile carries none', async () => {
+      const owner = await newUser();
+      // Has `User.name` from signup, and a profile row with no displayName —
+      // the profile must not overwrite the only name there is with a blank.
+      const host = await newUser();
+      await request(app.getHttpServer()).get(`${V1}/me`).set(auth(host.token)).expect(200);
+
+      const { itemId } = await wishlistWithItem(owner);
+      const gg = (await createGroupGift(host, itemId, { targetAmountMinor: 500000 }).expect(201))
+        .body as Envelope<{ id: string }>;
+
+      const view = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gifts/${gg.data.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ participants: { userId: string; name: string }[] }>;
+
+      const me = view.data.participants.find((p) => p.userId === host.userId);
+      expect(me?.name).toMatch(/^Friend /);
+    });
+
+    it('still falls back to A friend when there is no name anywhere', async () => {
+      const owner = await newUser();
+      const host = await namelessUser();
+
+      const { itemId } = await wishlistWithItem(owner);
+      const gg = (await createGroupGift(host, itemId, { targetAmountMinor: 500000 }).expect(201))
+        .body as Envelope<{ id: string }>;
+
+      const view = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gifts/${gg.data.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ participants: { userId: string; name: string }[] }>;
+
+      expect(view.data.participants.find((p) => p.userId === host.userId)?.name).toBe('A friend');
+    });
+  });
 });

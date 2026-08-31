@@ -10,6 +10,7 @@ import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../discover/presentation/explore_products_screen.dart';
 import '../../group_gift/domain/group_gift.dart';
+import '../../group_gift/presentation/widgets/group_gift_invites_banner.dart';
 import '../../notifications/presentation/notification_providers.dart';
 import '../../wishmates/presentation/handle_gate.dart';
 import '../domain/wishtick_event.dart';
@@ -110,6 +111,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Above everything: an unanswered invitation is a question
+                // somebody is waiting on, and it is the one thing here that
+                // goes stale if it is missed.
+                const GroupGiftInvitesBanner(),
                 const CelebrateMomentBanner(),
                 const SizedBox(height: AppSpacing.xl),
                 OccasionGrid(

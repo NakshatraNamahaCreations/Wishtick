@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +9,9 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
+import '../../gifting/presentation/widgets/celebration_mark.dart';
 import 'group_gift_controller.dart';
+import 'widgets/invite_wishmates_action.dart';
 
 /// "Group Gift Created" (`299:1735`) — the last step of creation.
 ///
@@ -35,7 +39,8 @@ class _GroupGiftCreatedScreenState
     });
   }
 
-  Future<void> _invite(String url) async {
+  /// The old behaviour, kept for people outside the app.
+  Future<void> _copyLink(String url) async {
     await Clipboard.setData(ClipboardData(text: url));
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -61,62 +66,100 @@ class _GroupGiftCreatedScreenState
           : SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-                child: Column(
-                  children: [
-                    const Spacer(flex: 2),
-                    Icon(
-                      Icons.celebration,
-                      size: AppSizes.avatarLg,
-                      color: colors.celebration,
-                    ),
-                    const SizedBox(height: AppSpacing.xxxl),
-                    Text(
-                      gift.title,
-                      textAlign: TextAlign.center,
-                      style: context.text.headlineMedium?.copyWith(
-                        color: context.headlineBrandColor,
-                        fontWeight: FontWeight.w700,
+                // Scrolls once it has to. The Spacers centre the celebration on
+                // a tall phone; on a short one four full-width buttons no
+                // longer fit, and without this the bottom one is clipped off
+                // the screen with a yellow-and-black overflow bar over it.
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          children: [
+                            const Spacer(flex: 2),
+                            // The same burst the other three "you did it" screens use
+                            // — All set, Added to wishlist, Thank-you sent. A static
+                            // icon on the one screen that is purely a celebration was
+                            // the odd one out.
+                            CelebrationMark(
+                              child: Icon(
+                                Icons.celebration,
+                                size: AppSizes.avatarLg,
+                                color: colors.celebration,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.xxxl),
+                            Text(
+                              gift.title,
+                              textAlign: TextAlign.center,
+                              style: context.text.headlineMedium?.copyWith(
+                                color: context.headlineBrandColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(
+                              'Group created successfully.',
+                              textAlign: TextAlign.center,
+                              style: context.text.bodyLarge?.copyWith(
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                            const Spacer(flex: 3),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => unawaited(
+                                  inviteWishmatesToGroupGift(
+                                    context,
+                                    groupGiftId: widget.groupGiftId,
+                                    title: gift.title,
+                                    shareUrl: shareUrl,
+                                  ),
+                                ),
+                                child: const Text('Invite Friends'),
+                              ),
+                            ),
+                            if (shareUrl != null) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton(
+                                  // For everyone who is not a WishMate. Only the host
+                                  // gets a share block, so a contributor landing here
+                                  // has no link to copy.
+                                  onPressed: () =>
+                                      unawaited(_copyLink(shareUrl)),
+                                  child: const Text('Copy invite link'),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: AppSpacing.md),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    context.go(AppRoutes.groupGift(gift.id)),
+                                child: const Text('View Group'),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: () => context.go(AppRoutes.home),
+                                child: const Text('Back to Home'),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.xxl),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      'Group created successfully.',
-                      textAlign: TextAlign.center,
-                      style: context.text.bodyLarge?.copyWith(
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                    const Spacer(flex: 3),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        // Only the host gets a share block, so a contributor
-                        // who lands here has nothing to invite anyone with.
-                        onPressed: shareUrl == null
-                            ? null
-                            : () => _invite(shareUrl),
-                        child: const Text('Invite Friends'),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () =>
-                            context.go(AppRoutes.groupGift(gift.id)),
-                        child: const Text('View Group'),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () => context.go(AppRoutes.home),
-                        child: const Text('Back to Home'),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xxl),
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -104,7 +104,21 @@ abstract final class AppRoutes {
   /// "Group Gift Created" (`299:1735`) — step 4.
   static String groupGiftCreated(String id) => '/group-gifts/$id/created';
 
+  /// "Thank You!" (`316:298`) — shown after a pledge, and the only place the
+  /// host's UPI ID appears.
+  static String groupGiftContributed(String id) =>
+      '/group-gifts/$id/contributed';
+
   /// "Group Gift Details" (`316:166`) — the live group everyone else sees.
+  /// Where a "chip in with us" notification lands. No id in the path: the
+  /// screen is the whole list of unanswered invitations, and the one that was
+  /// tapped is in it.
+  static const groupGiftInvites = '/group-gifts/invites';
+
+  /// One invitation, with the gift behind it and the answer at the bottom.
+  static String groupGiftInvite(String inviteId) =>
+      '/group-gifts/invites/$inviteId';
+
   static String groupGift(String id) => '/group-gifts/$id';
 
   /// The participant list (`316:536`).
@@ -132,6 +146,9 @@ abstract final class AppRoutes {
   static const createEventDetails = '/events/create/details';
 
   /// "Choose a Template" (`263:900`).
+  /// The host's own view of one event, from "My Events".
+  static String eventDetail(String id) => '/events/$id';
+
   static String eventInviteTemplates(String id) => '/events/$id/invite';
 
   /// "Upload Invitation" (`2248:70`) — the other answer to the method sheet.

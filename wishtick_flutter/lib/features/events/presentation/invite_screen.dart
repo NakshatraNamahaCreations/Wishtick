@@ -269,13 +269,59 @@ class _Body extends StatelessWidget {
                 context.push<void>(AppRoutes.publicWishlist(wishlist.slug)),
               ),
             ),
-        // Group Gifts, Guest List and Add Your Wish are the mock's other three
-        // rows. Group gifts land in Sprint 6, wishes in Sprint 8, and a guest
-        // list is host-only information the invitee view deliberately withholds
-        // — so none of them are drawn as rows that cannot be opened.
+        // `291:1008`'s Group Gifts row. Drawn only when a group is actually
+        // running: an invitee cannot start one from here, so an empty row
+        // would be an affordance for nothing.
+        if (invite.groupGifts.isNotEmpty)
+          _SuggestionRow(
+            icon: Icons.card_giftcard,
+            title: 'Group Gifts',
+            subtitle: invite.groupGifts.length == 1
+                ? '1 active gift'
+                : '${invite.groupGifts.length} active gifts',
+            onTap: () => unawaited(_openGroupGift(context, invite.groupGifts)),
+          ),
+        // Guest List and Add Your Wish are the mock's remaining two rows. A
+        // guest list is host-only information this view deliberately withholds,
+        // and "Add Your Wish" is an action on the invitee's *own* list rather
+        // than on this event — so neither is drawn as a row that cannot open.
       ],
     );
   }
+}
+
+/// Opens a group gift, asking which one when there is more than one.
+///
+/// A sheet rather than a list screen: the design has no frame for "the group
+/// gifts of an event", and with one gift — which is what `291:1008` draws —
+/// there is nothing to choose and the sheet never appears.
+Future<void> _openGroupGift(
+  BuildContext context,
+  List<InviteGroupGift> gifts,
+) async {
+  if (gifts.length == 1) {
+    await context.push<void>(AppRoutes.groupGift(gifts.single.id));
+    return;
+  }
+
+  final picked = await showModalBottomSheet<InviteGroupGift>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final gift in gifts)
+            ListTile(
+              leading: const Icon(Icons.card_giftcard),
+              title: Text(gift.title),
+              onTap: () => Navigator.of(sheetContext).pop(gift),
+            ),
+        ],
+      ),
+    ),
+  );
+  if (picked == null || !context.mounted) return;
+  await context.push<void>(AppRoutes.groupGift(picked.id));
 }
 
 class _CancelledBanner extends StatelessWidget {

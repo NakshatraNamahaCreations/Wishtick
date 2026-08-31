@@ -101,6 +101,17 @@ View the group gift: https://app.wishtick.test/x",
 }
 `;
 
+exports[`NotificationRenderer renders in-app/text/sms content for every notification type: group_gift_invite 1`] = `
+{
+  "sms": "Join a group gift — https://app.wishtick.test/x",
+  "subject": "Someone asked you to chip in",
+  "text": "Someone invited you to chip in for Noise-cancelling headphones.
+
+See the invitation: https://app.wishtick.test/x",
+  "title": "Join a group gift",
+}
+`;
+
 exports[`NotificationRenderer renders in-app/text/sms content for every notification type: group_gift_joined 1`] = `
 {
   "sms": "Someone joined the group gift",

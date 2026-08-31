@@ -5,6 +5,7 @@ import { QUEUE } from 'src/infra/queue/queue.constants';
 import { MediaModule } from 'src/modules/media/media.module';
 import { ProfileModule } from 'src/modules/profile/profile.module';
 import { UsersModule } from 'src/modules/users/users.module';
+import { EventGroupGiftsModule } from 'src/modules/group-gifts/event-group-gifts.module';
 import { WishmatesModule } from 'src/modules/wishmates/wishmates.module';
 import { WishlistsModule } from 'src/modules/wishlists/wishlists.module';
 import { EventParticipationModule } from './event-participation.module';
@@ -39,6 +40,9 @@ import { Event, EventSchema } from './schemas/event.schema';
     // For guest identities on the invite list. Also one-way, and it reaches
     // events only through EventParticipationModule, so this is not a cycle.
     WishmatesModule,
+    // Just the "which groups are running for this party?" lookup — see the
+    // note on the module itself.
+    EventGroupGiftsModule,
   ],
   controllers: [EventsController, PublicInvitesController, PublicEventsController],
   providers: [

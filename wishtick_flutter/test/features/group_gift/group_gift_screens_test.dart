@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wishtick_flutter/core/theme/app_dimens.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/features/gifting/data/gifting_repository.dart';
+import 'package:wishtick_flutter/features/gifting/presentation/widgets/celebration_mark.dart';
 import 'package:wishtick_flutter/features/group_gift/data/group_gift_repository.dart';
 import 'package:wishtick_flutter/features/group_gift/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/group_gift/domain/settlement.dart';
@@ -21,12 +22,15 @@ import 'package:wishtick_flutter/features/wishlist/data/product_repository.dart'
 import 'package:wishtick_flutter/features/wishlist/data/wishlist_repository.dart';
 import 'package:wishtick_flutter/features/wishlist/domain/product.dart';
 import 'package:wishtick_flutter/features/wishlist/domain/wishlist.dart';
+import 'package:wishtick_flutter/features/wishmates/data/wishmates_repository.dart';
+import 'package:wishtick_flutter/features/wishmates/presentation/widgets/quick_share_sheet.dart';
 
 import '../../helpers/gifting_fakes.dart';
 import '../../helpers/group_gift_fakes.dart';
 // Prefixed: wishlist_fakes also exports `buildItem`, which here means a
 // *wishlist* item rather than a group-gift line.
 import '../../helpers/wishlist_fakes.dart' as wl;
+import '../../helpers/wishmates_fakes.dart';
 
 void main() {
   Future<void> pump(
@@ -484,6 +488,191 @@ void main() {
       // receiver's affordance — the point is that "Mark as Sent" is not
       // offered while there is nowhere to send it.
       expect(find.text('Mark as Sent'), findsNothing);
+    });
+  });
+
+  // "This should be in instagram share format and bottomsheet should be
+  // minimum." Both invite buttons open the same quick-share sheet the wishlist
+  // and event share buttons use — a grid of faces, tap to pick, one send —
+  // rather than a full-height list of rows.
+  group('inviting WishMates to chip in', () {
+    late FakeWishmatesRepository mates;
+
+    setUp(
+      () => mates = FakeWishmatesRepository(
+        mates: [
+          buildWishmate(userId: 'u_1', displayName: 'Priyal Sharma'),
+          buildWishmate(userId: 'u_2', displayName: 'Rohan Prasad'),
+        ],
+      ),
+    );
+
+    Future<void> pumpScreen(
+      WidgetTester tester,
+      Widget screen,
+      FakeGroupGiftRepository repo,
+    ) async {
+      tester.view
+        ..physicalSize = const Size(393, 1400)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          key: UniqueKey(),
+          overrides: [
+            groupGiftRepositoryProvider.overrideWithValue(repo),
+            wishmatesRepositoryProvider.overrideWithValue(mates),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: screen),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the created screen opens the quick-share grid', (
+      tester,
+    ) async {
+      final repo = FakeGroupGiftRepository(gift: buildGroupGift())
+        ..inviteResult = (invited: 1, skipped: 0);
+      await pumpScreen(
+        tester,
+        const GroupGiftCreatedScreen(groupGiftId: 'gg_1'),
+        repo,
+      );
+
+      await tester.tap(find.text('Invite Friends'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(QuickShareSheet), findsOneWidget);
+      expect(find.text('Priyal Sharma'), findsOneWidget);
+    });
+
+    // The bug that started this: the participants screen was still copying a
+    // link long after the created screen had stopped.
+    testWidgets('the participants screen opens it too, and sends', (
+      tester,
+    ) async {
+      final repo = FakeGroupGiftRepository(gift: buildGroupGift())
+        ..inviteResult = (invited: 1, skipped: 0);
+      await pumpScreen(
+        tester,
+        const GroupGiftParticipantsScreen(groupGiftId: 'gg_1'),
+        repo,
+      );
+
+      await tester.tap(find.text('Invite Friends & Family'));
+      await tester.pumpAndSettle();
+      expect(find.byType(QuickShareSheet), findsOneWidget);
+
+      await tester.tap(find.text('Priyal Sharma'));
+      await tester.pump();
+      await tester.tap(find.textContaining('Send to'));
+      await tester.pumpAndSettle();
+
+      expect(repo.invitedUserIds, [
+        ['u_1'],
+      ]);
+    });
+
+    // The sheet is sized to what is in it. Two WishMates must not open half a
+    // screen of nothing under one row of faces.
+    testWidgets('the sheet is no taller than its contents', (tester) async {
+      final repo = FakeGroupGiftRepository(gift: buildGroupGift());
+      await pumpScreen(
+        tester,
+        const GroupGiftParticipantsScreen(groupGiftId: 'gg_1'),
+        repo,
+      );
+
+      await tester.tap(find.text('Invite Friends & Family'));
+      await tester.pumpAndSettle();
+
+      final sheet = tester.getSize(find.byType(QuickShareSheet));
+      // Well under the 85% cap it is allowed to grow to, and under half the
+      // screen: two faces is one row.
+      expect(sheet.height, lessThan(1400 * 0.5));
+    });
+
+    // The server skips who it cannot invite rather than failing the batch, so
+    // "Invite sent to 2 WishMates" over one real invitation is reachable
+    // without any error to catch.
+    testWidgets('does not claim a send for people the server skipped', (
+      tester,
+    ) async {
+      final repo = FakeGroupGiftRepository(gift: buildGroupGift())
+        ..inviteResult = (invited: 0, skipped: 1);
+      await pumpScreen(
+        tester,
+        const GroupGiftParticipantsScreen(groupGiftId: 'gg_1'),
+        repo,
+      );
+
+      await tester.tap(find.text('Invite Friends & Family'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Priyal Sharma'));
+      await tester.pump();
+      await tester.tap(find.textContaining('Send to'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Some of them already had access.'), findsOneWidget);
+      expect(find.textContaining('Invite sent'), findsNothing);
+    });
+
+    testWidgets('counts only what actually went out', (tester) async {
+      final repo = FakeGroupGiftRepository(gift: buildGroupGift())
+        ..inviteResult = (invited: 1, skipped: 1);
+      await pumpScreen(
+        tester,
+        const GroupGiftParticipantsScreen(groupGiftId: 'gg_1'),
+        repo,
+      );
+
+      await tester.tap(find.text('Invite Friends & Family'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Priyal Sharma'));
+      await tester.pump();
+      await tester.tap(find.text('Rohan Prasad'));
+      await tester.pump();
+      await tester.tap(find.textContaining('Send to'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Two picked, one invited. The dialog must say one — asserted
+      // positively, because two findsNothing would also pass if no
+      // confirmation appeared at all.
+      expect(find.text('Invite sent'), findsOneWidget);
+      expect(find.textContaining('2 WishMates'), findsNothing);
+    });
+
+    // The share block is the host's alone, so gating on it left every other
+    // member looking at a dead button. Any member may invite.
+    // The other three "you did it" screens burst; this one used to be a still
+    // icon, which made the only screen that is purely a celebration the flat
+    // one.
+    testWidgets('the created screen celebrates', (tester) async {
+      await pumpScreen(
+        tester,
+        const GroupGiftCreatedScreen(groupGiftId: 'gg_1'),
+        FakeGroupGiftRepository(gift: buildGroupGift()),
+      );
+      expect(find.byType(CelebrationMark), findsOneWidget);
+    });
+
+    testWidgets('a member with no share link can still invite', (tester) async {
+      await pumpScreen(
+        tester,
+        const GroupGiftParticipantsScreen(groupGiftId: 'gg_1'),
+        FakeGroupGiftRepository(gift: buildGroupGift()),
+      );
+
+      final button = tester.widget<ElevatedButton>(
+        find.ancestor(
+          of: find.text('Invite Friends & Family'),
+          matching: find.byType(ElevatedButton),
+        ),
+      );
+      expect(button.onPressed, isNotNull);
     });
   });
 

@@ -64,6 +64,52 @@ class GroupGiftRepository {
 
   /// Group gifts the caller takes part in — initiated, joined, or contributed
   /// to — newest first.
+  /// The invitations waiting on the caller's answer.
+  Future<List<GroupGiftInvite>> listInvites() async {
+    final json = await _api.get<List<dynamic>>('/group-gift-invites/mine');
+    return json
+        .map((e) => GroupGiftInvite.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// One invitation, with the gift behind it.
+  Future<GroupGiftInviteDetail> inviteDetail(String inviteId) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/group-gift-invites/$inviteId',
+    );
+    return GroupGiftInviteDetail.fromJson(json);
+  }
+
+  /// Answers one.
+  ///
+  /// Accepting is what actually lets the invitee pay: the server adds them to
+  /// the wishlist behind the group first, then joins them to the group, so a
+  /// private list stops being the wall it is to a link-holder.
+  Future<void> respondToInvite(String inviteId, {required bool accept}) async {
+    await _api.post<Map<String, dynamic>>(
+      '/group-gift-invites/$inviteId/${accept ? 'accept' : 'decline'}',
+    );
+  }
+
+  /// Asks WishMates to chip in.
+  ///
+  /// Returns how many were actually asked; the server skips anyone it cannot
+  /// invite — already asked, already in, not a WishMate, or the recipient —
+  /// rather than failing the whole batch.
+  Future<({int invited, int skipped})> invite(
+    String groupGiftId,
+    List<String> userIds,
+  ) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/group-gifts/$groupGiftId/invites',
+      body: {'userIds': userIds},
+    );
+    return (
+      invited: json['invited'] as int? ?? 0,
+      skipped: json['skipped'] as int? ?? 0,
+    );
+  }
+
   Future<List<GroupGift>> listMine({int? limit}) async {
     final json = await _api.get<List<dynamic>>(
       '/group-gifts/mine',

@@ -1,3 +1,4 @@
+import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/features/group_gift/data/group_gift_repository.dart';
 import 'package:wishtick_flutter/features/group_gift/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/group_gift/domain/settlement.dart';
@@ -77,6 +78,51 @@ GroupGift buildGroupGift({
   thankYouNote: thankYouNote,
   recipientName: recipientName,
   share: share,
+);
+
+GroupGiftInvite buildInvite({
+  String id = 'inv_1',
+  String groupGiftId = 'gg_1',
+  String groupTitle = "Siya's birthday gift",
+  String inviterName = 'Rohan',
+}) => GroupGiftInvite(
+  id: id,
+  groupGiftId: groupGiftId,
+  groupTitle: groupTitle,
+  status: 'pending',
+  invitedById: 'host_1',
+  inviterName: inviterName,
+  createdAt: DateTime(2026, 8, 1),
+);
+
+GroupGiftInviteDetail buildInviteDetail({
+  GroupGiftInvite? invite,
+  String itemTitle = 'Lightbeam Android 14 Smart LED Projector',
+  String? imageUrl,
+  int targetAmountMinor = 487100,
+  int collectedAmountMinor = 100000,
+  int contributorCount = 1,
+  List<GroupGiftInviteContributor>? contributors,
+}) => GroupGiftInviteDetail(
+  invite: invite ?? buildInvite(),
+  itemTitle: itemTitle,
+  imageUrl: imageUrl,
+  currency: 'INR',
+  targetAmountMinor: targetAmountMinor,
+  collectedAmountMinor: collectedAmountMinor,
+  percentFunded: targetAmountMinor == 0
+      ? 0
+      : (collectedAmountMinor * 100 ~/ targetAmountMinor).clamp(0, 100),
+  contributorCount: contributorCount,
+  contributors:
+      contributors ??
+      const [
+        GroupGiftInviteContributor(
+          userId: 'host_1',
+          name: 'Rohan',
+          amountMinor: 100000,
+        ),
+      ],
 );
 
 Settlement buildSettlement({
@@ -163,6 +209,62 @@ class FakeGroupGiftRepository implements GroupGiftRepository {
 
   @override
   Future<List<GroupGift>> listMine({int? limit}) async => _guard([gift]);
+
+  /// What the server answered the last invite with. The skip count is not
+  /// cosmetic — the screen has to say it out loud — so it is stubbable.
+  ({int invited, int skipped}) inviteResult = (invited: 0, skipped: 0);
+
+  /// Exactly who was asked, in order, so a test can catch the picker's
+  /// selection being dropped or reordered on the way to the wire.
+  final invitedUserIds = <List<String>>[];
+
+  /// What the invitee's list answers with.
+  List<GroupGiftInvite> invites = const [];
+
+  /// Every answer sent, as (inviteId, accepted). Recorded rather than counted:
+  /// a screen that sends accept when the Decline button was pressed would pass
+  /// a call-count assertion and fail this one.
+  final respondedTo = <(String, bool)>[];
+
+  @override
+  Future<List<GroupGiftInvite>> listInvites() async {
+    calls.add('listInvites');
+    return _guard(invites);
+  }
+
+  /// What the detail screen is handed. Null means the call throws not-found,
+  /// which is what a stale invite id does on the server.
+  GroupGiftInviteDetail? inviteDetail0;
+
+  @override
+  Future<GroupGiftInviteDetail> inviteDetail(String inviteId) async {
+    calls.add('inviteDetail');
+    final detail = _guard(inviteDetail0);
+    if (detail == null) {
+      throw const ApiException(
+        code: 'NOT_FOUND',
+        message: 'Invitation not found',
+      );
+    }
+    return detail;
+  }
+
+  @override
+  Future<void> respondToInvite(String inviteId, {required bool accept}) async {
+    calls.add('respondToInvite');
+    _guard(null);
+    respondedTo.add((inviteId, accept));
+  }
+
+  @override
+  Future<({int invited, int skipped})> invite(
+    String groupGiftId,
+    List<String> userIds,
+  ) async {
+    calls.add('invite');
+    invitedUserIds.add(userIds);
+    return _guard(inviteResult);
+  }
 
   @override
   Future<GroupGift> addCharge(
