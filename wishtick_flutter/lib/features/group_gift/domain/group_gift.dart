@@ -180,6 +180,50 @@ class GroupGiftContribution {
       );
 }
 
+/// The group gift already collecting for an item.
+///
+/// Enough to say "a group is running for this" on the item screen, which would
+/// otherwise offer to reserve it, buy it outright, or start a second one — all
+/// three of which the server refuses once the item is claimed.
+@immutable
+class ItemGroupGift {
+  const ItemGroupGift({
+    required this.id,
+    required this.title,
+    required this.status,
+    required this.targetAmountMinor,
+    required this.collectedAmountMinor,
+    required this.percentFunded,
+    required this.contributorCount,
+  });
+
+  factory ItemGroupGift.fromJson(Map<String, dynamic> json) => ItemGroupGift(
+    id: json['id'] as String,
+    title: json['title'] as String? ?? 'A group gift',
+    status: GroupGiftStatus.fromWire(json['status'] as String?),
+    targetAmountMinor: json['targetAmountMinor'] as int? ?? 0,
+    collectedAmountMinor: json['collectedAmountMinor'] as int? ?? 0,
+    percentFunded: json['percentFunded'] as int? ?? 0,
+    contributorCount: json['contributorCount'] as int? ?? 0,
+  );
+
+  final String id;
+  final String title;
+  final GroupGiftStatus status;
+  final int targetAmountMinor;
+  final int collectedAmountMinor;
+  final int percentFunded;
+  final int contributorCount;
+
+  /// "3 people chipping in" / "1 person chipping in", or null before anyone
+  /// has — "0 people" reads as a failure rather than a fresh start.
+  String? get contributorLine => switch (contributorCount) {
+    0 => null,
+    1 => '1 person chipping in',
+    _ => '$contributorCount people chipping in',
+  };
+}
+
 /// An invitation to chip in, as the person asked sees it.
 ///
 /// Carries the group's title rather than only its id: the list is the first

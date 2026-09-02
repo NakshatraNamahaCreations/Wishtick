@@ -11,6 +11,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
+import '../../../core/widgets/scroll_more_cue.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
 import '../../events/presentation/widgets/relation_picker_sheet.dart';
@@ -74,6 +75,10 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
   void _onSaveAndContinue() {
     final state = ref.read(createMemoryProvider);
     if (state.step1Complete) {
+      // Seeded here rather than on step 2, because its date field reads its
+      // initial value once when it is built — a suggestion arriving after
+      // that would never reach the box.
+      ref.read(createMemoryProvider.notifier).suggestUnlockDate();
       unawaited(context.push<void>(AppRoutes.createMemoryUnlock));
       return;
     }
@@ -161,127 +166,136 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
     return Scaffold(
       backgroundColor: colors.background,
       appBar: circleBackAppBar(context, title: 'Create Memory'),
-      body: ListView(
+      // The form runs under a pinned Save bar, so the occasion grid gets cut
+      // at that edge and the page reads as finished when it is not.
+      body: ScrollMoreCue(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.sm,
-          AppSpacing.lg,
-          AppSpacing.xxl,
-        ),
-        children: [
-          _SectionHeading('Give Your Memory a Title'),
-          const SizedBox(height: AppSpacing.lg),
-          TextField(
-            controller: _title,
-            textCapitalization: TextCapitalization.words,
-            maxLength: 140,
-            buildCounter: _noCounter,
-            decoration: InputDecoration(
-              labelText: 'Memory Name *',
-              errorText: _errorFor(state, MemoryField.title),
-              hintText: "Ananya's Birthday",
-            ),
-            onChanged: notifier.setTitle,
+        child: ListView(
+          controller: _scrollController,
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.sm,
+            AppSpacing.lg,
+            AppSpacing.xxl,
           ),
-
-          const SizedBox(height: AppSpacing.section),
-          _SectionHeading('Who is this memory for?'),
-          const SizedBox(height: AppSpacing.lg),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 3,
-                child: _RecipientField(
-                  key: _fieldKeys[MemoryField.recipient],
-                  person: state.recipient,
-                  onTap: _pickRecipient,
-                  errorText: _errorFor(state, MemoryField.recipient),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                flex: 2,
-                child: _RelationField(
-                  key: _fieldKeys[MemoryField.relation],
-                  label: state.relationLabel,
-                  onTap: _pickRelation,
-                  errorText: _errorFor(state, MemoryField.relation),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          TextField(
-            controller: _description,
-            textCapitalization: TextCapitalization.sentences,
-            maxLines: 4,
-            maxLength: kMemoryDescriptionMax,
-            decoration: InputDecoration(
-              labelText: 'Description *',
-              errorText: _errorFor(state, MemoryField.description),
-              hintText:
-                  "Let's make her day extra special. Join us in celebrating "
-                  "Ananya's birthday.",
-            ),
-            onChanged: notifier.setDescription,
-          ),
-
-          const SizedBox(height: AppSpacing.xl),
-          _SectionHeading('What is the occasion?'),
-          const SizedBox(height: AppSpacing.lg),
-          OccasionGrid(
-            selectedKey: state.occasionKey,
-            onSelect: notifier.setOccasion,
-          ),
-
-          const SizedBox(height: AppSpacing.section),
-          _OccasionDatePicker(
-            day: state.occasionDay,
-            month: state.occasionMonth,
-            year: state.occasionYear ?? DateTime.now().year,
-            includeYear: state.includeYear,
-            onDay: notifier.setOccasionDay,
-            onMonth: notifier.setOccasionMonth,
-            onYear: notifier.setOccasionYear,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Row(
-            children: [
-              Switch(
-                value: state.includeYear,
-                onChanged: notifier.setIncludeYear,
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Text(
-                'Include Year',
-                style: context.text.titleSmall?.copyWith(
-                  color: colors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: AppSpacing.xl),
-          _SectionHeading('Cover Image'),
-          const SizedBox(height: AppSpacing.lg),
-          _CoverRow(
-            localPath: state.coverLocalPath,
-            busy: _uploadingCover,
-            onAdd: _uploadingCover ? null : _pickCover,
-          ),
-          if (_coverError != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            WishtickErrorText(_coverError!),
-          ],
-
-          if (state.error != null) ...[
+          children: [
+            _SectionHeading('Give Your Memory a Title'),
             const SizedBox(height: AppSpacing.lg),
-            WishtickErrorText(state.error!),
+            TextField(
+              controller: _title,
+              textCapitalization: TextCapitalization.words,
+              maxLength: 140,
+              buildCounter: _noCounter,
+              decoration: InputDecoration(
+                labelText: 'Memory Name *',
+                errorText: _errorFor(state, MemoryField.title),
+                hintText: "Ananya's Birthday",
+              ),
+              onChanged: notifier.setTitle,
+            ),
+
+            const SizedBox(height: AppSpacing.section),
+            _SectionHeading('Who is this memory for?'),
+            const SizedBox(height: AppSpacing.lg),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: _RecipientField(
+                    key: _fieldKeys[MemoryField.recipient],
+                    person: state.recipient,
+                    onTap: _pickRecipient,
+                    errorText: _errorFor(state, MemoryField.recipient),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  flex: 2,
+                  child: _RelationField(
+                    key: _fieldKeys[MemoryField.relation],
+                    label: state.relationLabel,
+                    onTap: _pickRelation,
+                    errorText: _errorFor(state, MemoryField.relation),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            TextField(
+              controller: _description,
+              textCapitalization: TextCapitalization.sentences,
+              maxLines: 4,
+              maxLength: kMemoryDescriptionMax,
+              decoration: InputDecoration(
+                labelText: 'Description *',
+                errorText: _errorFor(state, MemoryField.description),
+                // A wish, addressed to the person. The old hint was the event
+                // screen's invitation copy ("Join us in celebrating…"), which
+                // asks the reader to turn up somewhere — wrong for a capsule
+                // that renders this line under "For <name>".
+                hintText:
+                    'Wishing you all the happiness in the world today — you '
+                    'deserve every bit of it.',
+              ),
+              onChanged: notifier.setDescription,
+            ),
+
+            const SizedBox(height: AppSpacing.xl),
+            _SectionHeading('What is the occasion?'),
+            const SizedBox(height: AppSpacing.lg),
+            OccasionGrid(
+              selectedKey: state.occasionKey,
+              onSelect: notifier.setOccasion,
+            ),
+
+            const SizedBox(height: AppSpacing.section),
+            _OccasionDatePicker(
+              day: state.occasionDay,
+              month: state.occasionMonth,
+              year: state.occasionYear ?? DateTime.now().year,
+              includeYear: state.includeYear,
+              onDay: notifier.setOccasionDay,
+              onMonth: notifier.setOccasionMonth,
+              onYear: notifier.setOccasionYear,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Row(
+              children: [
+                Switch(
+                  value: state.includeYear,
+                  onChanged: notifier.setIncludeYear,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Text(
+                  'Include Year',
+                  style: context.text.titleSmall?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: AppSpacing.xl),
+            _SectionHeading('Cover Image'),
+            const SizedBox(height: AppSpacing.lg),
+            _CoverRow(
+              localPath: state.coverLocalPath,
+              busy: _uploadingCover,
+              onAdd: _uploadingCover ? null : _pickCover,
+            ),
+            if (_coverError != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              WishtickErrorText(_coverError!),
+            ],
+
+            if (state.error != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              WishtickErrorText(state.error!),
+            ],
           ],
-        ],
+        ),
       ),
       bottomNavigationBar: SafeArea(
         top: false,

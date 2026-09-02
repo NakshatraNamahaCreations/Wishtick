@@ -3,11 +3,11 @@
 The app is wired for `https://wishtick.com` links. Three pieces are needed and
 only the first is in this repo's control:
 
-| Piece | Where | State |
-|---|---|---|
-| Intent filters / entitlements | `wishtick_flutter/android/…/AndroidManifest.xml`, `ios/Runner/Runner.entitlements` | ✅ done |
-| The two verification files | `wishtick.com/.well-known/…` | ⛔ this folder — needs real values |
-| The store fallback | the web page at `/i/`, `/e/`, `/w/`, `/m/` | ⛔ website work |
+| Piece                         | Where                                                                              | State                              |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------- |
+| Intent filters / entitlements | `wishtick_flutter/android/…/AndroidManifest.xml`, `ios/Runner/Runner.entitlements` | ✅ done                            |
+| The two verification files    | `wishtick.com/.well-known/…`                                                       | ⛔ this folder — needs real values |
+| The store fallback            | the web page at `/i/`, `/e/`, `/w/`, `/m/`                                         | ⛔ website work                    |
 
 ## The store fallback is the website's job, not the app's
 
@@ -18,7 +18,7 @@ the page at that URL is what has to look at the User-Agent and send them to the
 Play Store or the App Store — and, ideally, render the invitation itself so the
 link is useful to somebody who never installs anything.
 
-Once the app *is* installed and the domain is verified, the OS intercepts the
+Once the app _is_ installed and the domain is verified, the OS intercepts the
 same URL before the browser ever sees it, and the page is never loaded.
 
 ## Claimed paths
@@ -26,19 +26,19 @@ same URL before the browser ever sees it, and the page is never loaded.
 Keep these three lists in step — `AppLinks.claimedPrefixes` in
 `lib/core/router/deep_links.dart` is the source of truth:
 
-| Path | Screen | Who can open it |
-|---|---|---|
-| `/i/<token>` | One person's event invitation — accept / decline | Anyone with the token |
-| `/e/<slug>` | A public event's open invitation | Anyone, but must sign in to RSVP |
-| `/w/<slug>` | A shared wishlist | Anyone with the link |
-| `/m/<slug>` | A memory capsule's contribute link | Anyone with the link |
+| Path         | Screen                                           | Who can open it                  |
+| ------------ | ------------------------------------------------ | -------------------------------- |
+| `/i/<token>` | One person's event invitation — accept / decline | Anyone with the token            |
+| `/e/<slug>`  | A public event's open invitation                 | Anyone, but must sign in to RSVP |
+| `/w/<slug>`  | A shared wishlist                                | Anyone with the link             |
+| `/m/<slug>`  | A memory capsule's contribute link               | Anyone with the link             |
 
 ## Before these files work
 
 Both templates below contain placeholders. **Neither will verify as-is.**
 
 1. **The application id is still the Flutter default.** Android is
-   `com.example.wishtick_flutter` and iOS is `com.example.wishtickFlutter`.
+   `com.wishtick.wishtick` and iOS is `com.example.wishtickFlutter`.
    Google Play rejects `com.example.*` outright, so this has to change before
    release — and because App Link verification binds to the id, changing it
    later means reissuing `assetlinks.json`. Worth settling before the first
@@ -67,8 +67,8 @@ Verify afterwards with:
 
 ```bash
 # Android — should report each statement as verified
-adb shell pm verify-app-links --re-verify com.example.wishtick_flutter
-adb shell pm get-app-links com.example.wishtick_flutter
+adb shell pm verify-app-links --re-verify com.wishtick.wishtick
+adb shell pm get-app-links com.wishtick.wishtick
 
 # iOS
 curl -sS https://wishtick.com/.well-known/apple-app-site-association | jq .

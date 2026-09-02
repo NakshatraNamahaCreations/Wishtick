@@ -7,6 +7,9 @@ import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/core/widgets/curved_bottom_clipper.dart';
 import 'package:wishtick_flutter/core/widgets/selection_caret.dart';
 import 'package:wishtick_flutter/features/events/presentation/create_event_screen.dart';
+import 'package:wishtick_flutter/features/wishmates/data/wishmates_repository.dart';
+
+import '../../helpers/wishmates_fakes.dart';
 
 /// "What are you celebrating?" (`257:733`) — the occasion picker.
 ///
@@ -21,12 +24,23 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          wishmatesRepositoryProvider.overrideWithValue(
+            FakeWishmatesRepository(
+              mates: [
+                buildWishmate(userId: 'u_1', displayName: 'Rohan Prasad'),
+                buildWishmate(userId: 'u_2', displayName: 'Priyal Sharma'),
+              ],
+            ),
+          ),
+        ],
         child: MaterialApp(
           theme: AppTheme.light,
           home: const CreateEventScreen(),
         ),
       ),
     );
+    await tester.pump();
     await tester.pump();
   }
 
@@ -250,5 +264,150 @@ void main() {
         1,
       ),
     );
+  });
+
+  group('who the event is for', () {
+    Future<void> type(WidgetTester tester, String text) async {
+      await tester.enterText(find.byType(TextField).first, text);
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('typing suggests the host WishMates', (tester) async {
+      await pump(tester);
+      await type(tester, 'Roh');
+
+      expect(find.text('Your WishMates'), findsOneWidget);
+      expect(find.text('Rohan Prasad'), findsOneWidget);
+      // Only the one that matches — a list of everybody is not a suggestion.
+      expect(find.text('Priyal Sharma'), findsNothing);
+    });
+
+    testWidgets('one letter suggests nothing — that is still everybody', (
+      tester,
+    ) async {
+      await pump(tester);
+      await type(tester, 'R');
+
+      expect(find.text('Your WishMates'), findsNothing);
+    });
+
+    testWidgets('a name that matches nobody suggests nothing', (tester) async {
+      await pump(tester);
+      await type(tester, 'Zzz');
+
+      expect(find.text('Your WishMates'), findsNothing);
+    });
+
+    testWidgets('the list floats — it does not push the page down', (
+      tester,
+    ) async {
+      await pump(tester);
+      final before = tester.getRect(assetNamed(expected['Birthday']!));
+
+      await type(tester, 'Roh');
+
+      expect(find.text('Rohan Prasad'), findsOneWidget);
+      // The whole point of an overlay. As a sibling in the column the grid
+      // slid down the moment a letter matched, moving the tiles out from
+      // under the reader's thumb mid-type.
+      expect(tester.getRect(assetNamed(expected['Birthday']!)), before);
+    });
+
+    testWidgets('the list hangs directly under the name field', (tester) async {
+      await pump(tester);
+      await type(tester, 'Roh');
+
+      final field = tester.getRect(find.byType(TextField).first);
+      // The card's own first line, not a row inside it — the header and its
+      // padding sit between the two, and measuring the name instead makes the
+      // gap look like a misplaced overlay.
+      final card = tester.getRect(find.text('Your WishMates'));
+
+      // Below it, not floating somewhere else on the page — a follower
+      // anchored to the wrong corner still renders, just in the wrong place.
+      expect(card.top, greaterThanOrEqualTo(field.bottom - 1));
+      expect(card.top - field.bottom, lessThan(24));
+      // And starts at the field's left edge, not the screen's.
+      expect(card.left, greaterThanOrEqualTo(field.left - 1));
+    });
+
+    testWidgets('the handle stays inside the field, not cropped off the '
+        'screen edge', (tester) async {
+      await pump(tester);
+      await type(tester, 'Roh');
+
+      final field = tester.getRect(find.byType(TextField).first);
+      final handle = tester.getRect(find.textContaining('@'));
+
+      // The bug this replaces: LayerLink.leaderSize is null while the overlay
+      // first builds, so the list went unbounded and the handle ran off the
+      // right edge of the screen. The other two overlay tests missed it —
+      // both only look at the left edge and the vertical offset.
+      expect(
+        handle.right,
+        lessThanOrEqualTo(field.right + 1),
+        reason: 'the handle spills past the field it hangs from',
+      );
+      expect(handle.right, lessThanOrEqualTo(393));
+    });
+
+    testWidgets('picking one fills the field and hides the list', (
+      tester,
+    ) async {
+      await pump(tester);
+      await type(tester, 'Roh');
+
+      await tester.tap(find.text('Rohan Prasad'));
+      await tester.pump();
+      await tester.pump();
+
+      // The list has nothing left to offer once there is a link, and leaving
+      // it up would invite a second pick over the first.
+      expect(find.text('Your WishMates'), findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Rohan Prasad',
+      );
+    });
+  });
+
+  group('a celebration for the host themself', () {
+    testWidgets('choosing "Me" removes the name and relation fields', (
+      tester,
+    ) async {
+      await pump(tester);
+      expect(find.text("Person's Name *"), findsOneWidget);
+
+      await tester.tap(find.text('Me'));
+      await tester.pump();
+
+      // Nothing to type: the person is the account, and there is no relation
+      // to oneself.
+      expect(find.text("Person's Name *"), findsNothing);
+      expect(find.text('Relation *'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets('and "Someone else" brings them back', (tester) async {
+      await pump(tester);
+      await tester.tap(find.text('Me'));
+      await tester.pump();
+      await tester.tap(find.text('Someone else'));
+      await tester.pump();
+
+      expect(find.text("Person's Name *"), findsOneWidget);
+    });
+
+    testWidgets('the switch defaults to someone else', (tester) async {
+      await pump(tester);
+
+      // Most events are for a friend or family member; the host's own is the
+      // exception, and the exception should not be the default.
+      final seg = tester.widget<SegmentedButton<bool>>(
+        find.byType(SegmentedButton<bool>),
+      );
+      expect(seg.selected, {false});
+    });
   });
 }

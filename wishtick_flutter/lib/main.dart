@@ -1,3 +1,5 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +11,8 @@ import 'core/dev/dev_home_repositories.dart';
 import 'core/dev/dev_mode.dart';
 import 'core/dev/dev_repositories.dart';
 import 'core/media/media_repository.dart';
+import 'core/push/firebase_push_service.dart';
+import 'core/push/push_service.dart';
 import 'core/theme/theme_controller.dart';
 import 'features/addresses/data/addresses_repository.dart';
 import 'features/auth/data/auth_repository.dart';
@@ -35,6 +39,27 @@ Future<void> main() async {
   // anywhere except the one hero image that already sits behind it on
   // purpose (see welcome_screen.dart).
 
+  // Before anything reads FirebaseMessaging. The Android config comes from
+  // `android/app/google-services.json`, which the Gradle plugin compiles into
+  // resources, so there are no options to pass here.
+  //
+
+  // Failure is survivable and deliberately not fatal: a build with the config
+  // missing, or a device with no Play Services, should still open the app —
+  // it simply never registers for push. `pushEnabled` is what the rest of
+  // startup keys off.
+  var pushEnabled = false;
+  try {
+    await Firebase.initializeApp();
+    // Registered before runApp so a notification that arrives while the app is
+    // terminated has a handler to wake into. Must be a top-level function —
+    // Android runs it in its own isolate. See firebase_push_service.dart.
+    FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
+    pushEnabled = true;
+  } on Exception catch (error) {
+    debugPrint('Firebase unavailable; push is off for this run: $error');
+  }
+
   // Resolved before the first frame so the saved theme applies immediately —
   // otherwise the app renders one frame in the wrong brightness.
   final prefs = await SharedPreferences.getInstance();
@@ -47,6 +72,11 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        // Left unoverridden when Firebase did not start, in which case the
+        // provider stays null and PushRegistrar is never built — the app runs
+        // exactly as before, without push.
+        if (pushEnabled)
+          pushServiceProvider.overrideWithValue(FirebasePushService()),
         // A rejected refresh token must sign the user out, not just clear
         // storage — see session_controller.dart.
         sessionExpiryOverride,

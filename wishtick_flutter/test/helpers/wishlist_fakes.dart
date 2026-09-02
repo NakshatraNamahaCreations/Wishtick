@@ -110,6 +110,7 @@ class FakeWishlistRepository implements WishlistRepository {
 
   int listMineCalls = 0;
   final createCalls = <String>[];
+  final createdForUserIds = <String?>[];
   final updateCalls = <String>[];
   final archiveCalls = <String>[];
   final addItemCalls = <String>[];
@@ -150,8 +151,12 @@ class FakeWishlistRepository implements WishlistRepository {
     String? occasionLabel,
     WishlistVisibility visibility = WishlistVisibility.private,
     String? coverMediaId,
+    String? forUserId,
   }) async {
     createCalls.add(title);
+    // Recorded rather than inferred: the person a list is *for* travels as an
+    // id the built Wishlist would not otherwise carry.
+    createdForUserIds.add(forUserId);
     _throwIfFailing();
     final created = buildWishlist(
       id: 'wl_${wishlists.length + 1}',
@@ -172,6 +177,7 @@ class FakeWishlistRepository implements WishlistRepository {
     String? occasionLabel,
     WishlistVisibility? visibility,
     String? coverMediaId,
+    String? forUserId,
   }) async {
     updateCalls.add(id);
     _throwIfFailing();

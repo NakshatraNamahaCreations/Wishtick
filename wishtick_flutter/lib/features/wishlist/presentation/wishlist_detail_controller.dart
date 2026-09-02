@@ -111,6 +111,7 @@ class WishlistDetailController extends Notifier<WishlistDetailState> {
     String? occasionLabel,
     required WishlistVisibility visibility,
     String? coverMediaId,
+    String? forUserId,
   }) async {
     state = state.copyWith(busy: true, clearError: true);
     try {
@@ -121,6 +122,7 @@ class WishlistDetailController extends Notifier<WishlistDetailState> {
         occasionLabel: occasionLabel,
         visibility: visibility,
         coverMediaId: coverMediaId,
+        forUserId: forUserId,
       );
       state = state.copyWith(wishlist: updated, busy: false);
       return true;

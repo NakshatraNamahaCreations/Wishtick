@@ -8,8 +8,13 @@ import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../../wishmates/domain/wishmate.dart';
+import '../../wishmates/presentation/wishmates_providers.dart';
 import '../domain/wishlist.dart';
+import 'cover_crop_screen.dart';
+import 'occasion_labels_provider.dart';
 import 'wishlist_detail_controller.dart';
+import 'wishlist_suggestions.dart';
 import 'wishlists_controller.dart';
 
 /// Figma `280:476` — Wishlist Name, Occasion, Cover Image, Description,
@@ -40,6 +45,18 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
 
   MediaView? _cover;
   bool _uploadingCover = false;
+
+  /// The WishMate picked from the name suggestions, if any.
+  ///
+  /// Held as the person, not just an id, so the "For Siya" pill can name them
+  /// without another lookup. Cleared the moment the name is edited away from
+  /// theirs: a list called "Camping gear" that quietly stays linked to Siya is
+  /// exactly the kind of stale link nobody notices until it is wrong.
+  PersonIdentity? _forMate;
+
+  /// Pending when editing a list that was already for someone: the id is
+  /// known at once, the person only once the WishMates have loaded.
+  String? _forUserIdToResolve;
   WishlistVisibility? _visibility;
 
   bool _submitted = false;
@@ -53,6 +70,7 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
     super.initState();
     final editing = widget.editing;
     _visibility = editing?.visibility;
+    _forUserIdToResolve = editing?.forUserId;
     final coverUrl = editing?.coverUrl;
     if (coverUrl != null) {
       _cover = MediaView(
@@ -76,11 +94,25 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
   Future<void> _pickCover() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null || !mounted) return;
+
+    // Framed on the device before anything is sent: covers are shown
+    // landscape, so what is confirmed here is exactly what gets stored, and
+    // there is no full-size original left on the server to crop again.
+    final original = await picked.readAsBytes();
+    if (!mounted) return;
+    final cropped = await CoverCropScreen.show(context, original);
+    if (cropped == null || !mounted) return;
+    final file = XFile.fromData(
+      cropped,
+      name: 'cover.jpg',
+      mimeType: 'image/jpeg',
+    );
+
     setState(() => _uploadingCover = true);
     try {
       final media = await ref
           .read(mediaRepositoryProvider)
-          .uploadFile(file: picked, purpose: MediaPurpose.wishlistCover);
+          .uploadFile(file: file, purpose: MediaPurpose.wishlistCover);
       if (!mounted) return;
       setState(() {
         _cover = media;
@@ -143,6 +175,7 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
                     : _occasionLabel.text.trim(),
                 visibility: _visibility!,
                 coverMediaId: _cover!.id,
+                forUserId: _forMate?.userId,
               )
         : await ref
               .read(wishlistDetailProvider(editing.id).notifier)
@@ -154,6 +187,7 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
                     : _occasionLabel.text.trim(),
                 visibility: _visibility!,
                 coverMediaId: _cover!.id,
+                forUserId: _forMate?.userId,
               );
     if (!mounted) return;
     if (ok) {
@@ -201,20 +235,56 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
                     TextFormField(
                       controller: _title,
                       textCapitalization: TextCapitalization.words,
+                      // Rebuilds the suggestions as they type, and drops a
+                      // stale link the moment the name stops being theirs.
+                      onChanged: (text) => setState(() {
+                        final mate = _forMate;
+                        if (mate != null && text.trim() != mate.name) {
+                          _forMate = null;
+                        }
+                      }),
                       decoration: InputDecoration(
                         label: _RequiredLabel('Wishlist Name'),
                         hintText: 'Enter Wishlist Name',
                         errorText: _titleError,
                       ),
                     ),
+                    _NameSuggestions(
+                      typed: _title.text,
+                      linked: _forMate,
+                      pendingUserId: _forUserIdToResolve,
+                      onPick: (mate) => setState(() {
+                        _forMate = mate;
+                        _forUserIdToResolve = null;
+                        _title.text = mate.name;
+                        _title.selection = TextSelection.collapsed(
+                          offset: _title.text.length,
+                        );
+                      }),
+                      onResolved: (mate) => setState(() {
+                        _forMate = mate;
+                        _forUserIdToResolve = null;
+                      }),
+                      onUnlink: () => setState(() => _forMate = null),
+                    ),
                     const SizedBox(height: AppSpacing.xxl),
                     TextFormField(
                       controller: _occasionLabel,
                       textCapitalization: TextCapitalization.words,
+                      onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(
                         labelText: 'Occasion (Optional)',
                         hintText: 'Enter Occasion name',
                       ),
+                    ),
+                    _OccasionSuggestions(
+                      typed: _occasionLabel.text,
+                      onPick: (label) => setState(() {
+                        _occasionLabel.text = label;
+                        _occasionLabel.selection = TextSelection.collapsed(
+                          offset: label.length,
+                        );
+                      }),
                     ),
                     const SizedBox(height: AppSpacing.xxl),
                     _RequiredLabel('Cover Image', asField: true),
@@ -498,6 +568,131 @@ class _PrivacyOption extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// WishMates whose name matches what has been typed, and the link once picked.
+///
+/// "Type the name and we suggest from your WishMates": a strip of chips under
+/// the field, not a dropdown that steals the keyboard. Picking one names the
+/// list after them and links it to them; the pill that replaces the strip says
+/// so, and its cross is how the link is undone. Free text stays free — a name
+/// that matches nobody is still a fine name.
+class _NameSuggestions extends ConsumerWidget {
+  const _NameSuggestions({
+    required this.typed,
+    required this.linked,
+    required this.pendingUserId,
+    required this.onPick,
+    required this.onResolved,
+    required this.onUnlink,
+  });
+
+  final String typed;
+  final PersonIdentity? linked;
+  final String? pendingUserId;
+  final ValueChanged<PersonIdentity> onPick;
+  final ValueChanged<PersonIdentity> onResolved;
+  final VoidCallback onUnlink;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final mates = ref.watch(wishmatesProvider).value ?? const <Wishmate>[];
+
+    // Editing a list that was already for someone: the id arrived with the
+    // list, the person only now. Resolved once, after this frame, so the
+    // parent is not asked to rebuild mid-build.
+    final pending = pendingUserId;
+    if (pending != null && linked == null && mates.isNotEmpty) {
+      for (final m in mates) {
+        if (m.userId == pending) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => onResolved(m));
+          break;
+        }
+      }
+    }
+
+    final mate = linked;
+    if (mate != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: AppSpacing.sm),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: InputChip(
+            avatar: const Icon(Icons.person_outline, size: AppSizes.iconSm),
+            label: Text('For ${mate.name}'),
+            onDeleted: onUnlink,
+            deleteButtonTooltipMessage: 'Unlink',
+          ),
+        ),
+      );
+    }
+
+    final matches = matchingWishmates(mates, typed);
+    if (matches.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.xs,
+        children: [
+          for (final m in matches)
+            ActionChip(
+              avatar: CircleAvatar(
+                backgroundColor: colors.surface,
+                child: Text(
+                  m.name.characters.first.toUpperCase(),
+                  style: context.text.bodySmall?.copyWith(
+                    color: colors.textPrimary,
+                  ),
+                ),
+              ),
+              label: Text(m.name),
+              onPressed: () => onPick(m),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Occasions worth suggesting: the user's own recorded dates first, worded as
+/// the list would be named, then the taxonomy. Typing narrows them.
+class _OccasionSuggestions extends ConsumerWidget {
+  const _OccasionSuggestions({required this.typed, required this.onPick});
+
+  final String typed;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dates = ref.watch(importantDatesProvider).value ?? const [];
+    final taxonomy = ref.watch(occasionLabelsProvider).value ?? const {};
+    final labels = occasionSuggestions(
+      dates: dates,
+      taxonomy: taxonomy,
+      typed: typed,
+    );
+    // Nothing to offer, or the field already says exactly one of them.
+    if (labels.isEmpty ||
+        (labels.length == 1 &&
+            labels.single.toLowerCase() == typed.trim().toLowerCase())) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.xs,
+        children: [
+          for (final label in labels)
+            ActionChip(label: Text(label), onPressed: () => onPick(label)),
+        ],
       ),
     );
   }

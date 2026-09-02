@@ -770,4 +770,107 @@ describe('Wishlists (e2e)', () => {
       await request(app.getHttpServer()).get(`${V1}/public/wishlists/nosuchslug123456`).expect(404);
     });
   });
+
+  // -- A list made for a WishMate -------------------------------------------
+
+  describe('a wishlist made for a WishMate', () => {
+    const becomeWishmates = async (a: Actor, b: Actor): Promise<void> => {
+      await request(app.getHttpServer())
+        .post(`${V1}/people/${b.userId}/request`)
+        .set(auth(a.token))
+        .expect(201);
+      const received = await request(app.getHttpServer())
+        .get(`${V1}/wishlinks/received`)
+        .set(auth(b.token))
+        .expect(200);
+      const linkId = (received.body as Envelope<{ linkId: string }[]>).data[0].linkId;
+      await request(app.getHttpServer())
+        .post(`${V1}/wishlinks/${linkId}/accept`)
+        .set(auth(b.token))
+        .expect(201);
+    };
+
+    const createFor = (actor: Actor, forUserId: string | null) =>
+      request(app.getHttpServer())
+        .post(`${V1}/wishlists`)
+        .set(auth(actor.token))
+        .send({ title: 'Siya birthday', visibility: 'private', forUserId });
+
+    it('records who it is for, and asks nobody', async () => {
+      const owner = await newUser('Rohan');
+      const siya = await newUser('Siya');
+      await becomeWishmates(owner, siya);
+
+      const created = (await createFor(owner, siya.userId).expect(201)).body as Envelope<{
+        id: string;
+        forUserId: string | null;
+      }>;
+      expect(created.data.forUserId).toBe(siya.userId);
+
+      // A label the owner chose: the person named is not told and gets no
+      // access. Private stays private, even to them.
+      await request(app.getHttpServer())
+        .get(`${V1}/wishlists/${created.data.id}`)
+        .set(auth(siya.token))
+        .expect(404);
+      const links = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlinks/received`)
+          .set(auth(siya.token))
+          .expect(200)
+      ).body as Envelope<unknown[]>;
+      expect(links.data).toHaveLength(0);
+    });
+
+    it('only a current WishMate may be named', async () => {
+      const owner = await newUser();
+      const stranger = await newUser();
+      await createFor(owner, stranger.userId).expect(400);
+    });
+
+    it('cannot be for yourself', async () => {
+      const owner = await newUser();
+      // Its own message: the WishMate check would refuse this too, with a
+      // different one, and a test on the status alone could not tell them apart.
+      const res = await createFor(owner, owner.userId).expect(400);
+      expect((res.body as Envelope<never>).error?.message).toBe('A list cannot be for yourself');
+    });
+
+    it('can be unlinked, and relinked, on update', async () => {
+      const owner = await newUser();
+      const siya = await newUser('Siya');
+      await becomeWishmates(owner, siya);
+      const created = (await createFor(owner, siya.userId).expect(201)).body as Envelope<{
+        id: string;
+      }>;
+
+      const cleared = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/wishlists/${created.data.id}`)
+          .set(auth(owner.token))
+          .send({ forUserId: null })
+          .expect(200)
+      ).body as Envelope<{ forUserId: string | null }>;
+      expect(cleared.data.forUserId).toBeNull();
+
+      const again = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/wishlists/${created.data.id}`)
+          .set(auth(owner.token))
+          .send({ forUserId: siya.userId })
+          .expect(200)
+      ).body as Envelope<{ forUserId: string | null }>;
+      expect(again.data.forUserId).toBe(siya.userId);
+
+      // An update that says nothing about it leaves it alone.
+      const untouched = (
+        await request(app.getHttpServer())
+          .patch(`${V1}/wishlists/${created.data.id}`)
+          .set(auth(owner.token))
+          .send({ title: 'Renamed' })
+          .expect(200)
+      ).body as Envelope<{ forUserId: string | null }>;
+      expect(untouched.data.forUserId).toBe(siya.userId);
+    });
+  });
 });

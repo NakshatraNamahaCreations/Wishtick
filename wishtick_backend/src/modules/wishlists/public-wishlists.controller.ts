@@ -1,7 +1,10 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse as ApiResponseDoc, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from 'src/common/decorators/public.decorator';
+import { OptionalJwtAuthGuard } from 'src/common/guards/optional-jwt-auth.guard';
+import type { AuthenticatedUser } from 'src/common/types/authenticated-user';
+import type { Request } from 'express';
 import { PublicWishlistQueryDto } from './dto/wishlist.dto';
 import { PublicWishlistsService } from './public-wishlists.service';
 import type { OpenGraphPreview, PublicWishlistView } from './wishlist.views';
@@ -15,6 +18,11 @@ const PUBLIC_SHARE_THROTTLE = { default: { limit: 30, ttl: 60_000 } };
 @ApiTags('public')
 @Controller('public/wishlists')
 @Public()
+// OptionalJwtAuthGuard rather than bare `@Public()`, for the same reason the
+// invite surface uses it: a viewer who *is* signed in may be an accepted guest
+// of the event this list is attached to, and resolving on the link alone
+// refuses them a list the invitation just offered.
+@UseGuards(OptionalJwtAuthGuard)
 export class PublicWishlistsController {
   constructor(private readonly publicWishlists: PublicWishlistsService) {}
 
@@ -24,8 +32,8 @@ export class PublicWishlistsController {
     summary: 'Open a shared wishlist without an account',
     description:
       'Redacted: no owner contact details, no owner id, and no gifter identity — a claimed item ' +
-      'reports only `isClaimed: true`. Private and event-only lists are never openable by link, ' +
-      'whatever the slug.',
+      'reports only `isClaimed: true`. A private list is never openable by link, whatever the ' +
+      'slug; an event-only one opens for a signed-in accepted guest of its event and nobody else.',
   })
   @ApiResponseDoc({ status: 404, description: 'SHARE_LINK_INVALID' })
   @ApiResponseDoc({ status: 401, description: 'SHARE_PASSCODE_REQUIRED' })
@@ -34,8 +42,9 @@ export class PublicWishlistsController {
   getBySlug(
     @Param('slug') slug: string,
     @Query() query: PublicWishlistQueryDto,
+    @Req() req: Request & { user?: AuthenticatedUser },
   ): Promise<PublicWishlistView> {
-    return this.publicWishlists.getBySlug(slug, query.passcode);
+    return this.publicWishlists.getBySlug(slug, query.passcode, req.user?.id);
   }
 
   @Get(':slug/preview')

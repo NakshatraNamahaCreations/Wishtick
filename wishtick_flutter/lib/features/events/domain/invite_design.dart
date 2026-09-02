@@ -20,6 +20,8 @@ class InviteBackground {
     required this.asset,
     required this.eventTypes,
     required this.safeArea,
+    this.ink = 0xFF1F1F1F,
+    this.accent = 0xFF3F0E4C,
   });
 
   final String key;
@@ -28,6 +30,16 @@ class InviteBackground {
 
   /// Which occasions offer this design. Empty means every occasion.
   final List<EventType> eventTypes;
+
+  /// Text colours that read on this artwork — the body ink and one accent.
+  ///
+  /// On the background rather than on a layout because legibility is the
+  /// picture's property, not the arrangement's: both bundled backgrounds are
+  /// light in the middle (sampled at 250/255 and 237/255 luminance), so dark
+  /// ink is right for both, but the accent that harmonises with confetti is
+  /// not the one that harmonises with gold.
+  final int ink;
+  final int accent;
 
   /// Where text can sit without colliding with the artwork, as a fraction of
   /// the canvas.
@@ -55,6 +67,8 @@ abstract final class InviteBackgrounds {
     // The bunting reaches ~22% down and the "HAPPY BIRTHDAY" lettering starts
     // at ~78%; balloons hold the sides in from ~12%.
     safeArea: Rect.fromLTRB(0.14, 0.26, 0.86, 0.74),
+    // A rose that sits with the balloons rather than against them.
+    accent: 0xFFC4304B,
   );
 
   static const wishes = InviteBackground(
@@ -64,6 +78,9 @@ abstract final class InviteBackgrounds {
     eventTypes: [],
     // Hanging lights above, baubles along the floor.
     safeArea: Rect.fromLTRB(0.10, 0.30, 0.90, 0.78),
+    // The artwork's own deep gold, sampled from its top corner (#A77536).
+    ink: 0xFF3B2A12,
+    accent: 0xFFA77536,
   );
 
   static const all = <InviteBackground>[happyBirthday, wishes];
@@ -412,12 +429,394 @@ class TextLayer {
   );
 }
 
+/// What a layer in a layout stands for, and so which event fact fills it.
+enum LayerRole {
+  /// The small line above the headline — "You're invited", "Join us".
+  eyebrow,
+
+  /// The event's title.
+  headline,
+
+  /// When. Formatted on the device, in the phone's zone — the same choice
+  /// `event_detail_screen` already makes for the same date.
+  date,
+
+  /// Where. Dropped entirely when the event has no venue: an invitation that
+  /// says "Venue: null" is worse than one that says nothing.
+  venue,
+
+  /// "Hosted by …" — the signed-in user who created the event, never the
+  /// event's `personName` (that is who the party is *for*). Omitted when the
+  /// event is for the host themself: "Siya's 24th, hosted by Siya" says the
+  /// same name twice.
+  host,
+}
+
+/// Which of the background's two colours a layer is set in.
+enum InkRole { ink, accent }
+
+/// One line of a layout, described against the background's safe area.
+///
+/// Nothing here is a canvas coordinate. [y] is a fraction down the *safe
+/// area* and the x is always its centre, so the same layout lands correctly
+/// on a background whose safe area starts a quarter of the way down and on one
+/// whose starts a third. Sizes are fractions of canvas width, as on
+/// [TextLayer], so the card keeps its proportions at any render size.
+@immutable
+class LayoutLayer {
+  const LayoutLayer({
+    required this.role,
+    required this.y,
+    required this.fontKey,
+    required this.size,
+    this.ink = InkRole.ink,
+    this.bold = false,
+    this.italic = false,
+    this.text,
+    this.uppercase = false,
+    this.widthFactor = 0.95,
+  });
+
+  final LayerRole role;
+  final double y;
+  final String fontKey;
+  final double size;
+  final InkRole ink;
+  final bool bold;
+  final bool italic;
+
+  /// Fixed copy for an [LayerRole.eyebrow]; every other role reads from the
+  /// event.
+  final String? text;
+
+  /// Small-caps register, done by transforming the text: [TextLayer] has no
+  /// letter-spacing, and an uppercased sans at a small size is the same
+  /// effect a guest reads.
+  final bool uppercase;
+
+  /// As a fraction of the safe area's width.
+  final double widthFactor;
+}
+
+/// A named arrangement of lines — what the picker calls a "style".
+///
+/// This is the whole of what a template used to be, moved onto the designer:
+/// a layout is applied to *any* background and pre-filled with the event's
+/// own details, and the result is an ordinary editable design. The
+/// server-rendered template it replaces could do neither.
+@immutable
+class InviteLayout {
+  const InviteLayout({
+    required this.key,
+    required this.label,
+    required this.layers,
+    this.eventTypes = const [],
+  });
+
+  final String key;
+  final String label;
+  final List<LayoutLayer> layers;
+
+  /// Which occasions offer this layout. Empty means every occasion.
+  final List<EventType> eventTypes;
+
+  bool offers(EventType type) =>
+      eventTypes.isEmpty || eventTypes.contains(type);
+}
+
+/// The event facts a layout is filled from.
+///
+/// Nullable fields are *absent*, not empty: a layer whose fact is null is left
+/// out of the design rather than rendered blank, so a host with no venue does
+/// not get an empty box to delete.
+@immutable
+class InviteFacts {
+  const InviteFacts({
+    required this.title,
+    required this.dateLine,
+    this.venue,
+    this.host,
+  });
+
+  /// What the picker shows before the event has loaded, and what a layout
+  /// preview is rendered with when there is no event at all.
+  static const placeholder = InviteFacts(
+    title: 'Your Celebration',
+    dateLine: 'Date & time',
+    venue: 'Venue',
+    host: 'Hosted by you',
+  );
+
+  final String title;
+  final String dateLine;
+  final String? venue;
+
+  /// Already phrased — "Hosted by Rohan" — so the layout prints it as is.
+  /// Null when there is nobody to name, or when the host is the one being
+  /// celebrated.
+  final String? host;
+
+  String? forRole(LayerRole role) => switch (role) {
+    LayerRole.eyebrow => null,
+    LayerRole.headline => title,
+    LayerRole.date => dateLine,
+    LayerRole.venue => venue,
+    LayerRole.host => host,
+  };
+}
+
+/// Every layout the app ships.
+///
+/// Five, deliberately distinct in register rather than in colour — colour is
+/// the background's job. Each is a different answer to "what kind of party":
+/// formal, loud, handwritten, plain, fun.
+abstract final class InviteLayouts {
+  /// Serif headline under a tracked eyebrow. The wedding-stationery register.
+  static const classic = InviteLayout(
+    key: 'classic',
+    label: 'Classic',
+    layers: [
+      LayoutLayer(
+        role: LayerRole.eyebrow,
+        text: "You're invited",
+        y: 0.12,
+        fontKey: 'raleway',
+        size: 0.036,
+        uppercase: true,
+        ink: InkRole.accent,
+      ),
+      LayoutLayer(
+        role: LayerRole.headline,
+        y: 0.36,
+        fontKey: 'playfair',
+        size: 0.11,
+        bold: true,
+      ),
+      LayoutLayer(
+        role: LayerRole.date,
+        y: 0.66,
+        fontKey: 'raleway',
+        size: 0.042,
+      ),
+      LayoutLayer(
+        role: LayerRole.venue,
+        y: 0.78,
+        fontKey: 'raleway',
+        size: 0.038,
+      ),
+      LayoutLayer(
+        role: LayerRole.host,
+        y: 0.92,
+        fontKey: 'raleway',
+        size: 0.032,
+        italic: true,
+        ink: InkRole.accent,
+      ),
+    ],
+  );
+
+  /// One enormous condensed headline. For the party that is the point.
+  static const bold = InviteLayout(
+    key: 'bold',
+    label: 'Bold',
+    layers: [
+      LayoutLayer(
+        role: LayerRole.headline,
+        y: 0.32,
+        fontKey: 'bebas',
+        size: 0.19,
+        uppercase: true,
+        widthFactor: 1.0,
+      ),
+      LayoutLayer(
+        role: LayerRole.date,
+        y: 0.66,
+        fontKey: 'oswald',
+        size: 0.05,
+        ink: InkRole.accent,
+        uppercase: true,
+      ),
+      LayoutLayer(
+        role: LayerRole.venue,
+        y: 0.80,
+        fontKey: 'oswald',
+        size: 0.04,
+      ),
+    ],
+  );
+
+  /// Handwritten headline — the note-from-the-host register.
+  static const script = InviteLayout(
+    key: 'script',
+    label: 'Script',
+    layers: [
+      LayoutLayer(
+        role: LayerRole.eyebrow,
+        text: 'Join us to celebrate',
+        y: 0.14,
+        fontKey: 'lora',
+        size: 0.04,
+        italic: true,
+      ),
+      LayoutLayer(
+        role: LayerRole.headline,
+        y: 0.40,
+        fontKey: 'greatvibes',
+        size: 0.15,
+        ink: InkRole.accent,
+      ),
+      LayoutLayer(role: LayerRole.date, y: 0.68, fontKey: 'lora', size: 0.042),
+      LayoutLayer(role: LayerRole.venue, y: 0.80, fontKey: 'lora', size: 0.038),
+      LayoutLayer(
+        role: LayerRole.host,
+        y: 0.93,
+        fontKey: 'lora',
+        size: 0.032,
+        italic: true,
+      ),
+    ],
+  );
+
+  /// Clean sans throughout. The one that gets out of the artwork's way.
+  static const modern = InviteLayout(
+    key: 'modern',
+    label: 'Modern',
+    layers: [
+      LayoutLayer(
+        role: LayerRole.headline,
+        y: 0.30,
+        fontKey: 'poppins',
+        size: 0.10,
+        bold: true,
+      ),
+      LayoutLayer(
+        role: LayerRole.date,
+        y: 0.58,
+        fontKey: 'poppins',
+        size: 0.046,
+        ink: InkRole.accent,
+        bold: true,
+      ),
+      LayoutLayer(
+        role: LayerRole.venue,
+        y: 0.72,
+        fontKey: 'poppins',
+        size: 0.038,
+      ),
+      LayoutLayer(
+        role: LayerRole.host,
+        y: 0.90,
+        fontKey: 'poppins',
+        size: 0.032,
+      ),
+    ],
+  );
+
+  /// Rounded and loud. Birthdays only — it is wrong for an anniversary.
+  static const playful = InviteLayout(
+    key: 'playful',
+    label: 'Playful',
+    eventTypes: [EventType.birthday],
+    layers: [
+      LayoutLayer(
+        role: LayerRole.eyebrow,
+        text: "Let's celebrate!",
+        y: 0.12,
+        fontKey: 'fredoka',
+        size: 0.05,
+        ink: InkRole.accent,
+        bold: true,
+      ),
+      LayoutLayer(
+        role: LayerRole.headline,
+        y: 0.40,
+        fontKey: 'fredoka',
+        size: 0.12,
+        bold: true,
+      ),
+      LayoutLayer(
+        role: LayerRole.date,
+        y: 0.68,
+        fontKey: 'nunito',
+        size: 0.044,
+        bold: true,
+      ),
+      LayoutLayer(
+        role: LayerRole.venue,
+        y: 0.82,
+        fontKey: 'nunito',
+        size: 0.038,
+      ),
+    ],
+  );
+
+  static const all = <InviteLayout>[classic, bold, script, modern, playful];
+
+  static InviteLayout? byKey(String? key) {
+    if (key == null) return null;
+    for (final layout in all) {
+      if (layout.key == key) return layout;
+    }
+    return null;
+  }
+
+  static List<InviteLayout> forType(EventType? type) =>
+      type == null ? all : all.where((l) => l.offers(type)).toList();
+}
+
 /// A whole invitation: one fixed background and the text on top of it.
 @immutable
 class InviteDesign {
   const InviteDesign({required this.backgroundKey, required this.layers});
 
   const InviteDesign.empty(this.backgroundKey) : layers = const [];
+
+  /// A layout applied to a background and filled with the event's details.
+  ///
+  /// The result is an ordinary design: every line is a [TextLayer] the host
+  /// can drag, restyle or delete, which is the whole point of doing this on
+  /// the canvas rather than on the server.
+  ///
+  /// Layer ids carry the `tpl_` prefix on purpose. The designer's controller
+  /// numbers the layers *it* creates `layer_0`, `layer_1`… from zero and does
+  /// not look at what it was given, so seeding with that scheme would have the
+  /// first added line share an id with a pre-placed one.
+  factory InviteDesign.fromLayout({
+    required InviteBackground background,
+    required InviteLayout layout,
+    required InviteFacts facts,
+  }) {
+    final area = background.safeArea;
+    final layers = <TextLayer>[];
+
+    for (final spec in layout.layers) {
+      final raw = spec.text ?? facts.forRole(spec.role);
+      // A fact the event does not have is left out, not printed blank.
+      if (raw == null || raw.trim().isEmpty) continue;
+
+      layers.add(
+        TextLayer(
+          id: 'tpl_${spec.role.name}',
+          text: spec.uppercase ? raw.toUpperCase() : raw,
+          dx: area.center.dx,
+          dy: area.top + spec.y * area.height,
+          fontSize: spec.size,
+          widthFactor: area.width * spec.widthFactor,
+          fontKey: spec.fontKey,
+          color: switch (spec.ink) {
+            InkRole.ink => background.ink,
+            InkRole.accent => background.accent,
+          },
+          bold: spec.bold,
+          italic: spec.italic,
+          align: LayerAlign.center,
+          rotation: 0,
+        ),
+      );
+    }
+
+    return InviteDesign(backgroundKey: background.key, layers: layers);
+  }
 
   final String backgroundKey;
   final List<TextLayer> layers;

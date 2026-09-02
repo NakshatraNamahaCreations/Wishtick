@@ -1,5 +1,6 @@
 import 'package:wishtick_flutter/features/events/data/events_repository.dart';
 import 'package:wishtick_flutter/features/events/domain/event.dart';
+import 'package:wishtick_flutter/features/events/domain/event_wishlist_request.dart';
 import 'package:wishtick_flutter/features/events/domain/invite_template.dart';
 import 'package:wishtick_flutter/features/events/domain/invited_event.dart';
 import 'package:wishtick_flutter/features/wishmates/domain/wishmate.dart';
@@ -15,6 +16,7 @@ WishtickEventDetail buildEvent({
   String? venue = 'Mysore Socials',
   List<String> wishlistIds = const [],
   RsvpCounts? rsvpCounts,
+  bool forSelf = false,
 }) => WishtickEventDetail(
   id: id,
   title: title,
@@ -32,6 +34,7 @@ WishtickEventDetail buildEvent({
   relation: 'friend',
   inviteTemplate: inviteTemplate,
   inviteMediaUrl: inviteMediaUrl,
+  forSelf: forSelf,
   share: const EventShare(
     slug: 'siya-24th',
     url: 'https://wt.test/e/siya-24th',
@@ -82,6 +85,26 @@ InviteTemplate buildTemplate({
       muted: '#D9CFC5',
     ),
   ],
+);
+
+EventWishlistRequest buildWishlistOffer({
+  String id = 'req_1',
+  String eventId = 'ev_1',
+  String wishlistId = 'wl_1',
+  String wishlistTitle = 'My birthday list',
+  int itemCount = 4,
+  String requestedByName = 'Siya',
+  EventWishlistRequestStatus status = EventWishlistRequestStatus.pending,
+}) => EventWishlistRequest(
+  id: id,
+  eventId: eventId,
+  wishlistId: wishlistId,
+  wishlistTitle: wishlistTitle,
+  itemCount: itemCount,
+  requestedById: 'u_1',
+  requestedByName: requestedByName,
+  status: status,
+  createdAt: DateTime(2026, 8, 1),
 );
 
 class FakeEventsRepository implements EventsRepository {
@@ -151,6 +174,7 @@ class FakeEventsRepository implements EventsRepository {
     String? venue,
     String? personName,
     String? relation,
+    bool? forSelf,
     EventVisibility? visibility,
     String? coverMediaId,
     List<String>? wishlistIds,
@@ -166,6 +190,7 @@ class FakeEventsRepository implements EventsRepository {
       'venue': venue,
       'personName': personName,
       'relation': relation,
+      'forSelf': forSelf,
     });
     return event;
   }
@@ -182,6 +207,7 @@ class FakeEventsRepository implements EventsRepository {
     String? venue,
     String? personName,
     String? relation,
+    bool? forSelf,
     EventVisibility? visibility,
     String? coverMediaId,
     String? inviteMediaId,
@@ -194,6 +220,7 @@ class FakeEventsRepository implements EventsRepository {
       'id': id,
       'inviteMediaId': inviteMediaId,
       'clearInviteMedia': clearInviteMedia,
+      'forSelf': forSelf,
       'templateId': inviteTemplate?.templateId,
       'colorVariant': inviteTemplate?.colorVariant,
     });
@@ -234,6 +261,61 @@ class FakeEventsRepository implements EventsRepository {
   /// The user ids [inviteWishmates] was handed, so a test can assert who was
   /// invited rather than only that something was.
   final invitedUserIds = <String>[];
+
+  /// What the host's queue answers with.
+  List<EventWishlistRequest> wishlistOffers = const [];
+
+  /// Every offer sent, as (eventId, wishlistId).
+  final offeredWishlists = <(String, String)>[];
+
+  /// Every answer, as (requestId, approved).
+  final answeredWishlists = <(String, bool)>[];
+
+  /// Every removal, by request id.
+  final removedWishlists = <String>[];
+
+  @override
+  Future<EventWishlistRequest> offerWishlist(
+    String eventId,
+    String wishlistId,
+  ) async {
+    _maybeThrow();
+    offeredWishlists.add((eventId, wishlistId));
+    return buildWishlistOffer(wishlistId: wishlistId);
+  }
+
+  @override
+  Future<List<EventWishlistRequest>> wishlistRequests(String eventId) async {
+    _maybeThrow();
+    return wishlistOffers;
+  }
+
+  @override
+  Future<List<EventWishlistRequest>> myWishlistRequests() async {
+    _maybeThrow();
+    return wishlistOffers;
+  }
+
+  @override
+  Future<EventWishlistRequest> respondToWishlistRequest(
+    String eventId,
+    String requestId, {
+    required bool approve,
+  }) async {
+    _maybeThrow();
+    answeredWishlists.add((requestId, approve));
+    return buildWishlistOffer(id: requestId);
+  }
+
+  @override
+  Future<EventWishlistRequest> removeWishlistRequest(
+    String eventId,
+    String requestId,
+  ) async {
+    _maybeThrow();
+    removedWishlists.add(requestId);
+    return buildWishlistOffer(id: requestId);
+  }
 
   @override
   Future<BulkInviteResult> inviteWishmates(

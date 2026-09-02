@@ -64,6 +64,17 @@ class GroupGiftRepository {
 
   /// Group gifts the caller takes part in — initiated, joined, or contributed
   /// to — newest first.
+  /// The group gift already collecting for an item, or null.
+  ///
+  /// Throws [ApiException] with `CANNOT_GIFT_OWN_ITEM` for the recipient: the
+  /// same rule that stops them gifting to themselves keeps the surprise.
+  Future<ItemGroupGift?> groupGiftForItem(String itemId) async {
+    final json = await _api.get<Map<String, dynamic>?>(
+      '/items/$itemId/group-gift',
+    );
+    return json == null ? null : ItemGroupGift.fromJson(json);
+  }
+
   /// The invitations waiting on the caller's answer.
   Future<List<GroupGiftInvite>> listInvites() async {
     final json = await _api.get<List<dynamic>>('/group-gift-invites/mine');

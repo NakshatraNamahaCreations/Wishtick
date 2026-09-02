@@ -36,6 +36,7 @@ class WishlistRepository {
     String? occasionLabel,
     WishlistVisibility visibility = WishlistVisibility.private,
     String? coverMediaId,
+    String? forUserId,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/wishlists',
@@ -45,6 +46,7 @@ class WishlistRepository {
         'occasionLabel': ?occasionLabel,
         'visibility': visibility.wireValue,
         'coverMediaId': ?coverMediaId,
+        'forUserId': ?forUserId,
       },
     );
     return Wishlist.fromJson(json);
@@ -57,6 +59,7 @@ class WishlistRepository {
     String? occasionLabel,
     WishlistVisibility? visibility,
     String? coverMediaId,
+    String? forUserId,
   }) async {
     final json = await _api.patch<Map<String, dynamic>>(
       '/wishlists/$id',
@@ -66,6 +69,7 @@ class WishlistRepository {
         'occasionLabel': ?occasionLabel,
         'visibility': ?visibility?.wireValue,
         'coverMediaId': ?coverMediaId,
+        'forUserId': ?forUserId,
       },
     );
     return Wishlist.fromJson(json);

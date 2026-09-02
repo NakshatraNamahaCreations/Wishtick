@@ -372,6 +372,7 @@ class DevWishlistRepository implements WishlistRepository {
     String? occasionLabel,
     WishlistVisibility visibility = WishlistVisibility.private,
     String? coverMediaId,
+    String? forUserId,
   }) async {
     await _ready();
     await Future<void>.delayed(_latency);
@@ -386,6 +387,7 @@ class DevWishlistRepository implements WishlistRepository {
       'occasionLabel': occasionLabel,
       'visibility': visibility.wireValue,
       'coverUrl': coverMediaId,
+      'forUserId': forUserId,
       'chatEnabled': true,
       'eventId': null,
       'archivedAt': null,
@@ -404,6 +406,7 @@ class DevWishlistRepository implements WishlistRepository {
     String? occasionLabel,
     WishlistVisibility? visibility,
     String? coverMediaId,
+    String? forUserId,
   }) async {
     await _ready();
     await Future<void>.delayed(_latency);
@@ -416,6 +419,7 @@ class DevWishlistRepository implements WishlistRepository {
     if (occasionLabel != null) row['occasionLabel'] = occasionLabel;
     if (visibility != null) row['visibility'] = visibility.wireValue;
     if (coverMediaId != null) row['coverUrl'] = coverMediaId;
+    if (forUserId != null) row['forUserId'] = forUserId;
     row['updatedAt'] = DateTime.now().toIso8601String();
     await _writeWishlists(rows);
     return _toWishlist(row, _readItems());

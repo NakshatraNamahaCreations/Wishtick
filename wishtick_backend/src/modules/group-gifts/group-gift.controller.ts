@@ -40,7 +40,7 @@ import {
   type GroupGiftInviteView,
 } from './group-gift-invites.service';
 import { GroupGiftService } from './group-gift.service';
-import type { GroupGiftShareView, GroupGiftView } from './group-gift.views';
+import type { GroupGiftShareView, GroupGiftView, ItemGroupGiftView } from './group-gift.views';
 
 /** Money-adjacent, and creating claims an item; a tight per-IP bucket blunts scripting. */
 const GROUP_GIFT_THROTTLE = { default: { limit: 30, ttl: 60_000 } };
@@ -56,6 +56,23 @@ export class GroupGiftController {
     private readonly groupGifts: GroupGiftService,
     private readonly invites: GroupGiftInvitesService,
   ) {}
+
+  @Get('items/:itemId/group-gift')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'The group gift already collecting for this item, if any',
+    description:
+      'Null when there is none. Lets the item screen offer a way into the existing group ' +
+      'instead of Reserve / Gift Now / Start a Group Gift, all three of which the server ' +
+      'refuses once an item is claimed.',
+  })
+  @ApiResponseDoc({ status: 403, description: 'CANNOT_GIFT_OWN_ITEM' })
+  groupGiftForItem(
+    @CurrentUser('id') userId: string,
+    @Param('itemId') itemId: string,
+  ): Promise<ItemGroupGiftView | null> {
+    return this.groupGifts.findForItem(itemId, userId);
+  }
 
   @Post('items/:itemId/group-gift')
   @HttpCode(HttpStatus.CREATED)

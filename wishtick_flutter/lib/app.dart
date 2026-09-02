@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/dev/dev_mode.dart';
+import 'core/push/push_registrar.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
@@ -12,6 +13,12 @@ class WishtickApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Read once, at the root, for the life of the app: it registers this
+    // install's push token when a session starts and withdraws it when one
+    // ends. Nothing consumes its value — watching it is what starts it, and
+    // the root is the one place guaranteed to be built exactly once.
+    ref.watch(pushSessionSyncProvider);
+
     return MaterialApp.router(
       title: 'Wishtick',
       debugShowCheckedModeBanner: false,

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "367104302111",
+    "project_id": "wishtick-7f45d",
+    "storage_bucket": "wishtick-7f45d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:367104302111:android:05b67704f28ae34267892a",
+        "android_client_info": {
+          "package_name": "com.wishtick.wishtick"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyChUTjLNcSd4uQA2oPMVFe6ZxVKM3CM6Vk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

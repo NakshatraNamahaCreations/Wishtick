@@ -17,6 +17,7 @@ import '../../wishlist/presentation/widgets/wishlist_picker_sheet.dart';
 import '../data/events_repository.dart';
 import '../domain/event.dart';
 import 'event_providers.dart';
+import 'widgets/event_wishlist_requests.dart';
 
 /// The host's own event, opened from "My Events".
 ///
@@ -262,6 +263,10 @@ class _Body extends ConsumerWidget {
         //    would mean walking event → wishlists → items → gifts;
         //  * "Add Your Wish" is a guest's action. On the host's own event it
         //    would open the very list "View Wishlist" already opens.
+        //
+        // Guests offering their own lists is different: the host has to answer
+        // it, and this is the only place they can.
+        EventWishlistRequestsSection(eventId: event.id),
       ],
     );
   }

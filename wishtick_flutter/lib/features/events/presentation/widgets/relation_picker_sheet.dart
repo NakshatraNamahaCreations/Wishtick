@@ -14,9 +14,17 @@ typedef RelationChoice = ({String key, String label});
 ///
 /// Groups come from the taxonomy rather than a hardcoded list, so adding a
 /// relation is a seed edit rather than an app release.
+///
+/// [openGroups] restricts which of them can be chosen; the rest are drawn
+/// greyed with the reason, rather than hidden. Hiding them would leave the
+/// host hunting for "Colleague" with no way to learn why it is not there —
+/// the point is to explain that the person should be invited, which is what
+/// [onInvite] offers.
 Future<RelationChoice?> showRelationPicker(
   BuildContext context, {
   String? selectedKey,
+  Set<String>? openGroups,
+  VoidCallback? onInvite,
 }) {
   return showModalBottomSheet<RelationChoice>(
     context: context,
@@ -25,14 +33,26 @@ Future<RelationChoice?> showRelationPicker(
     // The page colour, not the card colour: `2252:485` draws this sheet in
     // beige, and the rows inside are the only white surfaces on it.
     backgroundColor: context.colors.background,
-    builder: (_) => _RelationPickerSheet(selectedKey: selectedKey),
+    builder: (_) => _RelationPickerSheet(
+      selectedKey: selectedKey,
+      openGroups: openGroups,
+      onInvite: onInvite,
+    ),
   );
 }
 
 class _RelationPickerSheet extends ConsumerStatefulWidget {
-  const _RelationPickerSheet({this.selectedKey});
+  const _RelationPickerSheet({
+    this.selectedKey,
+    this.openGroups,
+    this.onInvite,
+  });
 
   final String? selectedKey;
+
+  /// Null means every group is selectable.
+  final Set<String>? openGroups;
+  final VoidCallback? onInvite;
 
   @override
   ConsumerState<_RelationPickerSheet> createState() =>
@@ -106,15 +126,22 @@ class _RelationPickerSheetState extends ConsumerState<_RelationPickerSheet> {
                 // Opens the group holding the current selection, so reopening
                 // the sheet shows where you already are.
                 _openGroup ??= _groupOf(groups, _selectedKey);
+                final open = widget.openGroups;
+                final restricted =
+                    open != null && groups.any((g) => !open.contains(g.group));
+
                 return ListView(
                   shrinkWrap: true,
                   padding: EdgeInsets.zero,
                   children: [
+                    if (restricted) _WhyRestricted(onInvite: widget.onInvite),
                     for (final group in groups)
                       _Group(
                         group: group,
                         expanded: _openGroup == group.group,
                         selectedKey: _selectedKey,
+                        enabled: open == null || open.contains(group.group),
+                        expandable: open == null || open.contains(group.group),
                         onToggle: () => setState(() {
                           _openGroup = _openGroup == group.group
                               ? null
@@ -159,6 +186,74 @@ class _RelationPickerSheetState extends ConsumerState<_RelationPickerSheet> {
   }
 }
 
+/// Why most of the list is greyed out, and what to do about it.
+///
+/// Stated once at the top rather than repeated on every locked row: six
+/// identical explanations down a sheet is noise, and the host reads the reason
+/// before they reach the rows.
+class _WhyRestricted extends StatelessWidget {
+  const _WhyRestricted({this.onInvite});
+
+  final VoidCallback? onInvite;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      margin: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: colors.primarySubtle,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                size: AppSizes.iconMd,
+                color: colors.primary,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Only Parents and Kids for now',
+                  style: context.text.bodyMedium?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            "This person isn't on Wishtick yet. Invite them and they can keep "
+            'their own wishlist — then you can pick any relation, and gift '
+            'them what they actually want.',
+            style: context.text.bodySmall?.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
+          if (onInvite != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onInvite,
+                icon: const Icon(Icons.share, size: AppSizes.iconMd),
+                label: const Text('Invite them to Wishtick'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _Group extends StatelessWidget {
   const _Group({
     required this.group,
@@ -166,6 +261,8 @@ class _Group extends StatelessWidget {
     required this.selectedKey,
     required this.onToggle,
     required this.onSelect,
+    this.enabled = true,
+    this.expandable = true,
   });
 
   final RelationGroup group;
@@ -174,6 +271,11 @@ class _Group extends StatelessWidget {
   final VoidCallback onToggle;
   final ValueChanged<TaxonomyOption> onSelect;
 
+  /// A closed group is still drawn — greyed and inert — so the host can see
+  /// that "Colleagues" exists and read why it is unavailable.
+  final bool enabled;
+  final bool expandable;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -181,7 +283,7 @@ class _Group extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         InkWell(
-          onTap: onToggle,
+          onTap: expandable ? onToggle : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.lg,
@@ -193,21 +295,33 @@ class _Group extends StatelessWidget {
                   child: Text(
                     group.label,
                     style: context.text.bodyLarge?.copyWith(
-                      color: colors.textPrimary,
+                      color: enabled ? colors.textPrimary : colors.textMuted,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
+                if (!enabled)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: Text(
+                      'Invite them first',
+                      style: context.text.bodySmall?.copyWith(
+                        color: colors.textMuted,
+                      ),
+                    ),
+                  ),
                 Icon(
-                  expanded ? Icons.expand_less : Icons.expand_more,
+                  enabled
+                      ? (expanded ? Icons.expand_less : Icons.expand_more)
+                      : Icons.lock_outline,
                   size: AppSizes.iconMd,
-                  color: colors.textSecondary,
+                  color: enabled ? colors.textSecondary : colors.textMuted,
                 ),
               ],
             ),
           ),
         ),
-        if (expanded)
+        if (expanded && enabled)
           for (final option in group.relations)
             InkWell(
               onTap: () => onSelect(option),

@@ -190,13 +190,14 @@ void main() {
       expect(hit.height, greaterThan(24));
     });
 
-    testWidgets('no aspect ratio crops the artwork or strands the button', (
-      tester,
-    ) async {
-      // 20:9 is the shape that broke it first: `cover` scaled the 9:16 design
-      // to the height and cut the headline off the left edge and the logo off
-      // the right. Nothing in these images is croppable, so the fit shows all
-      // of it and letterboxes the difference.
+    testWidgets('the artwork fills the screen at every aspect ratio, and the '
+        'button hit area follows it', (tester) async {
+      // `cover`, so the artwork reaches every edge and the shortfall is a crop
+      // rather than a letterbox. What that costs is real — the 9:16 design
+      // loses ~11% off each side on a 20:9 phone — and is the reason the
+      // slides want redrawing on a taller canvas. What it must not cost is the
+      // button: its position is a fraction of the *image*, and under cover the
+      // image starts outside the screen.
       for (final surface in const [
         Size(393, 852), // a tall phone, 20:9
         Size(1000, 800), // a tablet, wider than the art
@@ -204,14 +205,12 @@ void main() {
       ]) {
         await pumpApp(tester, surface: surface);
 
-        final screen = tester.getRect(find.byType(WelcomeScreen));
-
         // The fit itself, because `getRect` on the Image returns its *box* —
-        // which is the whole screen under either fit — and so cannot tell a
-        // cropped painting from an uncropped one.
+        // the whole screen under either fit — and so cannot tell a cropped
+        // painting from a letterboxed one.
         expect(
           tester.widget<Image>(find.byType(Image).first).fit,
-          BoxFit.contain,
+          BoxFit.cover,
           reason: '$surface',
         );
 
@@ -221,22 +220,17 @@ void main() {
             matching: find.byType(GestureDetector),
           ),
         );
-        expect(
-          hit.bottom,
-          lessThanOrEqualTo(screen.bottom + 1),
-          reason: '$surface',
-        );
-        expect(hit.top, greaterThanOrEqualTo(screen.top), reason: '$surface');
 
-        // And the hit area must sit where the *painted* artwork puts it. This
-        // is the assertion that fails if the fit and the position maths ever
-        // disagree: under `cover` on a tall phone the design is wider than the
-        // screen, so the button starts further left than its fraction of the
-        // screen width — a tappable area no longer over the button.
+        // Where the covered artwork actually lands: bigger than the screen on
+        // one axis, centred, so its origin is negative there. Getting this
+        // backwards is the bug that leaves a tappable area beside the button
+        // instead of on it — and it grows with the screen, so a 9:16 test
+        // surface alone would never show it.
         final art = WelcomeScreen.artworkAspectRatio;
-        final drawnWidth = surface.width / surface.height > art
-            ? surface.height * art
-            : surface.width;
+        final boxAspect = surface.width / surface.height;
+        final drawnWidth = boxAspect > art
+            ? surface.width
+            : surface.height * art;
         final originX = (surface.width - drawnWidth) / 2;
         expect(
           hit.left,
@@ -246,17 +240,29 @@ void main() {
           ),
           reason: '$surface',
         );
+        expect(
+          hit.width,
+          closeTo(
+            (WelcomeScreen.slides.first.button.right -
+                    WelcomeScreen.slides.first.button.left) *
+                drawnWidth,
+            0.5,
+          ),
+          reason: '$surface',
+        );
       }
     });
 
-    testWidgets('the letterbox is the same white the artwork ends in', (
+    testWidgets('the canvas behind the artwork is the white it ends in', (
       tester,
     ) async {
       await pumpApp(tester, surface: const Size(393, 852));
 
-      // Every slide's top and bottom rows are pure white — see
-      // welcome_artwork_test.dart — so a band of anything else would draw a
-      // seam straight across the design.
+      // Under `cover` this is no longer a letterbox — the artwork reaches
+      // every edge — but it is still what shows for the frame before a slide
+      // finishes decoding, and every slide's outer rows are pure white (see
+      // welcome_artwork_test.dart). Anything else flashes a coloured slab on
+      // the first screen of the app.
       expect(
         tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
         WishtickColors.light.artworkCanvas,
@@ -269,13 +275,14 @@ void main() {
       );
     });
 
-    testWidgets('the status bar icons are dark, because the band behind them '
-        'is white', (tester) async {
+    testWidgets('the status bar icons are dark, because the artwork behind '
+        'them is light', (tester) async {
       await pumpApp(tester, topInset: 40);
 
-      // On a phone taller than 9:16 the status bar sits over the letterbox,
-      // which is white; light icons would be invisible there. All four designs
-      // are light at the top, so dark reads against the artwork too.
+      // The status bar sits over the artwork itself now that it is covered
+      // rather than letterboxed, and all four designs are light at the top —
+      // so dark icons are what read against them. They also read against the
+      // white canvas behind, for the frame before the image decodes.
       final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
         find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
       );

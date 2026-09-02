@@ -2,16 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
+import 'package:wishtick_flutter/features/auth/presentation/session_controller.dart';
 import 'package:wishtick_flutter/features/events/data/events_repository.dart';
 import 'package:wishtick_flutter/features/events/domain/event.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_guest_detail_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_guests_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_invite_preview_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_invite_templates_screen.dart';
+import 'package:wishtick_flutter/features/events/presentation/invite_designer_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/widgets/rsvp_status_pill.dart';
 
+import '../../helpers/auth_fakes.dart';
 import '../../helpers/events_fakes.dart';
+
+/// A session that starts authenticated as a named user.
+class _SignedIn extends SessionController {
+  _SignedIn(this._name);
+
+  final String _name;
+
+  @override
+  SessionState build() => SessionState(
+    status: SessionStatus.authenticated,
+    user: buildUser(name: _name),
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -62,6 +79,7 @@ void main() {
     WidgetTester tester,
     Widget child, {
     ThemeData? theme,
+    String? signedInAs,
   }) async {
     // A phone, not the 800×600 default: the download button and the last few
     // guest rows sit below the fold at that size and cannot be tapped.
@@ -69,7 +87,12 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [eventsRepositoryProvider.overrideWithValue(repo)],
+        overrides: [
+          eventsRepositoryProvider.overrideWithValue(repo),
+          // The invitation's "Hosted by" line reads the signed-in user.
+          if (signedInAs != null)
+            sessionProvider.overrideWith(() => _SignedIn(signedInAs)),
+        ],
         child: MaterialApp(theme: theme ?? AppTheme.light, home: child),
       ),
     );
@@ -227,7 +250,13 @@ void main() {
   });
 
   group('Template picker (263:900)', () {
-    testWidgets('Next is dead until a design is chosen', (tester) async {
+    setUpAll(() {
+      // The style grid renders the real canvas, whose Google faces would
+      // otherwise fetch — and hang — in a test.
+      GoogleFonts.config.allowRuntimeFetching = false;
+    });
+
+    testWidgets('Next is dead until a style is chosen', (tester) async {
       await pump(tester, const EventInviteTemplatesScreen(eventId: 'evt_1'));
       // The method sheet opens over it first.
       await tester.tap(find.text('Use Wishtick Templates'));
@@ -236,9 +265,11 @@ void main() {
       final next = tester.widget<ElevatedButton>(
         find.widgetWithText(ElevatedButton, 'Next'),
       );
+      // A background is pre-selected — every style needs one to preview on —
+      // but a style is the host's choice, so nothing is armed yet.
       expect(next.onPressed, isNull);
 
-      await tester.tap(find.text('Golden Bloom').first);
+      await tester.tap(find.byKey(const ValueKey('invite-style-classic')));
       await tester.pumpAndSettle();
 
       final armed = tester.widget<ElevatedButton>(
@@ -247,39 +278,104 @@ void main() {
       expect(armed.onPressed, isNotNull);
     });
 
-    testWidgets('the Anniversary tab hides birthday-only designs', (
-      tester,
-    ) async {
+    testWidgets('the Anniversary tab hides birthday-only backgrounds and '
+        'styles', (tester) async {
       await pump(tester, const EventInviteTemplatesScreen(eventId: 'evt_1'));
       await tester.tap(find.text('Use Wishtick Templates'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Golden Bloom'), findsWidgets);
+      expect(find.byKey(const ValueKey('invite-bg-happy_birthday')), findsOne);
+      expect(find.byKey(const ValueKey('invite-style-playful')), findsOne);
 
       await tester.tap(find.byKey(const ValueKey('template-tab-Anniversary')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Golden Bloom'), findsNothing);
-      expect(find.text('Evergreen'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey('invite-bg-happy_birthday')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('invite-style-playful')), findsNothing);
+      // The occasion-neutral ones stay.
+      expect(find.byKey(const ValueKey('invite-bg-wishes')), findsOne);
+      expect(find.byKey(const ValueKey('invite-style-classic')), findsOne);
     });
 
-    testWidgets('choosing a design drops a previously uploaded file', (
-      tester,
-    ) async {
-      // The two are alternatives and the upload wins wherever the invitation
-      // is drawn, so leaving it in place would make picking a design look
-      // like it did nothing.
+    testWidgets('Next opens the designer on the chosen background with the '
+        'style already laid out', (tester) async {
       await pump(tester, const EventInviteTemplatesScreen(eventId: 'evt_1'));
       await tester.tap(find.text('Use Wishtick Templates'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Golden Bloom').first);
+
+      await tester.tap(find.byKey(const ValueKey('invite-bg-wishes')));
+      await tester.pumpAndSettle();
+      // Third of five styles, so the second grid row — below the fold on a
+      // 900px surface. A tap outside the viewport is silently dropped.
+      final script = find.byKey(const ValueKey('invite-style-script'));
+      await tester.ensureVisible(script);
+      await tester.pumpAndSettle();
+      await tester.tap(script);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
       await tester.pumpAndSettle();
 
-      final call = repo.updateCalls.single;
-      expect(call['templateId'], 'tpl_1');
-      expect(call['clearInviteMedia'], isTrue);
+      final designer = tester.widget<InviteDesignerScreen>(
+        find.byType(InviteDesignerScreen),
+      );
+      expect(designer.initial.backgroundKey, 'wishes');
+      // Pre-filled from the event, not blank: the old template path could
+      // not be edited, and a blank canvas is not a template.
+      expect(designer.initial.layers, isNotEmpty);
+      expect(
+        designer.initial.layers.map((l) => l.text),
+        contains("Siya's 24th"),
+      );
+      // Nothing was saved yet — the card only exists once the designer exports
+      // it, so backing out of the designer leaves the event untouched.
+      expect(repo.updateCalls, isEmpty);
+    });
+
+    testWidgets('previews carry "Hosted by" the signed-in user, not the '
+        'person the party is for', (tester) async {
+      await pump(
+        tester,
+        const EventInviteTemplatesScreen(eventId: 'evt_1'),
+        signedInAs: 'Ananya',
+      );
+      await tester.tap(find.text('Use Wishtick Templates'));
+      await tester.pumpAndSettle();
+
+      // The event is Siya's; Ananya is the account designing it.
+      expect(find.text('Hosted by Ananya'), findsWidgets);
+      expect(find.text('Hosted by Siya'), findsNothing);
+    });
+
+    testWidgets('a self-event carries no "Hosted by" line at all', (
+      tester,
+    ) async {
+      repo.event = buildEvent(forSelf: true);
+      await pump(
+        tester,
+        const EventInviteTemplatesScreen(eventId: 'evt_1'),
+        signedInAs: 'Ananya',
+      );
+      await tester.tap(find.text('Use Wishtick Templates'));
+      await tester.pumpAndSettle();
+
+      // The headline already names the host; a second line would say it twice.
+      expect(find.textContaining('Hosted by'), findsNothing);
+    });
+
+    testWidgets('previews are drawn with this event, not placeholder copy', (
+      tester,
+    ) async {
+      await pump(tester, const EventInviteTemplatesScreen(eventId: 'evt_1'));
+      await tester.tap(find.text('Use Wishtick Templates'));
+      await tester.pumpAndSettle();
+
+      // One per style card — the title appears on every preview.
+      expect(find.text("Siya's 24th"), findsWidgets);
+      expect(find.text('Mysore Socials'), findsWidgets);
+      expect(find.text('Your Celebration'), findsNothing);
     });
   });
 

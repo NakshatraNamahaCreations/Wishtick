@@ -88,6 +88,7 @@ PublicInvite buildInvite({
   List<InviteWishlistLink> wishlists = const [],
   List<InviteGroupGift> groupGifts = const [],
 }) => PublicInvite(
+  eventId: 'ev_1',
   event: InviteEvent(
     title: title,
     type: EventType.birthday,

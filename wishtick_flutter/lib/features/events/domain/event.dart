@@ -198,6 +198,7 @@ class WishtickEventDetail {
     this.ogImageUrl,
     this.share,
     this.rsvpCounts,
+    this.forSelf = false,
   });
 
   final String id;
@@ -216,6 +217,13 @@ class WishtickEventDetail {
   /// [relation] is a `relation` taxonomy key, not a label.
   final String? personName;
   final String? relation;
+
+  /// The host is the person being celebrated — their own birthday, wedding.
+  ///
+  /// Decides two things: the create flow asks for no name and no relation,
+  /// and the invitation carries no "Hosted by" line, because the host and the
+  /// guest of honour are the same person.
+  final bool forSelf;
 
   final String? coverUrl;
 
@@ -275,6 +283,7 @@ class WishtickEventDetail {
         rsvpCounts: json['rsvpCounts'] == null
             ? null
             : RsvpCounts.fromJson(json['rsvpCounts'] as Map<String, dynamic>),
+        forSelf: json['forSelf'] as bool? ?? false,
       );
 }
 

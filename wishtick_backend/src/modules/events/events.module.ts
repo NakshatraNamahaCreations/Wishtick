@@ -12,6 +12,7 @@ import { EventParticipationModule } from './event-participation.module';
 import { EventRemindersRegistrar } from './event-reminders.processor';
 import { EventRemindersService } from './event-reminders.service';
 import { EventsController } from './events.controller';
+import { EventWishlistsService } from './event-wishlists.service';
 import { EventsService } from './events.service';
 import { InviteCardRenderer } from './invite-card.renderer';
 import { InviteNotificationsService } from './invite-notifications.service';
@@ -20,11 +21,21 @@ import { InvitesService } from './invites.service';
 import { GuestListExportService } from './guest-list-export.service';
 import { PublicEventsController, PublicInvitesController } from './public-invites.controller';
 import { PublicInvitesService } from './public-invites.service';
+import {
+  EventWishlistSubmission,
+  EventWishlistSubmissionSchema,
+} from './schemas/event-wishlist-submission.schema';
 import { Event, EventSchema } from './schemas/event.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Event.name, schema: EventSchema }]),
+    MongooseModule.forFeature([
+      { name: Event.name, schema: EventSchema },
+      {
+        name: EventWishlistSubmission.name,
+        schema: EventWishlistSubmissionSchema,
+      },
+    ]),
     // Brings the EventInvite model with it, and is the same module WishlistsModule
     // imports for EVENT_PARTICIPATION — one registration, no duplicate model.
     EventParticipationModule,
@@ -50,6 +61,7 @@ import { Event, EventSchema } from './schemas/event.schema';
     InvitesService,
     GuestListExportService,
     PublicInvitesService,
+    EventWishlistsService,
     EventRemindersService,
     EventRemindersRegistrar,
     InviteNotificationsService,

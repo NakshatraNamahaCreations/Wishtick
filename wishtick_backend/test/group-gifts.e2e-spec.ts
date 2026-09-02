@@ -1122,4 +1122,80 @@ describe('Group gifting (e2e)', () => {
       expect(view.data.participants.find((p) => p.userId === host.userId)?.name).toBe('A friend');
     });
   });
+
+  describe('an item that already has a group gift', () => {
+    const forItem = (actor: Actor, itemId: string) =>
+      request(app.getHttpServer()).get(`${V1}/items/${itemId}/group-gift`).set(auth(actor.token));
+
+    it('reports the running group so the item screen can offer a way in', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const onlooker = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+      await contribute(initiator, gg.data.id, { amountMinor: 125000 }).expect(201);
+
+      const seen = (await forItem(onlooker, itemId).expect(200)).body as Envelope<{
+        id: string;
+        collectedAmountMinor: number;
+        targetAmountMinor: number;
+        percentFunded: number;
+      }>;
+      expect(seen.data.id).toBe(gg.data.id);
+      expect(seen.data.collectedAmountMinor).toBe(125000);
+      expect(seen.data.percentFunded).toBe(25);
+
+      // And every single-gifter route on that item is shut, which is why the
+      // screen must offer the group instead of Reserve / Gift Now.
+      await request(app.getHttpServer())
+        .post(`${V1}/items/${itemId}/reserve`)
+        .set(auth(onlooker.token))
+        .set(idem())
+        .send({})
+        .expect(409);
+      await createGroupGift(onlooker, itemId, { targetAmountMinor: 500000 }).expect(409);
+    });
+
+    it('reports nothing for an item nobody is collecting for', async () => {
+      const owner = await newUser();
+      const onlooker = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+
+      const res = await forItem(onlooker, itemId).expect(200);
+      expect((res.body as Envelope<unknown>).data).toBeNull();
+    });
+
+    // A cancelled group leaves the item free again. Reporting it would lock a
+    // still-giftable item behind a group nobody can join.
+    it('reports nothing once the group is closed', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const onlooker = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gifts/${gg.data.id}/cancel`)
+        .set(auth(initiator.token))
+        .expect(200);
+
+      const res = await forItem(onlooker, itemId).expect(200);
+      expect((res.body as Envelope<unknown>).data).toBeNull();
+    });
+
+    // The gift is a surprise. The same rule that stops the recipient gifting
+    // to themselves stops them being told a group is collecting for them.
+    it('keeps the surprise from the recipient', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const { itemId } = await wishlistWithItem(owner);
+      await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201);
+
+      await forItem(owner, itemId).expect(403);
+    });
+  });
 });

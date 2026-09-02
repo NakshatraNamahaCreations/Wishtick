@@ -74,6 +74,13 @@ class WelcomeScreen extends StatefulWidget {
   ];
 
   /// What the artwork was drawn at — 9:16.
+  ///
+  /// Every phone is taller than this, and the slides are painted with
+  /// [BoxFit.cover], so the sides are what get trimmed: 11% off each edge at
+  /// 20.5:9, 12% at 21:9. Redrawing the four slides on a taller canvas — 9:18
+  /// halves it, 9:21 removes it on phones — with nothing important inside the
+  /// outer margin is what fixes that, and this constant plus the four button
+  /// rects above must be re-measured against the new export when it lands.
   static const artworkAspectRatio = 1890 / 3360;
 
   @override
@@ -119,10 +126,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      // Dark icons: on a phone taller than 9:16 the artwork is letterboxed and
-      // the status bar sits over the white band above it, where light icons
-      // would be invisible. All four designs are light at the top, so dark
-      // icons read against the artwork itself too.
+      // Dark icons: the artwork is covered rather than letterboxed, so the
+      // status bar sits over the design itself — and all four are light at the
+      // top. They read against the white canvas behind too, for the frame
+      // before a slide finishes decoding.
       value: SystemUiOverlayStyle.dark,
       child: Scaffold(
         backgroundColor: context.colors.artworkCanvas,
@@ -168,17 +175,18 @@ class _Slide extends StatelessWidget {
             Positioned.fill(
               child: Image.asset(
                 slide.asset,
-                // `contain`, not `cover`. These are composed designs, not
-                // photographs to crop into: the headline runs to the left edge
-                // and the logo to the right, so filling a 20:9 phone by
-                // scaling to the height cut both of them off. Nothing here can
-                // be trimmed — the top carries the headline, the bottom the
-                // only button — so the whole image is shown and the shortfall
-                // becomes a letterbox.
+                // `cover`: the artwork fills the screen edge to edge on every
+                // device, at the cost of trimming whichever axis has to give.
                 //
-                // It costs nothing visually: every slide's top and bottom rows
-                // are pure white, and the canvas behind them is the same white.
-                fit: BoxFit.contain,
+                // The art is drawn 9:16 and phones are taller than that, so
+                // what gets trimmed on a phone is the *sides* — 11% off each
+                // edge at 20.5:9. The headline runs to the left edge and the
+                // logo to the right, so both lose a little; the drawn button
+                // loses its rounded ends on the tallest screens. Redrawing the
+                // slides on a taller canvas with the artwork kept clear of the
+                // outer margin is what removes that cost — see the note on
+                // [WelcomeScreen.artworkAspectRatio].
+                fit: BoxFit.cover,
                 // Excluded from semantics because the hit area below carries
                 // the only name a reader can act on. A second, unlabelled
                 // image node would just be noise before it.
@@ -206,20 +214,24 @@ class _Slide extends StatelessWidget {
     );
   }
 
-  /// Where a [BoxFit.contain] image actually lands inside [box].
+  /// Where a [BoxFit.cover] image actually lands relative to [box].
   ///
-  /// Always inside it, centred on the axis with room to spare — which is what
-  /// makes the drawn button reachable at every aspect ratio, with no crop able
-  /// to carry it off screen.
+  /// Deliberately *larger* than the box and centred, so the returned rect can
+  /// start at a negative offset. That is the whole difference from `contain`,
+  /// and it is why the button's fractions have to be resolved against this
+  /// rather than against the box: under cover the image no longer starts at
+  /// the box's origin, and a button placed as a fraction of the box would
+  /// drift further off the drawn one the taller the screen gets.
   static Rect _paintedRect(Size box, double aspectRatio) {
     final boxAspect = box.width / box.height;
     if (boxAspect > aspectRatio) {
-      // Box is wider than the art: full height, letterboxed left and right.
-      final width = box.height * aspectRatio;
-      return Rect.fromLTWH((box.width - width) / 2, 0, width, box.height);
+      // Box is wider than the art: match the width, overflow above and below.
+      final height = box.width / aspectRatio;
+      return Rect.fromLTWH(0, (box.height - height) / 2, box.width, height);
     }
-    // Taller: full width, letterboxed top and bottom.
-    final height = box.width / aspectRatio;
-    return Rect.fromLTWH(0, (box.height - height) / 2, box.width, height);
+    // Taller than the art — every modern phone: match the height, overflow
+    // left and right.
+    final width = box.height * aspectRatio;
+    return Rect.fromLTWH((box.width - width) / 2, 0, width, box.height);
   }
 }

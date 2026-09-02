@@ -27,14 +27,45 @@ Future<PersonIdentity?> showWishmatePickerSheet(
       _WishmatePickerSheet(title: title, emptyMessage: emptyMessage),
 );
 
-class _WishmatePickerSheet extends ConsumerWidget {
+class _WishmatePickerSheet extends ConsumerStatefulWidget {
   const _WishmatePickerSheet({required this.title, required this.emptyMessage});
 
   final String title;
   final String emptyMessage;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_WishmatePickerSheet> createState() =>
+      _WishmatePickerSheetState();
+}
+
+class _WishmatePickerSheetState extends ConsumerState<_WishmatePickerSheet> {
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Filters on both the display name and the handle, because either is what
+  /// somebody remembers about a person. Local, not a server round trip: the
+  /// whole WishMate list is already in hand, and typing should not wait on the
+  /// network to narrow a list you can see.
+  List<T> _matching<T extends PersonIdentity>(List<T> all) {
+    final needle = _query.trim().toLowerCase();
+    if (needle.isEmpty) return all;
+    return all
+        .where(
+          (mate) =>
+              mate.name.toLowerCase().contains(needle) ||
+              mate.handle.toLowerCase().contains(needle),
+        )
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.colors;
     final mates = ref.watch(wishmatesProvider);
 
@@ -66,13 +97,46 @@ class _WishmatePickerSheet extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Text(
-                title,
+                widget.title,
                 style: context.text.titleMedium?.copyWith(
                   color: colors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
+            // Only once there is something to search: a box over "you have no
+            // WishMates yet" is furniture, not a feature.
+            if (mates.value?.isNotEmpty ?? false)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  0,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
+                child: TextField(
+                  controller: _search,
+                  textInputAction: TextInputAction.search,
+                  // No autofocus: the keyboard would cover the very list the
+                  // sheet exists to show, and most people have few enough
+                  // WishMates to just tap one.
+                  decoration: InputDecoration(
+                    hintText: 'Search by name or @handle',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close),
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _search.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                ),
+              ),
             Expanded(
               // Error before loading: Riverpod retries a failed provider, so a
               // provider that has failed is *also* loading — matching
@@ -85,30 +149,16 @@ class _WishmatePickerSheet extends ConsumerWidget {
                   child: CircularProgressIndicator(),
                 ),
                 AsyncValue(:final value?) when value.isEmpty => _Message(
-                  emptyMessage,
+                  widget.emptyMessage,
                 ),
-                AsyncValue(:final value?) => ListView.builder(
+                // "You have none" and "none match what you typed" are
+                // different problems, and telling someone to go add WishMates
+                // when they have twenty and a typo would be wrong.
+                AsyncValue(:final value?) when _matching(value).isEmpty =>
+                  _Message('No WishMates match “${_query.trim()}”.'),
+                AsyncValue(:final value?) => _MateList(
+                  mates: _matching(value),
                   controller: controller,
-                  itemCount: value.length,
-                  itemBuilder: (context, index) {
-                    final mate = value[index];
-                    return ListTile(
-                      leading: PersonAvatar(person: mate),
-                      title: Text(
-                        mate.name,
-                        style: context.text.bodyLarge?.copyWith(
-                          color: colors.textPrimary,
-                        ),
-                      ),
-                      subtitle: Text(
-                        mate.handle,
-                        style: context.text.bodySmall?.copyWith(
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                      onTap: () => Navigator.of(context).pop(mate),
-                    );
-                  },
                 ),
                 _ => const SizedBox.shrink(),
               },
@@ -116,6 +166,39 @@ class _WishmatePickerSheet extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MateList extends StatelessWidget {
+  const _MateList({required this.mates, required this.controller});
+
+  final List<PersonIdentity> mates;
+  final ScrollController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return ListView.builder(
+      controller: controller,
+      itemCount: mates.length,
+      itemBuilder: (context, index) {
+        final mate = mates[index];
+        return ListTile(
+          leading: PersonAvatar(person: mate),
+          title: Text(
+            mate.name,
+            style: context.text.bodyLarge?.copyWith(color: colors.textPrimary),
+          ),
+          subtitle: Text(
+            mate.handle,
+            style: context.text.bodySmall?.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
+          onTap: () => Navigator.of(context).pop(mate),
+        );
+      },
     );
   }
 }

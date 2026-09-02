@@ -80,6 +80,25 @@ GroupGift buildGroupGift({
   share: share,
 );
 
+ItemGroupGift buildItemGroupGift({
+  String id = 'gg_1',
+  String title = "Siya's birthday gift",
+  GroupGiftStatus status = GroupGiftStatus.open,
+  int targetAmountMinor = 487100,
+  int collectedAmountMinor = 200000,
+  int contributorCount = 1,
+}) => ItemGroupGift(
+  id: id,
+  title: title,
+  status: status,
+  targetAmountMinor: targetAmountMinor,
+  collectedAmountMinor: collectedAmountMinor,
+  percentFunded: targetAmountMinor == 0
+      ? 0
+      : (collectedAmountMinor * 100 ~/ targetAmountMinor).clamp(0, 100),
+  contributorCount: contributorCount,
+);
+
 GroupGiftInvite buildInvite({
   String id = 'inv_1',
   String groupGiftId = 'gg_1',
@@ -217,6 +236,16 @@ class FakeGroupGiftRepository implements GroupGiftRepository {
   /// Exactly who was asked, in order, so a test can catch the picker's
   /// selection being dropped or reordered on the way to the wire.
   final invitedUserIds = <List<String>>[];
+
+  /// The group already collecting for an item, if a test says so. Null is the
+  /// ordinary case: most items have none.
+  ItemGroupGift? itemGroupGift;
+
+  @override
+  Future<ItemGroupGift?> groupGiftForItem(String itemId) async {
+    calls.add('groupGiftForItem');
+    return _guard(itemGroupGift);
+  }
 
   /// What the invitee's list answers with.
   List<GroupGiftInvite> invites = const [];

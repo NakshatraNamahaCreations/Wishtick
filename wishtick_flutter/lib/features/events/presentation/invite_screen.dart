@@ -12,6 +12,7 @@ import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
 import '../domain/public_invite.dart';
 import 'invite_controller.dart';
+import 'widgets/event_wishlist_requests.dart';
 
 /// Figma `291:1008` — an invite, opened by its token.
 ///
@@ -84,6 +85,8 @@ class _InviteScreenState extends ConsumerState<InviteScreen> {
             invite: loaded,
             busy: state.busy,
             onRespond: (r) => unawaited(_respond(r)),
+            onAddWishlist: () =>
+                unawaited(offerWishlistToEvent(context, ref, loaded.eventId)),
           ),
           _ => const Center(child: CircularProgressIndicator()),
         },
@@ -97,11 +100,16 @@ class _Body extends StatelessWidget {
     required this.invite,
     required this.busy,
     required this.onRespond,
+    required this.onAddWishlist,
   });
 
   final PublicInvite invite;
   final bool busy;
   final ValueChanged<RsvpResponse> onRespond;
+
+  /// Offering one of your own wishlists. Handed down rather than done here:
+  /// only the stateful parent holds the ref and the invite's event.
+  final VoidCallback onAddWishlist;
 
   @override
   Widget build(BuildContext context) {
@@ -261,14 +269,41 @@ class _Body extends StatelessWidget {
           )
         else
           for (final wishlist in invite.wishlists)
-            _SuggestionRow(
-              icon: Icons.favorite_border,
-              title: wishlist.title,
-              subtitle: 'View the gifts on this list',
-              onTap: () => unawaited(
-                context.push<void>(AppRoutes.publicWishlist(wishlist.slug)),
+            if (wishlist.locked)
+              // Known to exist, and that is all. Tapping says why rather than
+              // doing nothing: a dead row reads as a broken one.
+              _SuggestionRow(
+                icon: Icons.lock_outline,
+                title: wishlist.title,
+                subtitle: 'Private wishlist',
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'This wishlist is private. Only the people its owner '
+                      'invited can open it.',
+                    ),
+                  ),
+                ),
+              )
+            else
+              _SuggestionRow(
+                icon: Icons.favorite_border,
+                title: wishlist.title,
+                subtitle: 'View the gifts on this list',
+                onTap: () => unawaited(
+                  context.push<void>(AppRoutes.publicWishlist(wishlist.slug!)),
+                ),
               ),
-            ),
+        // Only once they are going: the access the host's approval grants is
+        // built on the RSVP, so someone still deciding would be offering a list
+        // they could not themselves see on the invitation.
+        if (invite.hasResponded)
+          _SuggestionRow(
+            icon: Icons.playlist_add,
+            title: 'Add your wishlist',
+            subtitle: 'The host decides whether it shows here',
+            onTap: onAddWishlist,
+          ),
         // `291:1008`'s Group Gifts row. Drawn only when a group is actually
         // running: an invitee cannot start one from here, so an empty row
         // would be an affordance for nothing.

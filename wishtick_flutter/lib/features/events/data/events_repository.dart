@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../domain/event.dart';
+import '../domain/event_wishlist_request.dart';
 import '../domain/invite_template.dart';
 import '../domain/invited_event.dart';
 
@@ -78,6 +79,7 @@ class EventsRepository {
     String? venue,
     String? personName,
     String? relation,
+    bool? forSelf,
     EventVisibility? visibility,
     String? coverMediaId,
     List<String>? wishlistIds,
@@ -95,6 +97,7 @@ class EventsRepository {
         'venue': ?venue,
         'personName': ?personName,
         'relation': ?relation,
+        'forSelf': ?forSelf,
         'visibility': ?visibility?.wireValue,
         'coverMediaId': ?coverMediaId,
         'wishlistIds': ?wishlistIds,
@@ -117,6 +120,7 @@ class EventsRepository {
     String? venue,
     String? personName,
     String? relation,
+    bool? forSelf,
     EventVisibility? visibility,
     String? coverMediaId,
     String? inviteMediaId,
@@ -139,6 +143,7 @@ class EventsRepository {
         'venue': ?venue,
         'personName': ?personName,
         'relation': ?relation,
+        'forSelf': ?forSelf,
         'visibility': ?visibility?.wireValue,
         'coverMediaId': ?coverMediaId,
         if (clearInviteMedia)
@@ -225,6 +230,66 @@ class EventsRepository {
   /// Everyone here is already a connection, so there is no address to type and
   /// none to mistype, and the invite is bound to a real account from the
   /// start: no waiting for a signup to link it up by matching an email.
+  // -- Guests offering their own wishlists --------------------------------
+
+  /// Offers one of the caller's wishlists to an event they are going to.
+  ///
+  /// The host has to approve it before it shows on the invitation. Throws
+  /// [ApiException] with a 409 when the list is already spoken for by an event.
+  Future<EventWishlistRequest> offerWishlist(
+    String eventId,
+    String wishlistId,
+  ) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/events/$eventId/wishlist-requests',
+      body: {'wishlistId': wishlistId},
+    );
+    return EventWishlistRequest.fromJson(json);
+  }
+
+  /// The host's queue for one event: offered and already showing.
+  Future<List<EventWishlistRequest>> wishlistRequests(String eventId) async {
+    final json = await _api.get<List<dynamic>>(
+      '/events/$eventId/wishlist-requests',
+    );
+    return json
+        .map((e) => EventWishlistRequest.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// The caller's own offers, so a guest can see what is still waiting.
+  Future<List<EventWishlistRequest>> myWishlistRequests() async {
+    final json = await _api.get<List<dynamic>>('/event-wishlist-requests/mine');
+    return json
+        .map((e) => EventWishlistRequest.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// The host's answer. Approving links the list to the event and, if it was
+  /// private, opens it to the event's accepted guests.
+  Future<EventWishlistRequest> respondToWishlistRequest(
+    String eventId,
+    String requestId, {
+    required bool approve,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/events/$eventId/wishlist-requests/$requestId/'
+      '${approve ? 'approve' : 'reject'}',
+    );
+    return EventWishlistRequest.fromJson(json);
+  }
+
+  /// Takes a wishlist back off the event. Either side may.
+  Future<EventWishlistRequest> removeWishlistRequest(
+    String eventId,
+    String requestId,
+  ) async {
+    final json = await _api.delete<Map<String, dynamic>>(
+      '/events/$eventId/wishlist-requests/$requestId',
+    );
+    return EventWishlistRequest.fromJson(json);
+  }
+
   Future<BulkInviteResult> inviteWishmates(
     String eventId,
     List<String> userIds,

@@ -37,7 +37,11 @@ export class PublicWishlistsService {
    * is a dead end they cannot act on. An unknown or non-linkable slug is a flat
    * 404 — that must not confirm a private list exists.
    */
-  private async resolveBySlug(slug: string, passcode?: string): Promise<WishlistDocument> {
+  private async resolveBySlug(
+    slug: string,
+    passcode?: string,
+    viewerUserId?: string,
+  ): Promise<WishlistDocument> {
     const wishlist = await this.wishlists.findBySlug(slug);
     if (!wishlist || wishlist.archivedAt) {
       throw new AppException(ErrorCode.SHARE_LINK_INVALID, 'This link is not valid', 404);
@@ -51,9 +55,19 @@ export class PublicWishlistsService {
       throw new AppException(ErrorCode.SHARE_PASSCODE_REQUIRED, 'This link needs a passcode', 401);
     }
 
-    // The policy is still the authority: it is what refuses a PRIVATE or
-    // EVENT_ONLY list even when the slug is correct.
-    const decision = await this.access.resolve(wishlist, { share: { slug, passcode } });
+    // The policy is still the authority: it is what refuses a PRIVATE list even
+    // when the slug is correct.
+    //
+    // The viewer is passed as well as the link, because who is asking can only
+    // widen what the policy allows: an EVENT_ONLY list opens for an accepted
+    // guest of its event, and the owner arriving through their own link is
+    // still the owner. Resolving on the link alone refused an event's guests
+    // the very list the invitation had just offered them — the invite view
+    // resolves *with* a viewer, so it listed a slug this route would not open.
+    const decision = await this.access.resolve(wishlist, {
+      userId: viewerUserId,
+      share: { slug, passcode },
+    });
     if (!decision.canView) {
       if (wishlist.share.passcodeHash && passcode) {
         throw new AppException(ErrorCode.SHARE_PASSCODE_INVALID, 'Incorrect passcode', 403);
@@ -77,8 +91,12 @@ export class PublicWishlistsService {
    *  - who reserved or bought anything, and which of the claimed statuses it is;
    *  - participants, chat, share settings, and internal counters.
    */
-  async getBySlug(slug: string, passcode?: string): Promise<PublicWishlistView> {
-    const wishlist = await this.resolveBySlug(slug, passcode);
+  async getBySlug(
+    slug: string,
+    passcode?: string,
+    viewerUserId?: string,
+  ): Promise<PublicWishlistView> {
+    const wishlist = await this.resolveBySlug(slug, passcode, viewerUserId);
 
     const [items, ownerFirstName] = await Promise.all([
       this.items

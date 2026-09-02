@@ -417,6 +417,46 @@ describe('Events & invites (e2e)', () => {
       expect(moved.data.personName).toBe('Priya');
     });
 
+    it('a host celebrating themself sends no person and no relation', async () => {
+      const host = await newUser();
+      const created = (
+        await request(app.getHttpServer())
+          .post(`${V1}/events`)
+          .set(auth(host.token))
+          .send({
+            title: "Siya's 24th",
+            type: 'birthday',
+            startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+            timezone: 'Asia/Kolkata',
+            forSelf: true,
+          })
+          .expect(201)
+      ).body as Envelope<{ id: string; forSelf: boolean; personName: string | null; relation: string | null }>;
+
+      // The flag is what tells a self-event from an unfinished draft: both
+      // have no person and no relation.
+      expect(created.data.forSelf).toBe(true);
+      expect(created.data.personName).toBeNull();
+      expect(created.data.relation).toBeNull();
+
+      // And it defaults off, so every existing event reads as "for someone".
+      const other = (
+        await request(app.getHttpServer())
+          .post(`${V1}/events`)
+          .set(auth(host.token))
+          .send({
+            title: "Priya's Anniversary",
+            type: 'anniversary',
+            startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+            timezone: 'Asia/Kolkata',
+            personName: 'Priya',
+            relation: 'partner_wife',
+          })
+          .expect(201)
+      ).body as Envelope<{ forSelf: boolean }>;
+      expect(other.data.forSelf).toBe(false);
+    });
+
     it('shows the venue to the invitee — the gap that made an invite all time and no place', async () => {
       const host = await newUser();
       const event = (
@@ -1246,6 +1286,518 @@ describe('Events & invites (e2e)', () => {
       const guest = await newUser();
       const res = await join(guest, 'nosuchslug123456').expect(404);
       expect(res.body.error.code).toBe('EVENT_NOT_FOUND');
+    });
+  });
+
+  // -- Guests offering their own wishlists ----------------------------------
+
+  describe('guest wishlists on an event', () => {
+    const publicEvent = async (host: Actor) => {
+      const event = await createEvent(host, { visibility: 'public' });
+      await publish(host, event.id);
+      const full = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<EventView & { share?: { slug: string } }>;
+      return { id: event.id, slug: full.data.share!.slug };
+    };
+
+    /** Joins, then says yes - the RSVP is what the access grant is built on. */
+    const attend = async (guest: Actor, slug: string): Promise<string> => {
+      const joined = (
+        await request(app.getHttpServer())
+          .post(`${V1}/events/by-slug/${slug}/join`)
+          .set(auth(guest.token))
+          .expect(201)
+      ).body as Envelope<{ token: string }>;
+      await request(app.getHttpServer())
+        .post(`${V1}/public/invites/${joined.data.token}/rsvp`)
+        .send({ response: 'yes' })
+        .expect(200);
+      return joined.data.token;
+    };
+
+    const privateList = async (owner: Actor, title = 'My birthday list') => {
+      const wl = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists`)
+          .set(auth(owner.token))
+          .send({ title, visibility: 'private' })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      return wl.data.id;
+    };
+
+    const offer = (guest: Actor, eventId: string, wishlistId: string) =>
+      request(app.getHttpServer())
+        .post(`${V1}/events/${eventId}/wishlist-requests`)
+        .set(auth(guest.token))
+        .send({ wishlistId });
+
+    /**
+     * The invite view, signed in.
+     *
+     * The token says which invitation; the bearer says who is holding it. An
+     * EVENT_ONLY list resolves only for the signed-in invited user, so an
+     * anonymous read would show nothing and prove nothing.
+     */
+    const inviteView = (token: string, viewer: Actor) =>
+      request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).set(auth(viewer.token));
+
+    it('stays off the invitation until the host approves it', async () => {
+      const host = await newUser('Rohan');
+      const guest = await newUser('Siya');
+      const other = await newUser('Ananya');
+      const event = await publicEvent(host);
+      const guestToken = await attend(guest, event.slug);
+      const otherToken = await attend(other, event.slug);
+      const wishlistId = await privateList(guest);
+
+      const offered = (await offer(guest, event.id, wishlistId).expect(200)).body as Envelope<{
+        id: string;
+        status: string;
+        requestedByName: string;
+      }>;
+      expect(offered.data.status).toBe('pending');
+      // Who offered it - the host is deciding, and an id names nobody.
+      expect(offered.data.requestedByName).toBe('Siya');
+
+      // Pending shows to nobody.
+      const before = (await inviteView(otherToken, other).expect(200)).body as Envelope<{
+        wishlists: { title: string }[];
+      }>;
+      expect(before.data.wishlists.map((w) => w.title)).not.toContain('My birthday list');
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/approve`)
+        .set(auth(host.token))
+        .expect(200);
+
+      // Now the other guests know it exists - and only that. The owner kept it
+      // private, and the host approving it is not the owner publishing it.
+      const after = (await inviteView(otherToken, other).expect(200)).body as Envelope<{
+        wishlists: { slug: string | null; title: string; locked: boolean }[];
+      }>;
+      const row = after.data.wishlists.find((w) => w.title === 'My birthday list');
+      expect(row).toBeDefined();
+      expect(row!.locked).toBe(true);
+      expect(row!.slug).toBeNull();
+      await request(app.getHttpServer())
+        .get(`${V1}/wishlists/${wishlistId}`)
+        .set(auth(other.token))
+        .expect(404);
+
+      // Nor the host: the usual offer is a surprise list a guest made *for*
+      // them, and approving it must not be how they get to read it.
+      await request(app.getHttpServer())
+        .get(`${V1}/wishlists/${wishlistId}`)
+        .set(auth(host.token))
+        .expect(404);
+
+      // Still private, in the owner's own view.
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${wishlistId}`)
+          .set(auth(guest.token))
+          .expect(200)
+      ).body as Envelope<{ visibility: string }>;
+      expect(mine.data.visibility).toBe('private');
+
+      await inviteView(guestToken, guest).expect(200);
+    });
+
+    it('a public list, once approved, opens from the invitation', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const other = await newUser();
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const otherToken = await attend(other, event.slug);
+      const wl = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists`)
+          .set(auth(guest.token))
+          .send({ title: 'Open list', visibility: 'public' })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      const offered = (await offer(guest, event.id, wl.data.id).expect(200)).body as Envelope<{
+        id: string;
+      }>;
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/approve`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const view = (await inviteView(otherToken, other).expect(200)).body as Envelope<{
+        wishlists: { slug: string | null; title: string; locked: boolean }[];
+      }>;
+      const row = view.data.wishlists.find((w) => w.title === 'Open list');
+      expect(row).toBeDefined();
+      expect(row!.locked).toBe(false);
+      expect(row!.slug).not.toBeNull();
+      await request(app.getHttpServer())
+        .get(`${V1}/public/wishlists/${row!.slug}`)
+        .set(auth(other.token))
+        .expect(200);
+    });
+
+    // The host's own private list keeps its old behaviour: it stays off the
+    // invitation entirely. Attaching it was not a decision to publish it, and
+    // nobody approved anything.
+    it('the host s own private list is still not listed at all', async () => {
+      const host = await newUser();
+      const other = await newUser();
+      const wishlistId = await privateList(host, 'Host private');
+      const event = await createEvent(host, {
+        visibility: 'public',
+        wishlistIds: [wishlistId],
+      });
+      await publish(host, event.id);
+      const full = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<EventView & { share?: { slug: string } }>;
+      const otherToken = await attend(other, full.data.share!.slug);
+
+      const view = (await inviteView(otherToken, other).expect(200)).body as Envelope<{
+        wishlists: { title: string }[];
+      }>;
+      expect(view.data.wishlists.map((w) => w.title)).not.toContain('Host private');
+    });
+
+    // Knowing who is asking may only ever *widen* what the link allows. These
+    // pin the other side of that: the slug still opens for nobody else.
+    it('an event-only list opens by slug for the event and nobody else', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const outsider = await newUser();
+      const wishlistId = await privateList(host, 'For my guests');
+      const event = await createEvent(host, {
+        visibility: 'public',
+        wishlistIds: [wishlistId],
+      });
+      await publish(host, event.id);
+      // Linking set eventId, which is what EVENT_ONLY needs to mean anything.
+      await request(app.getHttpServer())
+        .patch(`${V1}/wishlists/${wishlistId}`)
+        .set(auth(host.token))
+        .send({ visibility: 'event_only' })
+        .expect(200);
+      const full = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<EventView & { share?: { slug: string } }>;
+      const guestToken = await attend(guest, full.data.share!.slug);
+
+      const view = (await inviteView(guestToken, guest).expect(200)).body as Envelope<{
+        wishlists: { slug: string | null; title: string; locked: boolean }[];
+      }>;
+      const row = view.data.wishlists.find((w) => w.title === 'For my guests');
+      expect(row).toBeDefined();
+      expect(row!.locked).toBe(false);
+      const slug = row!.slug!;
+
+      // An accepted guest opens it by the slug the invitation handed them. The
+      // route resolves on the link *and* the caller, which is the fix: on the
+      // link alone it refused EVENT_ONLY for everybody.
+      await request(app.getHttpServer())
+        .get(`${V1}/public/wishlists/${slug}`)
+        .set(auth(guest.token))
+        .expect(200);
+
+      // Signed in, holding the slug, but not going: still nothing.
+      await request(app.getHttpServer())
+        .get(`${V1}/public/wishlists/${slug}`)
+        .set(auth(outsider.token))
+        .expect(404);
+
+      // And a plain link-holder with no account at all.
+      await request(app.getHttpServer()).get(`${V1}/public/wishlists/${slug}`).expect(404);
+    });
+
+    // The other half of the same decision. Knowing the caller must not have
+    // replaced the link: an unlisted list is openable by whoever holds the
+    // slug, account or no account, and nothing else in the suite pinned that
+    // -- the public slug route had no HTTP test at all.
+    it('an unlisted list still opens for whoever holds the link', async () => {
+      const owner = await newUser();
+      const holder = await newUser();
+      const wl = (
+        await request(app.getHttpServer())
+          .post(`${V1}/wishlists`)
+          .set(auth(owner.token))
+          .send({ title: 'Unlisted', visibility: 'invite_only' })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${wl.data.id}`)
+          .set(auth(owner.token))
+          .expect(200)
+      ).body as Envelope<{ share?: { slug: string } }>;
+      const slug = mine.data.share!.slug;
+
+      await request(app.getHttpServer())
+        .get(`${V1}/public/wishlists/${slug}`)
+        .set(auth(holder.token))
+        .expect(200);
+      await request(app.getHttpServer()).get(`${V1}/public/wishlists/${slug}`).expect(200);
+    });
+
+    it('a private list is still never openable by link', async () => {
+      const owner = await newUser();
+      const viewer = await newUser();
+      const wishlistId = await privateList(owner, 'Just mine');
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${wishlistId}`)
+          .set(auth(owner.token))
+          .expect(200)
+      ).body as Envelope<{ share?: { slug: string } }>;
+      const slug = mine.data.share!.slug;
+
+      // The owner's own link still opens for the owner - resolving on the
+      // caller must not have broken that either.
+      await request(app.getHttpServer())
+        .get(`${V1}/public/wishlists/${slug}`)
+        .set(auth(owner.token))
+        .expect(200);
+
+      // Everyone else, signed in or not.
+      await request(app.getHttpServer())
+        .get(`${V1}/public/wishlists/${slug}`)
+        .set(auth(viewer.token))
+        .expect(404);
+      await request(app.getHttpServer()).get(`${V1}/public/wishlists/${slug}`).expect(404);
+    });
+
+    it('only accepted guests may offer a list', async () => {
+      const host = await newUser();
+      const stranger = await newUser();
+      const event = await publicEvent(host);
+      const wishlistId = await privateList(stranger);
+
+      // Not invited at all: a 404, not a 403 - someone not going has no
+      // business learning the event exists.
+      await offer(stranger, event.id, wishlistId).expect(404);
+
+      // Joined but still undecided is not enough either.
+      await request(app.getHttpServer())
+        .post(`${V1}/events/by-slug/${event.slug}/join`)
+        .set(auth(stranger.token))
+        .expect(201);
+      await offer(stranger, event.id, wishlistId).expect(404);
+    });
+
+    it('refuses a wishlist the offerer does not own', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const owner = await newUser();
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const notMine = await privateList(owner);
+
+      await offer(guest, event.id, notMine).expect(404);
+    });
+
+    it('a wishlist belongs to one event at a time', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const first = await publicEvent(host);
+      const second = await publicEvent(host);
+      await attend(guest, first.slug);
+      await attend(guest, second.slug);
+      const wishlistId = await privateList(guest);
+
+      await offer(guest, first.id, wishlistId).expect(200);
+      // Only offered, not yet approved - but it is already spoken for.
+      await offer(guest, second.id, wishlistId).expect(409);
+    });
+
+    it('turning it down leaves the list alone', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const other = await newUser();
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const otherToken = await attend(other, event.slug);
+      const wishlistId = await privateList(guest);
+      const offered = (await offer(guest, event.id, wishlistId).expect(200)).body as Envelope<{
+        id: string;
+      }>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/reject`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const view = (await inviteView(otherToken, other).expect(200)).body as Envelope<{
+        wishlists: { title: string }[];
+      }>;
+      expect(view.data.wishlists).toHaveLength(0);
+
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${wishlistId}`)
+          .set(auth(guest.token))
+          .expect(200)
+      ).body as Envelope<{ visibility: string }>;
+      expect(mine.data.visibility).toBe('private');
+    });
+
+    /**
+     * Approves a fresh offer and hands back what is needed to undo it.
+     *
+     * A helper rather than a loop inside one test: six signups in a single
+     * case trips the 5/hr signup throttle, and the failure looks like a
+     * broken join rather than the rate limit it is.
+     */
+    const approved = async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const other = await newUser();
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const otherToken = await attend(other, event.slug);
+      const wishlistId = await privateList(guest);
+      const offered = (await offer(guest, event.id, wishlistId).expect(200)).body as Envelope<{
+        id: string;
+      }>;
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/approve`)
+        .set(auth(host.token))
+        .expect(200);
+      return { host, guest, other, event, otherToken, wishlistId, requestId: offered.data.id };
+    };
+
+    /** Gone from the invitation, and private again. */
+    const expectTakenDown = async (ctxt: Awaited<ReturnType<typeof approved>>) => {
+      const view = (await inviteView(ctxt.otherToken, ctxt.other).expect(200)).body as Envelope<{
+        wishlists: { title: string }[];
+      }>;
+      expect(view.data.wishlists).toHaveLength(0);
+
+      // Approval never touched the visibility, and neither did removal.
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/wishlists/${ctxt.wishlistId}`)
+          .set(auth(ctxt.guest.token))
+          .expect(200)
+      ).body as Envelope<{ visibility: string }>;
+      expect(mine.data.visibility).toBe('private');
+    };
+
+    it('the host can take it back down, and the list goes back to private', async () => {
+      const ctxt = await approved();
+      await request(app.getHttpServer())
+        .delete(`${V1}/events/${ctxt.event.id}/wishlist-requests/${ctxt.requestId}`)
+        .set(auth(ctxt.host.token))
+        .expect(200);
+      await expectTakenDown(ctxt);
+    });
+
+    it('the owner can withdraw it, and the list goes back to private', async () => {
+      const ctxt = await approved();
+      await request(app.getHttpServer())
+        .delete(`${V1}/events/${ctxt.event.id}/wishlist-requests/${ctxt.requestId}`)
+        .set(auth(ctxt.guest.token))
+        .expect(200);
+      await expectTakenDown(ctxt);
+    });
+
+    // Taking it down has to *unlink* it, not just hide it. A list left pointing
+    // at the event is invisible either way, so nothing above can tell the
+    // difference -- but it stays spoken for and can never be offered again.
+    it('a withdrawn list is free to be offered somewhere else', async () => {
+      const ctxt = await approved();
+      await request(app.getHttpServer())
+        .delete(`${V1}/events/${ctxt.event.id}/wishlist-requests/${ctxt.requestId}`)
+        .set(auth(ctxt.guest.token))
+        .expect(200);
+
+      const second = await publicEvent(ctxt.host);
+      await attend(ctxt.guest, second.slug);
+      await offer(ctxt.guest, second.id, ctxt.wishlistId).expect(200);
+    });
+
+    it('answering the same request twice is refused', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const wishlistId = await privateList(guest);
+      const offered = (await offer(guest, event.id, wishlistId).expect(200)).body as Envelope<{
+        id: string;
+      }>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/reject`)
+        .set(auth(host.token))
+        .expect(200);
+      // Approving a list already turned down would relink it behind the host.
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/approve`)
+        .set(auth(host.token))
+        .expect(409);
+    });
+
+    it('an outsider cannot answer or remove', async () => {
+      const host = await newUser();
+      const guest = await newUser();
+      const nosy = await newUser();
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const wishlistId = await privateList(guest);
+      const offered = (await offer(guest, event.id, wishlistId).expect(200)).body as Envelope<{
+        id: string;
+      }>;
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/approve`)
+        .set(auth(nosy.token))
+        .expect(404);
+      await request(app.getHttpServer())
+        .delete(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}`)
+        .set(auth(nosy.token))
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`${V1}/events/${event.id}/wishlist-requests`)
+        .set(auth(nosy.token))
+        .expect(404);
+    });
+
+    it('the host sees the queue and the guest sees their own offers', async () => {
+      const host = await newUser('Rohan');
+      const guest = await newUser('Siya');
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const wishlistId = await privateList(guest);
+      await offer(guest, event.id, wishlistId).expect(200);
+
+      const queue = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}/wishlist-requests`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ wishlistTitle: string; requestedByName: string }[]>;
+      expect(queue.data).toHaveLength(1);
+      expect(queue.data[0].wishlistTitle).toBe('My birthday list');
+      expect(queue.data[0].requestedByName).toBe('Siya');
+
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/event-wishlist-requests/mine`)
+          .set(auth(guest.token))
+          .expect(200)
+      ).body as Envelope<{ status: string }[]>;
+      expect(mine.data).toHaveLength(1);
+      expect(mine.data[0].status).toBe('pending');
     });
   });
 });

@@ -96,6 +96,7 @@ export class EventsService {
       venue: dto.venue ?? null,
       personName: dto.personName ?? null,
       relation: dto.relation ?? null,
+      forSelf: dto.forSelf ?? false,
       visibility: dto.visibility ?? EventVisibility.PRIVATE,
       coverUrl: dto.coverMediaId ? await this.resolveCover(userId, dto.coverMediaId) : null,
       coverMediaId: dto.coverMediaId ? new Types.ObjectId(dto.coverMediaId) : null,
@@ -154,6 +155,7 @@ export class EventsService {
     if (dto.venue !== undefined) event.venue = dto.venue;
     if (dto.personName !== undefined) event.personName = dto.personName;
     if (dto.relation !== undefined) event.relation = dto.relation;
+    if (dto.forSelf !== undefined) event.forSelf = dto.forSelf;
     if (dto.timezone !== undefined) event.timezone = dto.timezone;
     if (dto.visibility !== undefined) event.visibility = dto.visibility;
 

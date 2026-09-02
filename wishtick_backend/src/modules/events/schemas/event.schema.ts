@@ -78,6 +78,18 @@ export class Event {
   @Prop({ type: String, default: null, trim: true, maxlength: 60 })
   relation!: string | null;
 
+  /**
+   * The host is the person the event is for — their own birthday, wedding,
+   * housewarming.
+   *
+   * A flag rather than "personName and relation are both null", because a
+   * draft that has not been filled in yet looks exactly the same, and the
+   * invitation has to know the difference: a card for someone else carries a
+   * "Hosted by" line, and a card for the host does not.
+   */
+  @Prop({ type: Boolean, default: false })
+  forSelf!: boolean;
+
   @Prop({ type: String, default: null })
   coverUrl!: string | null;
 

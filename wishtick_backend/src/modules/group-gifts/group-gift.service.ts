@@ -49,6 +49,7 @@ import type {
 } from './dto/group-gift.dto';
 import {
   toGroupGiftView,
+  type ItemGroupGiftView,
   toPublicGroupGiftView,
   type GroupGiftShareView,
   type GroupGiftView,
@@ -59,6 +60,7 @@ import {
   ContributionMode,
   INACTIVE_GROUP_GIFT_STATUSES,
   ContributionStatus,
+  CLOSED_GROUP_GIFT_STATUSES,
   GROUP_GIFT_TRANSITIONS,
   GroupGiftStatus,
   GroupGiftVisibility,
@@ -120,6 +122,41 @@ export class GroupGiftService {
    * the holder tracks the item. This is why a group gift and a single
    * reservation can never both hold one item.
    */
+  /**
+   * The group gift already collecting for an item, if there is one.
+   *
+   * Authorised exactly like starting one: anyone who could open a group gift on
+   * this item may see the one that is already there. The recipient is refused
+   * by the same rule that stops them gifting to themselves, which keeps the
+   * surprise.
+   *
+   * Closed groups do not count -- a cancelled or refunded one leaves the item
+   * free again, and reporting it would lock a still-giftable item forever.
+   */
+  async findForItem(itemId: string, userId: string): Promise<ItemGroupGiftView | null> {
+    await this.gifting.loadGiftableItem(itemId, userId);
+    const gift = await this.groupGiftModel
+      .findOne({
+        itemId: new Types.ObjectId(itemId),
+        status: { $nin: CLOSED_GROUP_GIFT_STATUSES },
+      })
+      .exec();
+    if (!gift) return null;
+    return {
+      id: gift._id.toString(),
+      title: gift.title,
+      status: gift.status,
+      currency: gift.currency,
+      targetAmountMinor: gift.targetAmountMinor,
+      collectedAmountMinor: gift.collectedAmountMinor,
+      percentFunded:
+        gift.targetAmountMinor <= 0
+          ? 0
+          : Math.min(100, Math.round((gift.collectedAmountMinor / gift.targetAmountMinor) * 100)),
+      contributorCount: gift.contributorCount,
+    };
+  }
+
   async create(itemId: string, userId: string, dto: CreateGroupGiftDto): Promise<GroupGiftView> {
     const item = await this.gifting.loadGiftableItem(itemId, userId);
 

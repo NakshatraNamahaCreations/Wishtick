@@ -97,15 +97,26 @@ class InviteEvent {
 /// has to decide what to hide.
 @immutable
 class InviteWishlistLink {
-  const InviteWishlistLink({required this.slug, required this.title});
+  const InviteWishlistLink({
+    required this.slug,
+    required this.title,
+    this.locked = false,
+  });
 
-  final String slug;
+  /// Null when [locked]: there is nothing a locked row should let anyone try.
+  final String? slug;
   final String title;
+
+  /// A list the host put on the event that this viewer may not open — usually
+  /// one a guest made *for* the host and kept private. Shown so guests know
+  /// it exists, and only that.
+  final bool locked;
 
   factory InviteWishlistLink.fromJson(Map<String, dynamic> json) =>
       InviteWishlistLink(
-        slug: json['slug'] as String,
+        slug: json['slug'] as String?,
         title: json['title'] as String,
+        locked: json['locked'] as bool? ?? false,
       );
 }
 
@@ -129,6 +140,7 @@ class InviteGroupGift {
 @immutable
 class PublicInvite {
   const PublicInvite({
+    required this.eventId,
     required this.event,
     required this.hostFirstName,
     required this.inviteeName,
@@ -138,6 +150,9 @@ class PublicInvite {
     required this.groupGifts,
   });
 
+  /// The event behind the token. Needed to offer a wishlist to it; the rest
+  /// of this view stays token-scoped.
+  final String eventId;
   final InviteEvent event;
   final String? hostFirstName;
   final String? inviteeName;
@@ -155,6 +170,7 @@ class PublicInvite {
     final invitee = json['invitee'] as Map<String, dynamic>? ?? const {};
     final host = json['host'] as Map<String, dynamic>? ?? const {};
     return PublicInvite(
+      eventId: json['eventId'] as String? ?? '',
       event: InviteEvent.fromJson(json['event'] as Map<String, dynamic>),
       hostFirstName: host['firstName'] as String?,
       inviteeName: invitee['name'] as String?,

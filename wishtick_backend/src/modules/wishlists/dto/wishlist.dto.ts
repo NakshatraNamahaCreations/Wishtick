@@ -63,6 +63,15 @@ export class CreateWishlistDto {
   @MaxLength(140)
   @Transform(trim)
   occasionLabel?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'The WishMate this list is for, when one was picked while naming it. Must be a ' +
+      'current WishMate; null clears it.',
+  })
+  @IsOptional()
+  @IsMongoId()
+  forUserId?: string | null;
 }
 
 export class UpdateWishlistDto {
@@ -101,6 +110,15 @@ export class UpdateWishlistDto {
   @MaxLength(140)
   @Transform(trim)
   occasionLabel?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'The WishMate this list is for, when one was picked while naming it. Must be a ' +
+      'current WishMate; null clears it.',
+  })
+  @IsOptional()
+  @IsMongoId()
+  forUserId?: string | null;
 }
 
 export class ShareWishlistDto {

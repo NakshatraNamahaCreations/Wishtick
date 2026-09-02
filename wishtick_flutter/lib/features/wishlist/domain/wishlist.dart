@@ -123,6 +123,7 @@ class Wishlist {
     required this.occasionLabel,
     required this.chatEnabled,
     required this.eventId,
+    this.forUserId,
     required this.itemCount,
     required this.fulfilledCount,
     required this.archivedAt,
@@ -144,6 +145,10 @@ class Wishlist {
 
   final bool chatEnabled;
   final String? eventId;
+
+  /// The WishMate this list is for, when one was picked while naming it.
+  /// A label the owner chose; the person named gets nothing from it.
+  final String? forUserId;
   final int itemCount;
   final int fulfilledCount;
   final DateTime? archivedAt;
@@ -167,6 +172,7 @@ class Wishlist {
       occasionLabel: json['occasionLabel'] as String?,
       chatEnabled: json['chatEnabled'] as bool? ?? true,
       eventId: json['eventId'] as String?,
+      forUserId: json['forUserId'] as String?,
       itemCount: stats['itemCount'] as int? ?? 0,
       fulfilledCount: stats['fulfilledCount'] as int? ?? 0,
       archivedAt: json['archivedAt'] == null

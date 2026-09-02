@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -116,6 +117,16 @@ export class CreateEventDto {
   @MaxLength(60)
   @Transform(trim)
   relation?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'The host is the one being celebrated — their own birthday or wedding. Distinct from ' +
+      'leaving personName/relation empty, which is what an unfinished draft looks like.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  forSelf?: boolean;
 }
 
 export class UpdateEventDto {
@@ -202,6 +213,16 @@ export class UpdateEventDto {
   @MaxLength(60)
   @Transform(trim)
   relation?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'The host is the one being celebrated — their own birthday or wedding. Distinct from ' +
+      'leaving personName/relation empty, which is what an unfinished draft looks like.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  forSelf?: boolean;
 }
 
 /**
@@ -296,4 +317,11 @@ export class BulkDeleteEventsDto {
   @ArrayMaxSize(50)
   @IsMongoId({ each: true })
   ids!: string[];
+}
+
+/** A guest offering one of their own wishlists to an event. */
+export class SubmitEventWishlistDto {
+  @ApiProperty({ description: 'A wishlist you own that is not on an event yet' })
+  @IsMongoId()
+  wishlistId!: string;
 }

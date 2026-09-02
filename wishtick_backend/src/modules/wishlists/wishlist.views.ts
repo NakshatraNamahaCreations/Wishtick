@@ -50,6 +50,7 @@ export interface WishlistView {
   coverUrl: string | null;
   chatEnabled: boolean;
   eventId: string | null;
+  forUserId: string | null;
   stats: { itemCount: number; fulfilledCount: number };
   archivedAt: Date | null;
   createdAt: Date;
@@ -157,6 +158,7 @@ export const toWishlistView = (
     coverUrl: wishlist.coverUrl,
     chatEnabled: wishlist.chatEnabled,
     eventId: wishlist.eventId?.toString() ?? null,
+    forUserId: wishlist.forUserId?.toString() ?? null,
     stats: {
       itemCount: wishlist.stats?.itemCount ?? 0,
       fulfilledCount: wishlist.stats?.fulfilledCount ?? 0,

@@ -77,6 +77,7 @@ class CreateMemoryState {
     this.coverMediaId,
     this.coverLocalPath,
     this.unlockDate,
+    this.unlockDateChosen = false,
     this.unlockTime,
     this.created,
     this.error,
@@ -106,6 +107,13 @@ class CreateMemoryState {
 
   // Step 2 (`2198:73`)
   final DateTime? unlockDate;
+
+  /// Whether [unlockDate] came from the host rather than from the occasion.
+  ///
+  /// Kept so returning to step 2 after changing the occasion re-derives the
+  /// suggestion, while a date the host typed or picked is never overwritten.
+  final bool unlockDateChosen;
+
   final MemoryTimeOfDay? unlockTime;
 
   final MemoryCapsule? created;
@@ -158,6 +166,26 @@ class CreateMemoryState {
     return DateTime(year, occasionMonth, occasionDay);
   }
 
+  /// What step 2's Unlock Date starts on, derived from the occasion picked in
+  /// step 1.
+  ///
+  /// A capsule almost always opens on the day it is about, so asking for that
+  /// date twice is asking the same question twice. This year, as the occasion
+  /// wheel implies — except when that day has already gone, since the field
+  /// refuses anything not in the future and prefilling a rejected date would
+  /// be worse than leaving it blank. Today counts as gone: the field compares
+  /// against `DateTime.now()` and a date is midnight, so today is already past.
+  DateTime suggestedUnlockDate({DateTime? now}) {
+    final today = now ?? DateTime.now();
+    final thisYear = DateTime(today.year, occasionMonth, occasionDay);
+    final isAhead = thisYear.isAfter(
+      DateTime(today.year, today.month, today.day),
+    );
+    return isAhead
+        ? thisYear
+        : DateTime(today.year + 1, occasionMonth, occasionDay);
+  }
+
   /// The unlock instant, in the device's zone.
   ///
   /// Composed here rather than in the repository so the screen can show what it
@@ -183,6 +211,7 @@ class CreateMemoryState {
     String? coverMediaId,
     String? coverLocalPath,
     DateTime? unlockDate,
+    bool? unlockDateChosen,
     MemoryTimeOfDay? unlockTime,
     MemoryCapsule? created,
     String? error,
@@ -204,6 +233,7 @@ class CreateMemoryState {
     coverMediaId: coverMediaId ?? this.coverMediaId,
     coverLocalPath: coverLocalPath ?? this.coverLocalPath,
     unlockDate: clearUnlockDate ? null : (unlockDate ?? this.unlockDate),
+    unlockDateChosen: unlockDateChosen ?? this.unlockDateChosen,
     unlockTime: unlockTime ?? this.unlockTime,
     created: created ?? this.created,
     error: clearError ? null : (error ?? this.error),
@@ -250,12 +280,27 @@ class CreateMemoryController extends Notifier<CreateMemoryState> {
       state = state.copyWith(coverMediaId: mediaId, coverLocalPath: localPath);
 
   void setUnlockDate(DateTime value) =>
-      state = state.copyWith(unlockDate: value);
+      state = state.copyWith(unlockDate: value, unlockDateChosen: true);
+
+  /// Starts step 2 on the occasion's own date.
+  ///
+  /// Called on the way out of step 1, not on the way into step 2: the date
+  /// field reads its initial value once, when it is built, so a suggestion
+  /// that lands afterwards would sit in the state and never reach the box.
+  ///
+  /// Never overwrites a date the host chose — but a *suggestion* is refreshed,
+  /// so going back, changing the occasion and returning follows the change
+  /// rather than leaving the first guess behind.
+  void suggestUnlockDate() {
+    if (state.unlockDateChosen) return;
+    state = state.copyWith(unlockDate: state.suggestedUnlockDate());
+  }
 
   /// Backs out of a committed date — see
   /// `ProfileFormController.clearDateOfBirth` for why the manual-entry field
   /// needs this.
-  void clearUnlockDate() => state = state.copyWith(clearUnlockDate: true);
+  void clearUnlockDate() =>
+      state = state.copyWith(clearUnlockDate: true, unlockDateChosen: true);
 
   void setUnlockTime(MemoryTimeOfDay value) =>
       state = state.copyWith(unlockTime: value);

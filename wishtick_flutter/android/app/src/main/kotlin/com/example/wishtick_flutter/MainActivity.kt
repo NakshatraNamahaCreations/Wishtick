@@ -1,4 +1,4 @@
-package com.example.wishtick_flutter
+package com.wishtick.wishtick
 
 import io.flutter.embedding.android.FlutterActivity
 

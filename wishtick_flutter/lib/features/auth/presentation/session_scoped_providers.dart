@@ -7,7 +7,9 @@ import '../../chat/presentation/direct_chat_screen.dart';
 import '../../discover/presentation/discover_controller.dart';
 import '../../events/presentation/create_event_controller.dart';
 import '../../events/presentation/invite_controller.dart';
+import '../../events/presentation/widgets/event_wishlist_requests.dart';
 import '../../gifting/presentation/gift_item_controller.dart';
+import '../../gifting/presentation/gift_item_screen.dart';
 import '../../gifting/presentation/gift_list_providers.dart';
 import '../../gifting/presentation/order_controller.dart';
 import '../../group_gift/presentation/create_group_gift_controller.dart';
@@ -29,6 +31,7 @@ import '../../wishlist/presentation/item_detail_controller.dart';
 import '../../wishlist/presentation/manage_access_controller.dart';
 import '../../wishlist/presentation/occasion_labels_provider.dart';
 import '../../wishlist/presentation/wishlist_detail_controller.dart';
+import '../../wishlist/presentation/wishlist_suggestions.dart';
 import '../../wishlist/presentation/wishlists_controller.dart';
 import '../../wishmates/presentation/wishmates_providers.dart';
 
@@ -94,9 +97,13 @@ void invalidateSessionScopedProviders(Ref ref) {
   ref.invalidate(groupGiftProvider);
   ref.invalidate(groupGiftInvitesProvider);
   ref.invalidate(groupGiftInviteDetailProvider);
+  ref.invalidate(itemGroupGiftProvider);
+  ref.invalidate(importantDatesProvider);
   ref.invalidate(settlementProvider);
 
   // Events & invitations
+  ref.invalidate(eventWishlistRequestsProvider);
+  ref.invalidate(myEventWishlistRequestsProvider);
   ref.invalidate(createEventProvider);
   ref.invalidate(inviteProvider);
 

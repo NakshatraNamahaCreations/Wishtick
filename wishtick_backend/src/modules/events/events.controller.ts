@@ -30,8 +30,10 @@ import {
   ExportGuestListQueryDto,
   ListTemplatesQueryDto,
   PreviewInviteDto,
+  SubmitEventWishlistDto,
   UpdateEventDto,
 } from './dto/event.dto';
+import { EventWishlistsService, type EventWishlistSubmissionView } from './event-wishlists.service';
 import { EventsService } from './events.service';
 import type { EventView, InvitedEventView, InviteView } from './event.views';
 import { InvitePreviewService, type InvitePreview } from './invite-preview.service';
@@ -50,6 +52,7 @@ const PREVIEW_THROTTLE = { default: { limit: 20, ttl: 60_000 } };
 export class EventsController {
   constructor(
     private readonly events: EventsService,
+    private readonly eventWishlists: EventWishlistsService,
     private readonly invites: InvitesService,
     private readonly previews: InvitePreviewService,
     private readonly notifications: InviteNotificationsService,
@@ -313,5 +316,90 @@ export class EventsController {
   ): Promise<{ url: string }> {
     const token = await this.invites.getTokenForHost(id, inviteId, userId);
     return { url: this.notifications.inviteUrl(token) };
+  }
+
+  // ── Guests offering their own wishlists ───────────────────────────────
+
+  @Post('events/:id/wishlist-requests')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Offer one of your wishlists to an event you are going to',
+    description:
+      'Accepted invitees only. The host has to approve it before it appears on the ' +
+      'invitation, and a wishlist may belong to one event at a time.',
+  })
+  @ApiResponseDoc({ status: 404, description: 'EVENT_NOT_FOUND / WISHLIST_NOT_FOUND' })
+  @ApiResponseDoc({ status: 409, description: 'Already offered, or already on an event' })
+  submitWishlist(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: SubmitEventWishlistDto,
+  ): Promise<EventWishlistSubmissionView> {
+    return this.eventWishlists.submit(id, userId, dto.wishlistId);
+  }
+
+  @Get('events/:id/wishlist-requests')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Wishlists guests have offered to this event (host only)' })
+  wishlistRequests(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ): Promise<EventWishlistSubmissionView[]> {
+    return this.eventWishlists.listForHost(id, userId);
+  }
+
+  @Get('event-wishlist-requests/mine')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Wishlists you have offered, and whether they were taken' })
+  myWishlistRequests(@CurrentUser('id') userId: string): Promise<EventWishlistSubmissionView[]> {
+    return this.eventWishlists.listMine(userId);
+  }
+
+  @Post('events/:id/wishlist-requests/:requestId/approve')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Show a guest’s wishlist on this event',
+    description:
+      'Links the list to the event and, if it was private, lifts it to EVENT_ONLY so the ' +
+      'event’s accepted guests can actually open it.',
+  })
+  approveWishlist(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Param('requestId') requestId: string,
+  ): Promise<EventWishlistSubmissionView> {
+    return this.eventWishlists.respond(id, requestId, userId, true);
+  }
+
+  @Post('events/:id/wishlist-requests/:requestId/reject')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Turn down a guest’s wishlist' })
+  rejectWishlist(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Param('requestId') requestId: string,
+  ): Promise<EventWishlistSubmissionView> {
+    return this.eventWishlists.respond(id, requestId, userId, false);
+  }
+
+  @Delete('events/:id/wishlist-requests/:requestId')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Take a wishlist back off the event',
+    description:
+      'Either side may: the host curates the event, and the owner must not be trapped into ' +
+      'showing a list they have changed their mind about. The list’s visibility is put back ' +
+      'where approval found it.',
+  })
+  removeWishlist(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Param('requestId') requestId: string,
+  ): Promise<EventWishlistSubmissionView> {
+    return this.eventWishlists.remove(id, requestId, userId);
   }
 }

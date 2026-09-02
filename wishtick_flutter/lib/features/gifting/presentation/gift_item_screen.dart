@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/format/currency.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
+import '../../group_gift/data/group_gift_repository.dart';
+import '../../group_gift/domain/group_gift.dart';
 import '../../wishlist/presentation/occasion_labels_provider.dart';
 import '../../wishlist/presentation/widgets/product_detail_body.dart';
 import '../domain/gift.dart';
@@ -180,6 +183,13 @@ class _GiftItemScreenState extends ConsumerState<GiftItemScreen> {
                   ),
                   _Actions(
                     state: state,
+                    // Null while it loads, which is the same as "none" here:
+                    // the buttons it replaces are refused by the server
+                    // anyway, so a moment of the old ones is no worse than a
+                    // spinner over the whole bar.
+                    groupGift: ref
+                        .watch(itemGroupGiftProvider(widget.itemId))
+                        .value,
                     onReserve: () => unawaited(_reserve()),
                     onRelease: () => unawaited(_release()),
                     onGiftNow: () => unawaited(_giftNow()),
@@ -195,11 +205,24 @@ class _GiftItemScreenState extends ConsumerState<GiftItemScreen> {
   }
 }
 
+/// The group gift already collecting for this item, if any.
+///
+/// Its own call rather than a field on the item: the item view is shared with
+/// the owner and with link holders, and whether a group is collecting is
+/// exactly the thing the recipient must not be told.
+final itemGroupGiftProvider = FutureProvider.family<ItemGroupGift?, String>((
+  ref,
+  itemId,
+) {
+  return ref.watch(groupGiftRepositoryProvider).groupGiftForItem(itemId);
+});
+
 /// The three CTAs from the mock, in its order: Reserve / Gift Now on one row,
 /// Start a Group Gift beneath.
 class _Actions extends StatelessWidget {
   const _Actions({
     required this.state,
+    required this.groupGift,
     required this.onReserve,
     required this.onRelease,
     required this.onGiftNow,
@@ -208,6 +231,10 @@ class _Actions extends StatelessWidget {
   });
 
   final GiftItemState state;
+
+  /// The group already collecting for this item. When there is one, every CTA
+  /// here is refused by the server, so the only honest offer is a way in.
+  final ItemGroupGift? groupGift;
   final VoidCallback onReserve;
   final VoidCallback onRelease;
   final VoidCallback onGiftNow;
@@ -253,6 +280,11 @@ class _Actions extends StatelessWidget {
           ),
         ),
       );
+    }
+
+    final group = groupGift;
+    if (group != null) {
+      return _GroupGiftRunning(group: group);
     }
 
     if (state.claimedByOther) {
@@ -434,6 +466,83 @@ class _ClaimedBanner extends StatelessWidget {
                 color: colors.textSecondary,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "A group gift is already running for this" — the item screen's only offer
+/// once an item is claimed by a group.
+///
+/// Replaces Reserve / Gift Now / Start a Group Gift outright rather than
+/// disabling them: all three are refused with a 409, and a row of dead buttons
+/// tells the reader nothing about the thing they could actually do.
+class _GroupGiftRunning extends StatelessWidget {
+  const _GroupGiftRunning({required this.group});
+
+  final ItemGroupGift group;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final contributors = group.contributorLine;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: colors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'A group gift is already running',
+                  style: context.text.bodyLarge?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '${formatInrMinor(group.collectedAmountMinor)} of '
+                  '${formatInrMinor(group.targetAmountMinor)} collected'
+                  '${contributors == null ? '' : ' · $contributors'}',
+                  style: context.text.bodySmall?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  child: LinearProgressIndicator(
+                    value: group.percentFunded / 100,
+                    minHeight: 6,
+                    backgroundColor: colors.border,
+                    valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ElevatedButton(
+            onPressed: () =>
+                unawaited(context.push<void>(AppRoutes.groupGift(group.id))),
+            child: const Text('View group gift'),
           ),
         ],
       ),

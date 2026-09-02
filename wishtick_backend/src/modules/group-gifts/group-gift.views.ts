@@ -204,6 +204,22 @@ const toItemViews = (
   ];
 };
 
+/**
+ * Just enough to say "a group is already collecting for this", on the item
+ * screen that would otherwise offer to reserve it, buy it, or start a second
+ * one -- all three of which the server refuses with a 409.
+ */
+export interface ItemGroupGiftView {
+  id: string;
+  title: string;
+  status: string;
+  currency: string;
+  targetAmountMinor: number;
+  collectedAmountMinor: number;
+  percentFunded: number;
+  contributorCount: number;
+}
+
 export function toGroupGiftView(input: {
   gift: GroupGiftDocument;
   names: Map<string, string>;

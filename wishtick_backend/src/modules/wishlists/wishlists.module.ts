@@ -5,6 +5,7 @@ import { ProfileModule } from 'src/modules/profile/profile.module';
 import { TaxonomyModule } from 'src/modules/taxonomy/taxonomy.module';
 import { UsersModule } from 'src/modules/users/users.module';
 import { EventParticipationModule } from 'src/modules/events/event-participation.module';
+import { WishmatesModule } from 'src/modules/wishmates/wishmates.module';
 import { AccessPolicyService } from './access/access-policy.service';
 import { ItemsService } from './items.service';
 import { ParticipantsService } from './participants.service';
@@ -36,6 +37,10 @@ import { WishlistsService } from './wishlists.service';
     // than the whole EventsModule, so wishlists and events do not import each
     // other — see EventParticipationModule.
     EventParticipationModule,
+    // One question only: is the person a list is *for* a WishMate of its
+    // owner? WishmatesModule reaches events through the participation port and
+    // never wishlists, so this stays one-way.
+    WishmatesModule,
   ],
   controllers: [WishlistsController, PublicWishlistsController],
   providers: [

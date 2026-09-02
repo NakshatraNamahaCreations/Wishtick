@@ -71,6 +71,7 @@ export class PublicInvitesService {
     ]);
 
     return {
+      eventId: event._id.toString(),
       event: {
         title: event.title,
         type: event.type,
@@ -130,25 +131,45 @@ export class PublicInvitesService {
    * only once they have RSVP'd yes/maybe *and* are signed in as the invited
    * user; a PRIVATE list the host attached never appears at all. Attaching a
    * wishlist to an event is not a decision to publish it.
+   *
+   * Two ways in, unioned: the host's own row (`Event.wishlistIds`), and lists a
+   * guest offered and the host approved, which are linked the other way round —
+   * by `eventId` on the list itself. Keeping them separate leaves the host's
+   * curated row host-only, so approving a guest's list cannot reorder or
+   * displace it.
    */
   private async visibleWishlists(
     event: EventDocument,
     viewerUserId?: string,
-  ): Promise<{ slug: string; title: string }[]> {
-    if (event.wishlistIds.length === 0) return [];
-
+  ): Promise<{ slug: string | null; title: string; locked: boolean }[]> {
     const lists = await this.wishlists
-      .find({ _id: { $in: event.wishlistIds }, archivedAt: null })
+      .find({
+        $or: [{ _id: { $in: event.wishlistIds } }, { eventId: event._id }],
+        archivedAt: null,
+      })
       .exec();
+    if (lists.length === 0) return [];
 
-    const visible: { slug: string; title: string }[] = [];
+    const hostOwned = new Set(event.wishlistIds.map((id) => id.toString()));
+    const visible: { slug: string | null; title: string; locked: boolean }[] = [];
     for (const wishlist of lists) {
       // The invite token is not a wishlist share slug, so it is deliberately
       // NOT passed as `share`: an event invite must not open a list the policy
       // would otherwise refuse. The only thing it establishes is who the caller
       // is, and event membership does the rest.
       const decision = await this.access.resolve(wishlist, { userId: viewerUserId });
-      if (decision.canView) visible.push({ slug: wishlist.share.slug, title: wishlist.title });
+      if (decision.canView) {
+        visible.push({ slug: wishlist.share.slug, title: wishlist.title, locked: false });
+        continue;
+      }
+      // The host's own private list stays off the invitation entirely —
+      // attaching it was not a decision to publish it. A guest's approved list
+      // is different: the host said yes to it being *on the event*, so guests
+      // are told it exists, and only that. No slug: there is nothing a locked
+      // row should let anyone try.
+      if (!hostOwned.has(wishlist._id.toString())) {
+        visible.push({ slug: null, title: wishlist.title, locked: true });
+      }
     }
 
     return visible;

@@ -26,6 +26,8 @@ export interface EventView {
   /** Who the event is for, and how the host knows them (`257:733`). */
   personName: string | null;
   relation: string | null;
+  /** The host is the person being celebrated. See Event.forSelf. */
+  forSelf: boolean;
   coverUrl: string | null;
   /**
    * The host's own invitation artwork (`2248:70`). When set it replaces the
@@ -83,6 +85,14 @@ export interface InviteView {
 
 /** The unauthenticated view an invitee gets from their token. */
 export interface PublicInviteView {
+  /**
+   * The event behind the token.
+   *
+   * The rest of this view is deliberately token-scoped, but a guest offering
+   * their own wishlist has to name the event they are offering it to, and the
+   * id is not a secret from someone already holding an invitation to it.
+   */
+  eventId: string;
   event: {
     title: string;
     type: EventType;
@@ -101,12 +111,16 @@ export interface PublicInviteView {
   host: { firstName: string | null };
   invitee: { name: string | null; rsvp: RsvpResponse; plusOnes: number };
   /**
-   * Slugs of the event's wishlists the invitee may open.
+   * The event's wishlists, each resolved through AccessPolicyService for this
+   * viewer.
    *
-   * Resolved through AccessPolicyService per wishlist, so an EVENT_ONLY list
-   * appears only once they have RSVP'd, and a private one never does.
+   * The host's own lists appear only when the viewer may open them — an
+   * EVENT_ONLY one once they have RSVP'd, a private one never. A list a guest
+   * offered and the host approved appears regardless, [locked] when the viewer
+   * may not open it: guests should know a wishlist exists for the occasion
+   * even when its owner kept it private, and a locked row carries no slug.
    */
-  wishlists: { slug: string; title: string }[];
+  wishlists: { slug: string | null; title: string; locked: boolean }[];
 
   /**
    * Group gifts being collected for this event — `291:1008`'s "Group Gifts"
@@ -134,6 +148,7 @@ export const toEventView = (
     venue: event.venue,
     personName: event.personName,
     relation: event.relation,
+    forSelf: event.forSelf ?? false,
     coverUrl: event.coverUrl,
     inviteMediaUrl: event.inviteMediaUrl,
     visibility: event.visibility,

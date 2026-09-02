@@ -76,6 +76,14 @@ export class Wishlist {
   @Prop({ type: SchemaTypes.ObjectId, ref: 'Event', default: null })
   eventId!: Types.ObjectId | null;
 
+  /**
+   * Who the list is *for*, when the owner picked a WishMate while naming it —
+   * a birthday list made for a friend. Purely a link: the person named is not
+   * asked, not told, and gets no access from it. Null for a list of one's own.
+   */
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'User', default: null })
+  forUserId!: Types.ObjectId | null;
+
   @Prop({ type: Boolean, default: true })
   chatEnabled!: boolean;
 

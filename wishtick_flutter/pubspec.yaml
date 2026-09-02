@@ -44,6 +44,16 @@ dependencies:
   share_plus: ^12.0.2
   url_launcher: ^6.3.2
 
+  # Push notifications. The backend already speaks FCM HTTP v1 and keeps a
+  # device-token registry (`POST /me/devices`); these are what give it a token
+  # to register. `firebase_core` is not optional — every FlutterFire plugin
+  # needs it to find the project config.
+  #
+  # Only messaging: no analytics, no crashlytics. Each Firebase product pulls
+  # its own native SDK into the APK, and nothing here asks for those.
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+
   # The chat composer's emoji keyboard. Chosen over hand-rolling one: a picker
   # is a categorised, searchable, skin-tone-aware set of ~1800 codepoints with
   # a recents list, and the hard part is knowing which of them the running
@@ -57,6 +67,7 @@ dependencies:
   just_audio: ^0.10.5
   video_player: ^2.10.1
   google_fonts: ^8.2.1
+  crop_your_image: ^2.0.0
 
 dev_dependencies:
   flutter_test:

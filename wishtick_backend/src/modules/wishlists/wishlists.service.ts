@@ -7,6 +7,8 @@ import { AppException } from 'src/common/errors/app.exception';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import type { AppConfig } from 'src/config/configuration';
 import { MediaService } from 'src/modules/media/media.service';
+import { WishmatesService } from 'src/modules/wishmates/wishmates.service';
+import { WishmateRelationship } from 'src/modules/wishmates/wishmates.views';
 import { MediaPurpose } from 'src/modules/media/schemas/media.schema';
 import { AccessPolicyService } from './access/access-policy.service';
 import type { AccessContext } from './access/access.types';
@@ -38,6 +40,7 @@ export class WishlistsService {
     @InjectModel(WishlistItem.name) private readonly items: Model<WishlistItemDocument>,
     private readonly access: AccessPolicyService,
     private readonly media: MediaService,
+    private readonly wishmates: WishmatesService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
@@ -83,12 +86,14 @@ export class WishlistsService {
     }
 
     const coverUrl = dto.coverMediaId ? await this.resolveCover(userId, dto.coverMediaId) : null;
+    const forUserId = await this.resolveForUser(userId, dto.forUserId);
 
     const wishlist = await this.model.create({
       ownerId,
       title: dto.title,
       description: dto.description ?? null,
       occasionLabel: dto.occasionLabel ?? null,
+      forUserId,
       visibility: dto.visibility ?? WishlistVisibility.PRIVATE,
       coverUrl,
       coverMediaId: dto.coverMediaId ? new Types.ObjectId(dto.coverMediaId) : null,
@@ -162,6 +167,9 @@ export class WishlistsService {
     if (dto.title !== undefined) wishlist.title = dto.title;
     if (dto.description !== undefined) wishlist.description = dto.description;
     if (dto.occasionLabel !== undefined) wishlist.occasionLabel = dto.occasionLabel;
+    if (dto.forUserId !== undefined) {
+      wishlist.forUserId = await this.resolveForUser(ctx.userId!, dto.forUserId);
+    }
     if (dto.chatEnabled !== undefined) wishlist.chatEnabled = dto.chatEnabled;
 
     if (dto.visibility !== undefined && dto.visibility !== wishlist.visibility) {
@@ -329,6 +337,33 @@ export class WishlistsService {
   }
 
   /** Only media the caller owns, confirmed, and uploaded as a wishlist cover. */
+  /**
+   * The WishMate a list is for, checked rather than trusted.
+   *
+   * Only a current WishMate may be named: the picker offers nobody else, and
+   * an id that arrived some other way must not let a list point at a stranger.
+   * Nothing is granted or sent to the person named — it is a label the owner
+   * chose, and they can pick it without anyone's say-so.
+   */
+  private async resolveForUser(
+    userId: string,
+    forUserId: string | null | undefined,
+  ): Promise<Types.ObjectId | null> {
+    if (!forUserId) return null;
+    if (forUserId === userId) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'A list cannot be for yourself', 400);
+    }
+    const relationship = await this.wishmates.relationshipWith(userId, forUserId);
+    if (relationship !== WishmateRelationship.WISHMATES) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        'You can only make a list for one of your WishMates',
+        400,
+      );
+    }
+    return new Types.ObjectId(forUserId);
+  }
+
   private async resolveCover(userId: string, mediaId: string): Promise<string | null> {
     const media = await this.media.getReadyOwned(userId, mediaId);
     if (media.purpose !== MediaPurpose.WISHLIST_COVER) {

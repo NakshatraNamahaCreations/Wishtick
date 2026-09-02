@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../auth/presentation/session_controller.dart';
 import '../data/events_repository.dart';
 import '../domain/event.dart';
 
@@ -34,6 +35,8 @@ const kDefaultTimezone = 'Asia/Kolkata';
 class CreateEventState {
   const CreateEventState({
     this.personName = '',
+    this.forSelf = false,
+    this.wishmateId,
     this.relationKey,
     this.relationLabel,
     this.occasionKey = 'birthday',
@@ -49,6 +52,45 @@ class CreateEventState {
 
   // Step 1 (`257:733`)
   final String personName;
+
+  /// The host is the one being celebrated — their own birthday or wedding.
+  ///
+  /// When set, step 1 asks for no name and no relation: the person is the
+  /// signed-in user, and a relation to yourself is not a thing. The WishMate
+  /// link is moot for the same reason.
+  final bool forSelf;
+
+  /// Set only when the name was picked from the host's WishMates.
+  ///
+  /// What it gates is the relation list: a person already on Wishtick can be
+  /// any relation, while someone typed in by hand can only be a parent or a
+  /// child — see [linkedToWishmate].
+  final String? wishmateId;
+
+  /// Whether the person named is a WishMate rather than free text.
+  bool get linkedToWishmate => wishmateId != null;
+
+  /// The relation groups open to someone who is *not* on Wishtick.
+  ///
+  /// Parents and children only. The reasoning is about who realistically joins
+  /// an app: a partner, a friend, a sibling or a colleague can be invited and
+  /// will have their own wishlist, so an event for them should hang off a real
+  /// WishMate rather than a name typed once. Parents and young children are
+  /// the two groups a host routinely celebrates without them ever signing up.
+  ///
+  /// Held here rather than in the picker so the rule that *disables* a row and
+  /// the rule that *clears* a stale selection cannot drift apart.
+  static const openRelationGroups = {'parents', 'kids'};
+
+  /// Whether [relationKey] survives losing the WishMate link.
+  ///
+  /// Keys are group-prefixed by the seed (`parents_mother`, `kids_son`), which
+  /// is what makes this a prefix test rather than a lookup against a taxonomy
+  /// this class would otherwise have to load.
+  static bool isRelationOpenToEveryone(String? relationKey) =>
+      relationKey != null &&
+      openRelationGroups.any((g) => relationKey.startsWith('${g}_'));
+
   final String? relationKey;
   final String? relationLabel;
   final String occasionKey;
@@ -71,7 +113,8 @@ class CreateEventState {
       );
 
   /// Step 1's asterisks: a person and a relation.
-  bool get step1Complete => personName.trim().isNotEmpty && relationKey != null;
+  bool get step1Complete =>
+      forSelf || (personName.trim().isNotEmpty && relationKey != null);
 
   /// Step 2's: everything on `257:755` carries one.
   bool get step2Complete =>
@@ -95,6 +138,8 @@ class CreateEventState {
 
   CreateEventState copyWith({
     String? personName,
+    bool? forSelf,
+    String? wishmateId,
     String? relationKey,
     String? relationLabel,
     String? occasionKey,
@@ -108,10 +153,14 @@ class CreateEventState {
     bool? busy,
     bool clearError = false,
     bool clearDate = false,
+    bool clearWishmate = false,
+    bool clearRelation = false,
   }) => CreateEventState(
     personName: personName ?? this.personName,
-    relationKey: relationKey ?? this.relationKey,
-    relationLabel: relationLabel ?? this.relationLabel,
+    forSelf: forSelf ?? this.forSelf,
+    wishmateId: clearWishmate ? null : (wishmateId ?? this.wishmateId),
+    relationKey: clearRelation ? null : (relationKey ?? this.relationKey),
+    relationLabel: clearRelation ? null : (relationLabel ?? this.relationLabel),
     occasionKey: occasionKey ?? this.occasionKey,
     title: title ?? this.title,
     date: clearDate ? null : (date ?? this.date),
@@ -146,8 +195,37 @@ class CreateEventController extends Notifier<CreateEventState> {
   @override
   CreateEventState build() => const CreateEventState();
 
-  void setPersonName(String value) =>
-      state = state.copyWith(personName: value, clearError: true);
+  /// Typing by hand breaks any WishMate link — the name no longer refers to
+  /// the person who was picked — and with it any relation that link allowed.
+  /// Leaving, say, "Colleague" selected after the link is gone would submit a
+  /// relation the picker would no longer offer.
+  void setPersonName(String value) => state = state.copyWith(
+    personName: value,
+    clearError: true,
+    clearWishmate: true,
+    clearRelation: !CreateEventState.isRelationOpenToEveryone(
+      state.relationKey,
+    ),
+  );
+
+  /// Whether the event is for the host themself.
+  ///
+  /// Switching to "me" clears the name, the WishMate link and the relation:
+  /// none of them describes the host, and leaving them in the draft would
+  /// submit a person and a relation for an event that has neither.
+  void setForSelf(bool value) => state = value
+      ? state.copyWith(
+          forSelf: true,
+          personName: '',
+          clearWishmate: true,
+          clearRelation: true,
+          clearError: true,
+        )
+      : state.copyWith(forSelf: false, clearError: true);
+
+  /// The host picked someone from their WishMates.
+  void setWishmate({required String userId, required String name}) => state =
+      state.copyWith(personName: name, wishmateId: userId, clearError: true);
 
   void setRelation(String key, String label) =>
       state = state.copyWith(relationKey: key, relationLabel: label);
@@ -176,6 +254,14 @@ class CreateEventController extends Notifier<CreateEventState> {
   /// Only ever a suggestion: it fills the field once, and an edited title is
   /// never overwritten, because the host's own words beat a generated one.
   String suggestedTitle() {
+    if (state.forSelf) {
+      // The guests read this, so it is the host's name, not "My": "Siya's
+      // Birthday" invites; "My Birthday" on someone else's phone does not.
+      // Without a name on the account there is nothing better than "My".
+      final me = ref.read(sessionProvider).user?.name?.trim();
+      final who = (me == null || me.isEmpty) ? 'My' : "$me's";
+      return '$who ${state.occasion.label}';
+    }
     final person = state.personName.trim();
     if (person.isEmpty) return '';
     return "$person's ${state.occasion.label}";
@@ -197,8 +283,12 @@ class CreateEventController extends Notifier<CreateEventState> {
             timezone: kDefaultTimezone,
             description: state.description.trim(),
             venue: state.venue.trim(),
-            personName: state.personName.trim(),
-            relation: state.relationKey,
+            // For the host's own event neither is sent: the server would
+            // otherwise store an empty name and a null relation as if they
+            // were answers.
+            personName: state.forSelf ? null : state.personName.trim(),
+            relation: state.forSelf ? null : state.relationKey,
+            forSelf: state.forSelf,
           );
       state = state.copyWith(busy: false, created: event);
       return event;
