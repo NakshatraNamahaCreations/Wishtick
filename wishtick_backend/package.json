@@ -20,6 +20,8 @@
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,test}/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",
+    "verify:storage": "ts-node -r tsconfig-paths/register -r dotenv/config scripts/verify-storage.ts",
+    "verify:video": "ts-node -r tsconfig-paths/register -r dotenv/config scripts/verify-video.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

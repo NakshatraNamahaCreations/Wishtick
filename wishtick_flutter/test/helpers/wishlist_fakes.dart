@@ -512,6 +512,9 @@ class FakeProductRepository implements ProductRepository {
 class FakeMediaRepository implements MediaRepository {
   final uploadCalls = <MediaPurpose>[];
 
+  /// What `getMedia` answers; ready unless a test is exercising a transcode.
+  MediaStatus status = MediaStatus.ready;
+
   @override
   Future<MediaView> uploadFile({
     required XFile file,
@@ -527,4 +530,14 @@ class FakeMediaRepository implements MediaRepository {
       sizeBytes: null,
     );
   }
+
+  @override
+  Future<MediaView> getMedia(String mediaId) async => MediaView(
+    id: mediaId,
+    url: mediaId,
+    purpose: MediaPurpose.memoryWish.wireValue,
+    contentType: null,
+    sizeBytes: null,
+    status: status,
+  );
 }

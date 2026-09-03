@@ -157,7 +157,27 @@ export const envValidationSchema = Joi.object({
   S3_FORCE_PATH_STYLE: Joi.boolean().default(false),
   /** Public read base (CDN) for objects; falls back to the S3 URL. */
   S3_PUBLIC_BASE_URL: Joi.string().allow('').default(''),
+  /** Leave false on any non-AWS endpoint — see configuration.ts. */
+  S3_REQUEST_CHECKSUMS: Joi.boolean().default(false),
   LOCAL_STORAGE_DIR: Joi.string().default('./uploads'),
+
+  // Video. 'storage' keeps clips as flat files, which is right for local dev
+  // and wrong for anyone on mobile data.
+  VIDEO_DRIVER: Joi.string().valid('storage', 'bunny_stream').default('storage'),
+  ...(() => {
+    const requiredForStream = Joi.string().when('VIDEO_DRIVER', {
+      is: 'bunny_stream',
+      then: Joi.required(),
+      otherwise: Joi.string().allow('').default(''),
+    });
+    return {
+      BUNNY_STREAM_LIBRARY_ID: requiredForStream,
+      BUNNY_STREAM_API_KEY: requiredForStream,
+      BUNNY_STREAM_TOKEN_KEY: requiredForStream,
+      BUNNY_STREAM_CDN_HOSTNAME: requiredForStream,
+    };
+  })(),
+  BUNNY_STREAM_TOKEN_TTL_SECONDS: Joi.number().default(14400),
   /** Signed upload/download URLs are short-lived by design. */
   MEDIA_URL_TTL_SECONDS: Joi.number().min(60).default(900),
   MEDIA_MAX_BYTES: Joi.number()

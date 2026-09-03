@@ -47,6 +47,17 @@ export class S3StorageAdapter implements IStorageProvider {
     this.cachedClient = new S3Client({
       region: s3.region,
       ...(s3.endpoint ? { endpoint: s3.endpoint, forcePathStyle: s3.forcePathStyle } : {}),
+      // Since ~3.729 the SDK computes a CRC32 on every PutObject and folds
+      // `x-amz-checksum-*` / `x-amz-sdk-checksum-algorithm` into the signature.
+      // A phone PUTting to a presigned URL sends neither, so on any provider
+      // that does not implement them the signature simply cannot match. AWS is
+      // unaffected either way, which is why this is off by default.
+      ...(s3.requestChecksums
+        ? {}
+        : {
+            requestChecksumCalculation: 'WHEN_REQUIRED' as const,
+            responseChecksumValidation: 'WHEN_REQUIRED' as const,
+          }),
       // Fall through to the default provider chain (IAM role, env, SSO) when no
       // static key is configured — long-lived keys in env are the worse option,
       // so they must be opt-in rather than required.
@@ -63,14 +74,21 @@ export class S3StorageAdapter implements IStorageProvider {
     maxBytes: number;
     ttlSeconds: number;
   }): Promise<PresignedUpload> {
+    // ContentLength is deliberately NOT signed.
+    //
+    // It used to be, set to `maxBytes`, to refuse an oversized upload at the
+    // edge. That cannot work: SigV4 binds an *exact* length, not a ceiling, so
+    // the only file it would have accepted is one exactly maxBytes long —
+    // every real upload is smaller. A max-size *range* needs a POST policy
+    // (`content-length-range`), which presigned PUT has no equivalent of.
+    //
+    // The real control is `MediaService.confirm`, which HEADs the stored object
+    // and deletes it if it exceeds the limit. That has always been the check
+    // that counts, because everything said at upload-url time is a claim.
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: input.storageKey,
       ContentType: input.contentType,
-      // Signing ContentLength binds the size into the signature: S3 itself
-      // rejects a PUT whose body length differs, so an oversized upload is
-      // refused at the edge instead of after we have already paid to store it.
-      ContentLength: input.maxBytes,
     });
 
     const uploadUrl = await getSignedUrl(this.client, command, { expiresIn: input.ttlSeconds });

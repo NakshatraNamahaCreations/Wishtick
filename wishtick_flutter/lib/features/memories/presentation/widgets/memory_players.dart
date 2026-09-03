@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/media/media_playback.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/theme_extensions.dart';
 
@@ -340,15 +343,48 @@ class MemoryVideoPlayer extends StatefulWidget {
 class _MemoryVideoPlayerState extends State<MemoryVideoPlayer> {
   VideoPlayerController? _controller;
   bool _failed = false;
+
+  /// The clip exists but is still being transcoded — a temporary state that
+  /// must not be shown as a failure.
+  bool _processing = false;
+
   bool _announcedCompletion = false;
+  Timer? _retry;
+
+  /// Backs off rather than hammering: an encode takes tens of seconds, and a
+  /// tight poll would spend a phone's battery to learn nothing sooner.
+  static const _retryDelays = <Duration>[
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 20),
+  ];
+  int _attempt = 0;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _load() async {
+    // Ask before opening the player: a still-encoding clip answers 409, and a
+    // VideoPlayerController handed that just fails, which reads on screen as a
+    // broken video rather than one that is nearly ready.
+    final readiness = await probePlayback(widget.url);
+    if (!mounted) return;
+
+    if (readiness == PlaybackReadiness.processing) {
+      setState(() => _processing = true);
+      _scheduleRetry();
+      return;
+    }
+    if (readiness == PlaybackReadiness.unavailable) {
+      setState(() => _failed = true);
+      return;
+    }
+
     final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     try {
       await controller.initialize();
@@ -357,12 +393,26 @@ class _MemoryVideoPlayerState extends State<MemoryVideoPlayer> {
         return;
       }
       controller.addListener(_onTick);
-      setState(() => _controller = controller);
+      setState(() {
+        _controller = controller;
+        _processing = false;
+      });
       if (widget.autoPlay) await controller.play();
     } catch (e) {
       await controller.dispose();
       if (mounted) setState(() => _failed = true);
     }
+  }
+
+  void _scheduleRetry() {
+    if (_attempt >= _retryDelays.length) {
+      // Still encoding after ~50 seconds of waiting. Stop the timer and leave
+      // the message up — it is accurate, and the screen can be reopened.
+      return;
+    }
+    _retry = Timer(_retryDelays[_attempt++], () {
+      if (mounted) unawaited(_load());
+    });
   }
 
   void _onTick() {
@@ -380,6 +430,7 @@ class _MemoryVideoPlayerState extends State<MemoryVideoPlayer> {
 
   @override
   void dispose() {
+    _retry?.cancel();
     _controller?.removeListener(_onTick);
     _controller?.dispose();
     super.dispose();
@@ -388,6 +439,38 @@ class _MemoryVideoPlayerState extends State<MemoryVideoPlayer> {
   @override
   Widget build(BuildContext context) {
     final ink = widget.ink ?? context.colors.textOnDark;
+
+    if (_processing) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: AppSizes.iconLg,
+              height: AppSizes.iconLg,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation(ink),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Getting this video ready…',
+              textAlign: TextAlign.center,
+              style: context.text.bodyMedium?.copyWith(color: ink),
+            ),
+            const SizedBox(height: AppSpacing.xxs),
+            Text(
+              'It will play here in a moment.',
+              textAlign: TextAlign.center,
+              style: context.text.bodySmall?.copyWith(
+                color: ink.withValues(alpha: 0.75),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (_failed) {
       return Center(

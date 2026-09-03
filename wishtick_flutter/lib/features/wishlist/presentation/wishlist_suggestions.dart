@@ -30,18 +30,21 @@ List<Wishmate> matchingWishmates(List<Wishmate> mates, String typed) {
 ///
 /// Dates are worded as the list would be named — "Siya's Birthday" — and
 /// de-duplicated against the taxonomy so "Birthday" does not appear twice.
+/// Only while typing: an empty field offers nothing, the same as the name
+/// field, rather than a standing block of every occasion there is.
 List<String> occasionSuggestions({
   required List<ImportantDate> dates,
   required Map<String, String> taxonomy,
   required String typed,
 }) {
   final q = typed.trim().toLowerCase();
+  if (q.isEmpty) return const [];
   final seen = <String>{};
   final out = <String>[];
 
   void add(String label) {
     final key = label.toLowerCase();
-    if (seen.add(key) && (q.isEmpty || key.contains(q))) out.add(label);
+    if (seen.add(key) && key.contains(q)) out.add(label);
   }
 
   for (final d in dates) {

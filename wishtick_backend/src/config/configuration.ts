@@ -139,6 +139,31 @@ export interface AppConfig {
       endpoint: string;
       forcePathStyle: boolean;
       publicBaseUrl: string;
+      /**
+       * Whether the SDK may add its own CRC32 checksum headers to requests.
+       *
+       * Off for every S3-compatible provider: since ~3.729 the SDK folds
+       * `x-amz-checksum-*` into the signature, and a phone PUTting to a
+       * presigned URL never sends them, so the signature cannot match.
+       */
+      requestChecksums: boolean;
+    };
+  };
+  /**
+   * Where video lives. Images and audio always go to `storage` — an image is
+   * usable the moment its bytes land, and a voice note streams fine as a plain
+   * file over a CDN that honours range requests. Video does not: a 50 MB phone
+   * clip served flat cannot adapt its bitrate, so it stalls on mobile.
+   */
+  video: {
+    driver: 'storage' | 'bunny_stream';
+    bunny: {
+      libraryId: string;
+      apiKey: string;
+      /** Signs playback URLs. Distinct from apiKey, and the weaker of the two. */
+      tokenKey: string;
+      cdnHostname: string;
+      tokenTtlSeconds: number;
     };
   };
   account: {
@@ -360,6 +385,17 @@ export const configuration = (): AppConfig => {
         endpoint: process.env.S3_ENDPOINT ?? '',
         forcePathStyle: toBool(process.env.S3_FORCE_PATH_STYLE, false),
         publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '',
+        requestChecksums: toBool(process.env.S3_REQUEST_CHECKSUMS, false),
+      },
+    },
+    video: {
+      driver: (process.env.VIDEO_DRIVER ?? 'storage') as 'storage' | 'bunny_stream',
+      bunny: {
+        libraryId: process.env.BUNNY_STREAM_LIBRARY_ID ?? '',
+        apiKey: process.env.BUNNY_STREAM_API_KEY ?? '',
+        tokenKey: process.env.BUNNY_STREAM_TOKEN_KEY ?? '',
+        cdnHostname: process.env.BUNNY_STREAM_CDN_HOSTNAME ?? '',
+        tokenTtlSeconds: toInt(process.env.BUNNY_STREAM_TOKEN_TTL_SECONDS, 14_400),
       },
     },
     account: {

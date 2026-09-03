@@ -85,9 +85,8 @@ void main() {
       'Siya Kapoor',
     );
     expect(find.text('For Siya Kapoor'), findsOneWidget);
-    // The name strip gives way to the pill. Not "no ActionChip at all": the
-    // occasion suggestions beneath are chips too, and stay.
-    expect(find.widgetWithText(ActionChip, 'Siya Kapoor'), findsNothing);
+    // The suggestion rows give way to the pill.
+    expect(find.widgetWithText(ListTile, 'Siya Kapoor'), findsNothing);
   });
 
   // "Camping gear" quietly still linked to Siya is the stale link nobody
@@ -133,20 +132,35 @@ void main() {
     await tester.enterText(nameField(), 'Camping gear');
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(ActionChip, 'Siya Kapoor'), findsNothing);
-    expect(find.widgetWithText(ActionChip, 'Priyal Sharma'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Siya Kapoor'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Priyal Sharma'), findsNothing);
     expect(find.textContaining('For '), findsNothing);
   });
 
-  testWidgets('occasion suggestions fill the field', (tester) async {
+  // Only while typing, right under the field: no standing block of every
+  // occasion there is.
+  testWidgets('occasion suggestions appear as you type and fill the field', (
+    tester,
+  ) async {
     await pump(tester);
+    final occasion = find.widgetWithText(TextFormField, 'Occasion (Optional)');
 
-    // The taxonomy the fake onboarding repository serves.
-    expect(find.text('Birthday'), findsOneWidget);
+    expect(find.text('Birthday'), findsNothing);
+
+    await tester.enterText(occasion, 'bir');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Birthday'), findsOneWidget);
+
     await tester.tap(find.text('Birthday'));
     await tester.pumpAndSettle();
-
-    final occasion = find.widgetWithText(TextFormField, 'Occasion (Optional)');
     expect(tester.widget<TextFormField>(occasion).controller!.text, 'Birthday');
+  });
+
+  testWidgets('the field is who the list is for', (tester) async {
+    await pump(tester);
+    // textContaining, not text: the required label is rich text with an
+    // asterisk, and find.text only sees plain Text widgets.
+    expect(find.textContaining('WishMate'), findsOneWidget);
+    expect(find.textContaining('Wishlist Name'), findsNothing);
   });
 }

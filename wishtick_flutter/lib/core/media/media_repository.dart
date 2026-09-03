@@ -36,6 +36,27 @@ enum MediaPurpose {
   final String wireValue;
 }
 
+/// Where an upload has got to on the server.
+enum MediaStatus {
+  pending('pending'),
+
+  /// Video only: the bytes are stored and a transcoder is working on them.
+  /// Attachable — the URL is stable — but not yet playable.
+  processing('processing'),
+  ready('ready'),
+
+  /// Transcoding failed. Terminal; there is no source left to retry from.
+  failed('failed'),
+  orphaned('orphaned');
+
+  const MediaStatus(this.wireValue);
+
+  final String wireValue;
+
+  static MediaStatus fromWire(String? value) =>
+      MediaStatus.values.firstWhere((s) => s.wireValue == value, orElse: () => ready);
+}
+
 /// A confirmed, ready-to-use upload — `id` is what a feature DTO stores
 /// (`coverMediaId`, `mediaIds`), `url` is what the app displays immediately
 /// without waiting for a fresh fetch of the parent resource.
@@ -46,13 +67,26 @@ class MediaView {
     required this.purpose,
     required this.contentType,
     required this.sizeBytes,
+    this.status = MediaStatus.ready,
+    this.durationSeconds,
   });
 
   final String id;
+
+  /// Stable for the life of the media. For a transcoded clip this is a link
+  /// the API owns, which redirects to a freshly signed playback URL — signed
+  /// URLs expire, and this one gets copied into wishlists and memories.
   final String url;
   final String purpose;
   final String? contentType;
   final int? sizeBytes;
+  final MediaStatus status;
+
+  /// Set once a transcoder has measured the clip. Null for stills.
+  final int? durationSeconds;
+
+  /// Whether a player can open [url] right now.
+  bool get isPlayable => status == MediaStatus.ready;
 
   factory MediaView.fromJson(Map<String, dynamic> json) => MediaView(
     id: json['id'] as String,
@@ -60,6 +94,8 @@ class MediaView {
     purpose: json['purpose'] as String,
     contentType: json['contentType'] as String?,
     sizeBytes: json['sizeBytes'] as int?,
+    status: MediaStatus.fromWire(json['status'] as String?),
+    durationSeconds: json['durationSeconds'] as int?,
   );
 }
 
@@ -80,6 +116,16 @@ class MediaRepository {
   /// necessarily this API (it may be a storage provider's own signed URL),
   /// so it must not carry this app's bearer token or retry/refresh logic.
   final Dio _transferDio;
+
+  /// Re-reads one media, asking the server to refresh an in-flight transcode.
+  ///
+  /// Poll this while [MediaView.status] is `processing` to learn when a clip
+  /// becomes playable — the server checks the transcoder on each call, so the
+  /// answer is never stale.
+  Future<MediaView> getMedia(String mediaId) async {
+    final json = await _api.get<Map<String, dynamic>>('/media/$mediaId');
+    return MediaView.fromJson(json);
+  }
 
   Future<MediaView> uploadFile({
     required XFile file,

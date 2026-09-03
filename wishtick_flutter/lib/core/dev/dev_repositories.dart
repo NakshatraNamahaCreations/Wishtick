@@ -1306,4 +1306,17 @@ class DevMediaRepository implements MediaRepository {
       sizeBytes: await file.length(),
     );
   }
+
+  /// A local file needs no transcoding, so it is ready the moment it exists.
+  @override
+  Future<MediaView> getMedia(String mediaId) async {
+    await Future<void>.delayed(_latency);
+    return MediaView(
+      id: mediaId,
+      url: mediaId,
+      purpose: MediaPurpose.memoryWish.wireValue,
+      contentType: null,
+      sizeBytes: null,
+    );
+  }
 }

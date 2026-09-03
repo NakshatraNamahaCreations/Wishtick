@@ -39,8 +39,18 @@ export enum MediaPurpose {
 export enum MediaStatus {
   /** Upload URL issued; bytes may never arrive. */
   PENDING = 'pending',
+  /**
+   * Video only: the bytes are in storage and a transcoder is working on them.
+   *
+   * Its own state because a clip is genuinely not usable yet — attaching one
+   * here would put an unplayable URL on a memory. An image never passes
+   * through this: it is usable the instant it lands.
+   */
+  PROCESSING = 'processing',
   /** Bytes verified present in storage by a HEAD.  */
   READY = 'ready',
+  /** Transcoding failed. Terminal — the source is gone, so there is no retry. */
+  FAILED = 'failed',
   /** Detached from its owner; the sweeper may delete the object. */
   ORPHANED = 'orphaned',
 }
@@ -84,6 +94,24 @@ export class Media {
 
   @Prop({ type: Date, default: null })
   confirmedAt!: Date | null;
+
+  /**
+   * The transcoder's id for this clip, once it has been handed over.
+   *
+   * Present only for video on a Stream driver. Its existence is what says
+   * "playback goes through the video provider, not the object store", so
+   * nothing has to re-derive that from the content type.
+   */
+  @Prop({ type: String, default: null })
+  videoId!: string | null;
+
+  /** Seconds, once the transcoder has measured it. */
+  @Prop({ type: Number, default: null })
+  durationSeconds!: number | null;
+
+  /** Signed on demand like the playlist; only the file name is stored. */
+  @Prop({ type: String, default: null })
+  thumbnailFileName!: string | null;
 
   createdAt!: Date;
   updatedAt!: Date;

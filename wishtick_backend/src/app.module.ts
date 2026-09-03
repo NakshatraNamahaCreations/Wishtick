@@ -20,6 +20,7 @@ import { NotifierModule } from './infra/notifier/notifier.module';
 import { QueueModule } from './infra/queue/queue.module';
 import { buildRedisOptions, RedisModule } from './infra/redis/redis.module';
 import { StorageModule } from './infra/storage/storage.module';
+import { VideoModule } from './infra/video/video.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -112,6 +113,7 @@ import { WishmatesModule } from './modules/wishmates/wishmates.module';
     QueueModule,
     NotifierModule,
     StorageModule,
+    VideoModule,
 
     HealthModule,
     UsersModule,

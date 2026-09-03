@@ -129,7 +129,7 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
 
   String? get _titleError {
     if (!_submitted) return null;
-    return _title.text.trim().isEmpty ? 'Please enter a wishlist name' : null;
+    return _title.text.trim().isEmpty ? 'Please enter a name' : null;
   }
 
   String? get _coverError {
@@ -244,8 +244,8 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
                         }
                       }),
                       decoration: InputDecoration(
-                        label: _RequiredLabel('Wishlist Name'),
-                        hintText: 'Enter Wishlist Name',
+                        label: _RequiredLabel('WishMate'),
+                        hintText: 'Type a name',
                         errorText: _titleError,
                       ),
                     ),
@@ -634,34 +634,38 @@ class _NameSuggestions extends ConsumerWidget {
     final matches = matchingWishmates(mates, typed);
     if (matches.isEmpty) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sm),
-      child: Wrap(
-        spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.xs,
-        children: [
-          for (final m in matches)
-            ActionChip(
-              avatar: CircleAvatar(
-                backgroundColor: colors.surface,
-                child: Text(
-                  m.name.characters.first.toUpperCase(),
-                  style: context.text.bodySmall?.copyWith(
-                    color: colors.textPrimary,
-                  ),
+    return _SuggestionList(
+      children: [
+        for (final m in matches)
+          ListTile(
+            dense: true,
+            leading: CircleAvatar(
+              radius: AppSizes.avatarSm / 2,
+              backgroundColor: colors.surface,
+              child: Text(
+                m.name.characters.first.toUpperCase(),
+                style: context.text.bodySmall?.copyWith(
+                  color: colors.textPrimary,
                 ),
               ),
-              label: Text(m.name),
-              onPressed: () => onPick(m),
             ),
-        ],
-      ),
+            title: Text(
+              m.name,
+              style: context.text.bodyMedium?.copyWith(
+                color: colors.textPrimary,
+              ),
+            ),
+            onTap: () => onPick(m),
+          ),
+      ],
     );
   }
 }
 
-/// Occasions worth suggesting: the user's own recorded dates first, worded as
-/// the list would be named, then the taxonomy. Typing narrows them.
+/// Occasions worth suggesting, only while typing: the user's own recorded
+/// dates first, worded as the list would be named, then the taxonomy. A
+/// standing block of every occasion under an empty field is a menu, not a
+/// suggestion.
 class _OccasionSuggestions extends ConsumerWidget {
   const _OccasionSuggestions({required this.typed, required this.onPick});
 
@@ -684,15 +688,49 @@ class _OccasionSuggestions extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
+    return _SuggestionList(
+      children: [
+        for (final label in labels)
+          ListTile(
+            dense: true,
+            title: Text(
+              label,
+              style: context.text.bodyMedium?.copyWith(
+                color: context.colors.textPrimary,
+              ),
+            ),
+            onTap: () => onPick(label),
+          ),
+      ],
+    );
+  }
+}
+
+/// The rows a field suggests, drawn right beneath it.
+///
+/// A bordered list rather than a strip of chips: it reads as "pick one of
+/// these to finish what you typed", which is the promise a suggestion makes.
+class _SuggestionList extends StatelessWidget {
+  const _SuggestionList({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sm),
-      child: Wrap(
-        spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.xs,
-        children: [
-          for (final label in labels)
-            ActionChip(label: Text(label), onPressed: () => onPick(label)),
-        ],
+      padding: const EdgeInsets.only(top: AppSpacing.xs),
+      child: Material(
+        color: colors.surface,
+        clipBehavior: Clip.antiAlias,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: colors.border),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: children),
+        ),
       ),
     );
   }

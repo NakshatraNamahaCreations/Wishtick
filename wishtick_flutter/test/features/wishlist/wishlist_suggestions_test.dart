@@ -55,15 +55,22 @@ void main() {
       ),
     ];
 
+    // Only while typing, like the name field: an empty occasion offers
+    // nothing rather than a standing block of every occasion there is.
+    test('offers nothing for an empty field', () {
+      expect(
+        occasionSuggestions(dates: dates, taxonomy: taxonomy, typed: ''),
+        isEmpty,
+      );
+    });
+
     test('the person s own dates come first, worded as a list name', () {
       final out = occasionSuggestions(
         dates: dates,
         taxonomy: taxonomy,
-        typed: '',
+        typed: 'birth',
       );
-      expect(out.first, "Siya's Birthday");
-      expect(out, contains('Birthday'));
-      expect(out, contains('Wedding'));
+      expect(out, ["Siya's Birthday", 'Birthday']);
     });
 
     test('typing narrows to what contains it', () {
@@ -87,7 +94,7 @@ void main() {
           ),
         ],
         taxonomy: taxonomy,
-        typed: '',
+        typed: 'retire',
       );
       expect(out.first, "Ma's retirement");
     });
@@ -96,7 +103,7 @@ void main() {
       final out = occasionSuggestions(
         dates: [...dates, ...dates],
         taxonomy: taxonomy,
-        typed: '',
+        typed: 'birth',
       );
       expect(out.where((l) => l == "Siya's Birthday"), hasLength(1));
     });

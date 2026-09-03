@@ -3,7 +3,14 @@ import type { Queue } from 'bullmq';
 export interface RecordedJob {
   name: string;
   data: unknown;
-  opts: { delay?: number; jobId?: string; removeOnComplete?: boolean };
+  opts: {
+    delay?: number;
+    jobId?: string;
+    removeOnComplete?: boolean;
+    // Recorded, not interpreted: what matters is *that* a job was scheduled
+    // repeatedly, which is what production removes it by.
+    repeat?: { pattern?: string; immediately?: boolean };
+  };
 }
 
 /**
@@ -57,6 +64,33 @@ export class FakeQueue {
 
   getJobCounts(): Promise<Record<string, number>> {
     return Promise.resolve({ waiting: this.added.length, active: 0, failed: 0, delayed: 0 });
+  }
+
+  /**
+   * The repeatables, as BullMQ reports them.
+   *
+   * Only jobs added with a `repeat` option, and keyed the way the real queue
+   * keys them, because production code removes them *by key*. A fake missing
+   * these two methods is worse than one that is merely approximate: schedulers
+   * are registered on boot, so the first caller to disable one would take every
+   * suite down with a TypeError before a single test ran.
+   */
+  getRepeatableJobs(): Promise<{ name: string; key: string }[]> {
+    return Promise.resolve(
+      this.added
+        .filter((j) => j.opts.repeat)
+        .map((j) => ({ name: j.name, key: `${j.name}:::${j.opts.jobId ?? ''}` })),
+    );
+  }
+
+  removeRepeatableByKey(key: string): Promise<boolean> {
+    const i = this.added.findIndex(
+      (j) => j.opts.repeat && `${j.name}:::${j.opts.jobId ?? ''}` === key,
+    );
+    if (i < 0) return Promise.resolve(false);
+    this.removed.push(key);
+    this.added.splice(i, 1);
+    return Promise.resolve(true);
   }
 
   jobsNamed(name: string): RecordedJob[] {

@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Redirect } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -7,6 +7,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
+import { Public } from 'src/common/decorators/public.decorator';
 import { ConfirmUploadDto, CreateUploadUrlDto } from './dto/media.dto';
 import { MediaService, type MediaView, type UploadTicket } from './media.service';
 
@@ -48,5 +49,38 @@ export class MediaController {
   })
   confirm(@CurrentUser('id') userId: string, @Body() dto: ConfirmUploadDto): Promise<MediaView> {
     return this.media.confirm(userId, dto.mediaId);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Read one media, refreshing a transcode in progress',
+    description:
+      'Poll this while `status` is `processing` to learn when a clip becomes playable. ' +
+      'Each call also asks the transcoder where it has got to, so the state is never stale.',
+  })
+  @ApiResponseDoc({ status: 404, description: 'MEDIA_NOT_FOUND' })
+  getOne(@CurrentUser('id') userId: string, @Param('id') id: string): Promise<MediaView> {
+    return this.media.viewOwned(userId, id);
+  }
+
+  /**
+   * Redirects to a freshly signed playback URL.
+   *
+   * Public and unguessable-by-id rather than authenticated, because this is
+   * what a video player fetches: `video_player` follows the redirect but sends
+   * no Authorization header, and a 401 here would simply read as a broken
+   * video. The signed URL it lands on is short-lived, which is the control.
+   */
+  @Get(':id/play')
+  @Public()
+  @Redirect()
+  @ApiOperation({
+    summary: 'Redirect to a signed, expiring playback URL',
+    description:
+      'The stable link stored on a memory or a wishlist. Signed URLs expire, so this ' +
+      'mints a new one per play rather than persisting one that would go stale.',
+  })
+  async play(@Param('id') id: string): Promise<{ url: string; statusCode: number }> {
+    return { url: await this.media.playbackUrl(id), statusCode: 302 };
   }
 }

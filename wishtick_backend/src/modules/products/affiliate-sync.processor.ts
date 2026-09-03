@@ -89,6 +89,25 @@ export class AffiliateSyncProcessor extends WorkerHost implements OnModuleInit {
         },
       );
       this.logger.log(`Search prewarm scheduled (${products.prewarmCron})`);
+    } else {
+      // Not adding it is not the same as removing it. A repeatable lives in
+      // Redis, not in this process, so one left behind by an earlier boot goes
+      // on firing after the flag is turned off — and every run spends real
+      // SerpApi searches against a monthly quota. Turning it off has to mean
+      // off on the next boot, not "off once Redis is wiped".
+      //
+      // Matched on name rather than the pattern the flag now hides: a schedule
+      // registered under an older cron would otherwise be unreachable by the
+      // very config meant to disable it.
+      const stale = (await this.queue.getRepeatableJobs()).filter(
+        (job) => job.name === SEARCH_PREWARM_JOB,
+      );
+      for (const job of stale) {
+        await this.queue.removeRepeatableByKey(job.key);
+      }
+      if (stale.length > 0) {
+        this.logger.log(`Search prewarm disabled — removed ${stale.length} schedule(s)`);
+      }
     }
   }
 
