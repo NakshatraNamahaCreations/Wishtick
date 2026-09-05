@@ -135,6 +135,29 @@ export class MemoryWishesService {
     ).map(toMemoryWishView);
   }
 
+  /**
+   * The caller's own wishes, readable whether or not the capsule has opened.
+   *
+   * Deliberately not subject to the time-lock, because it does not weaken it:
+   * these are the words the caller wrote themselves, and showing somebody
+   * their own message reveals nothing about anyone else's. The lock exists so
+   * that a *surprise* stays a surprise — nobody is surprised by their own
+   * wish.
+   *
+   * This is the whole reason the host lost "Open it now". Opening a capsule
+   * early to check what was in it broke the promise for everybody at once,
+   * and could not be undone; reading back your own contribution answers the
+   * same question and costs nothing.
+   */
+  async listMine(capsuleId: string, userId: string): Promise<MemoryWishView[]> {
+    const capsule = await this.capsules.loadOrFail(capsuleId);
+    return (
+      await this.wishModel
+        .find({ capsuleId: capsule._id, contributorId: new Types.ObjectId(userId) })
+        .sort({ order: 1, createdAt: 1 })
+    ).map(toMemoryWishView);
+  }
+
   /** A contributor may withdraw their own wish while the capsule is still open. */
   async remove(capsuleId: string, wishId: string, userId: string): Promise<void> {
     const capsule = await this.capsules.loadOrFail(capsuleId);

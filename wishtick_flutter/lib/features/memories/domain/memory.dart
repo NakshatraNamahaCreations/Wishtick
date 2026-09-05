@@ -136,6 +136,7 @@ class MemoryCapsule {
     required this.unlockAt,
     required this.timezone,
     required this.wishCount,
+    this.myWishCount = 0,
     required this.contributors,
     required this.hostId,
     required this.isHost,
@@ -143,7 +144,6 @@ class MemoryCapsule {
     required this.createdAt,
     required this.wishes,
     this.relation,
-    this.description,
     this.occasionDate,
     this.coverUrl,
     this.unlockedAt,
@@ -163,8 +163,6 @@ class MemoryCapsule {
   /// A `relation` taxonomy key, not a label.
   final String? relation;
 
-  final String? description;
-
   /// An `occasion` taxonomy key — the eight tiles on `4104:1539`.
   final String occasion;
 
@@ -179,6 +177,16 @@ class MemoryCapsule {
   final DateTime? unlockedAt;
   final String timezone;
   final int wishCount;
+
+  /// How many of those the viewer wrote.
+  ///
+  /// Drives both the button's words — "Add a Wish" the first time, "Add
+  /// Another Wish" after — and whether there is anything of their own to
+  /// preview while the capsule is still sealed.
+  final int myWishCount;
+
+  /// Whether the viewer has already contributed to this capsule.
+  bool get hasContributed => myWishCount > 0;
 
   /// First names only — the metadata the server shows while it is sealed.
   final List<String> contributors;
@@ -220,7 +228,6 @@ class MemoryCapsule {
         ? null
         : PersonIdentity.fromJson(json['person'] as Map<String, dynamic>),
     relation: json['relation'] as String?,
-    description: json['description'] as String?,
     occasion: json['occasion'] as String? ?? 'birthday',
     occasionDate: json['occasionDate'] == null
         ? null
@@ -234,6 +241,7 @@ class MemoryCapsule {
         : DateTime.parse(json['unlockedAt'] as String),
     timezone: json['timezone'] as String? ?? 'Asia/Kolkata',
     wishCount: json['wishCount'] as int? ?? 0,
+    myWishCount: json['myWishCount'] as int? ?? 0,
     contributors:
         (json['contributors'] as List<dynamic>?)
             ?.map((e) => e as String)

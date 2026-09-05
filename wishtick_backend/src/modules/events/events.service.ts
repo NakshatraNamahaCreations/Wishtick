@@ -15,6 +15,11 @@ import { EventStatus, EventVisibility, RsvpResponse } from './event.types';
 import { toEventView, type EventView, type RsvpCounts } from './event.views';
 import { findTemplate, findVariant } from './invite-templates.data';
 import { EventInvite, type EventInviteDocument } from './schemas/event-invite.schema';
+import {
+  EventWishlistSubmission,
+  EventWishlistSubmissionStatus,
+  type EventWishlistSubmissionDocument,
+} from './schemas/event-wishlist-submission.schema';
 import { Event, type EventDocument } from './schemas/event.schema';
 
 /** Same alphabet and length as the wishlist slug, for the same reasons. */
@@ -30,6 +35,11 @@ export class EventsService {
     @InjectModel(Event.name) private readonly model: Model<EventDocument>,
     @InjectModel(EventInvite.name) private readonly invites: Model<EventInviteDocument>,
     @InjectModel(Wishlist.name) private readonly wishlists: Model<WishlistDocument>,
+    // The model rather than EventWishlistsService: that service depends on
+    // this one, and reading the collection here keeps the arrow pointing one
+    // way. All this needs is a count.
+    @InjectModel(EventWishlistSubmission.name)
+    private readonly wishlistSubmissions: Model<EventWishlistSubmissionDocument>,
     private readonly reminders: EventRemindersService,
     private readonly media: MediaService,
     private readonly config: ConfigService<AppConfig, true>,
@@ -100,6 +110,11 @@ export class EventsService {
       visibility: dto.visibility ?? EventVisibility.PRIVATE,
       coverUrl: dto.coverMediaId ? await this.resolveCover(userId, dto.coverMediaId) : null,
       coverMediaId: dto.coverMediaId ? new Types.ObjectId(dto.coverMediaId) : null,
+      // Resolved before the insert, so a refused upload leaves no event behind.
+      inviteMediaUrl: dto.inviteMediaId
+        ? await this.resolveInviteMedia(userId, dto.inviteMediaId)
+        : null,
+      inviteMediaId: dto.inviteMediaId ? new Types.ObjectId(dto.inviteMediaId) : null,
       wishlistIds: [],
       inviteTemplate: dto.inviteTemplate
         ? { ...dto.inviteTemplate, fields: dto.inviteTemplate.fields ?? {} }
@@ -125,15 +140,47 @@ export class EventsService {
       .limit(MAX_ACTIVE_EVENTS)
       .exec();
 
+    const pending = await this.pendingWishlistCounts(events.map((e) => e._id));
+
     return Promise.all(
       events.map(async (event) =>
         toEventView(event, {
           isHost: true,
           shareBaseUrl: this.shareBaseUrl,
           rsvpCounts: await this.rsvpCounts(event._id),
+          pendingWishlistCount: pending.get(event._id.toString()) ?? 0,
         }),
       ),
     );
+  }
+
+  /**
+   * How many guest wishlists are waiting on each host's answer.
+   *
+   * One grouped query for the whole page rather than a count per card: the
+   * list is capped at [MAX_ACTIVE_EVENTS], and a hundred round trips to draw
+   * one screen is how a list gets slow.
+   */
+  private async pendingWishlistCounts(
+    eventIds: Types.ObjectId[],
+  ): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    if (eventIds.length === 0) return counts;
+
+    const rows = await this.wishlistSubmissions
+      .aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: {
+            eventId: { $in: eventIds },
+            status: EventWishlistSubmissionStatus.PENDING,
+          },
+        },
+        { $group: { _id: '$eventId', count: { $sum: 1 } } },
+      ])
+      .exec();
+
+    for (const row of rows) counts.set(row._id.toString(), row.count);
+    return counts;
   }
 
   async getOne(eventId: string, userId: string): Promise<EventView> {
@@ -142,6 +189,12 @@ export class EventsService {
       isHost: true,
       shareBaseUrl: this.shareBaseUrl,
       rsvpCounts: await this.rsvpCounts(event._id),
+      pendingWishlistCount: await this.wishlistSubmissions
+        .countDocuments({
+          eventId: event._id,
+          status: EventWishlistSubmissionStatus.PENDING,
+        })
+        .exec(),
     });
   }
 

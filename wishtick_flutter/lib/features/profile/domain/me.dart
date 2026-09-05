@@ -70,7 +70,19 @@ class Me {
       ? displayName!.trim()
       : 'Your profile';
 
-  /// The contact line under the name — a phone if there is one, else the email.
+  /// The `@handle` as it is shown, or null for an account that has not
+  /// claimed one.
+  ///
+  /// This is what sits under the name on the Profile hub. It used to be the
+  /// phone number, which is the one thing on that screen a person cannot do
+  /// anything with and would rather not have over their shoulder — and unlike
+  /// a number, a handle is what other people find them by.
+  String? get handle => hasHandle ? '@${username!}' : null;
+
+  /// The contact line — a phone if there is one, else the email.
+  ///
+  /// No longer the Profile header's subtitle; kept for the places that are
+  /// genuinely about how to reach this account.
   String? get contactLine => phone ?? email;
 
   factory Me.fromJson(Map<String, dynamic> json) {

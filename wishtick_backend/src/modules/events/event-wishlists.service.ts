@@ -1,6 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import {
+  EVENT_WISHLIST_ANSWERED,
+  EVENT_WISHLIST_OFFERED,
+  type EventWishlistAnsweredEvent,
+  type EventWishlistOfferedEvent,
+} from 'src/common/events/domain-events';
 import { AppException } from 'src/common/errors/app.exception';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import {
@@ -65,6 +72,7 @@ export class EventWishlistsService {
     @Inject(EVENT_PARTICIPATION)
     private readonly participation: IEventParticipation,
     private readonly users: UsersService,
+    private readonly emitter: EventEmitter2,
   ) {}
 
   /**
@@ -132,6 +140,19 @@ export class EventWishlistsService {
       });
       this.logger.log(`Wishlist ${wishlistId} offered to event ${eventId} by ${userId}`);
       const names = await this.resolveNames([userId]);
+
+      // The host's queue sits at the foot of one event's page. Without this
+      // the offer waits there unseen: the host is never told it arrived, and
+      // the guest is never told why their list is not on the invitation.
+      this.emitter.emit(EVENT_WISHLIST_OFFERED, {
+        eventId,
+        submissionId: submission._id.toString(),
+        hostId: event.hostId.toString(),
+        guestName: names.get(userId) ?? 'A guest',
+        eventTitle: event.title,
+        wishlistTitle: wishlist.title,
+      } satisfies EventWishlistOfferedEvent);
+
       return this.toView(submission, wishlist, names.get(userId));
     } catch {
       // Either index caught it: the same list offered to this event twice, or
@@ -204,10 +225,24 @@ export class EventWishlistsService {
       throw new AppException(ErrorCode.WISHLIST_NOT_FOUND, 'Wishlist not found', 404);
     }
 
+    // Told either way. Offering a list used to end in silence whichever way
+    // the host decided, so a guest had no way to know it had been answered.
+    const announce = (approved: boolean): void => {
+      this.emitter.emit(EVENT_WISHLIST_ANSWERED, {
+        eventId,
+        submissionId: submission._id.toString(),
+        guestId: submission.requestedById.toString(),
+        eventTitle: event.title,
+        wishlistTitle: wishlist.title,
+        approved,
+      } satisfies EventWishlistAnsweredEvent);
+    };
+
     if (!approve) {
       submission.status = EventWishlistSubmissionStatus.REJECTED;
       submission.respondedAt = new Date();
       await submission.save();
+      announce(false);
       return this.toView(submission, wishlist);
     }
 
@@ -228,6 +263,7 @@ export class EventWishlistsService {
     submission.respondedAt = new Date();
     await submission.save();
     this.logger.log(`Wishlist ${wishlist._id.toString()} approved onto event ${eventId}`);
+    announce(true);
     return this.toView(submission, wishlist);
   }
 

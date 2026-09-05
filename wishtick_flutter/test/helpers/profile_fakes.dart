@@ -19,10 +19,11 @@ Me buildMe({
   String? photoUrl,
   String? gender = 'female',
   String? dateOfBirth = '2000-01-01',
+  String? phone = '+917829200254',
 }) => Me(
   id: id,
   email: email,
-  phone: null,
+  phone: phone,
   emailVerified: true,
   phoneVerified: false,
   displayName: displayName,

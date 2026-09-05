@@ -83,7 +83,7 @@ void main() {
     // what is missing rather than "some fields are required", which would be
     // equally useless.
     expect(
-      find.text('Add the WishMate, Relation and Description to continue.'),
+      find.text('Add the WishMate and Relation to continue.'),
       findsOneWidget,
     );
   });
@@ -94,16 +94,13 @@ void main() {
     final container = await pump(tester);
     container.read(createMemoryProvider.notifier)
       ..setTitle('Testing')
-      ..setDescription('Testing Memory');
+      ..setRelation('partner_wife', 'Wife');
 
     await tapSaveAndContinue(tester);
 
-    // Two left: WishMate and Relation.
-    expect(find.text('Required'), findsNWidgets(2));
-    expect(
-      find.text('Add the WishMate and Relation to continue.'),
-      findsOneWidget,
-    );
+    // One left: the WishMate. The two that are filled stay unmarked.
+    expect(find.text('Required'), findsOneWidget);
+    expect(find.text('Add the WishMate to continue.'), findsOneWidget);
   });
 
   testWidgets('an outline clears as soon as that field is filled', (
@@ -114,14 +111,14 @@ void main() {
     notifier.setTitle('Testing');
 
     await tapSaveAndContinue(tester);
-    expect(find.text('Required'), findsNWidgets(3));
+    expect(find.text('Required'), findsNWidgets(2));
 
     notifier.setRelation('partner_wife', 'Wife');
     await tester.pumpAndSettle();
 
-    // Down to two. The errors track the form rather than freezing at the
+    // Down to one. The errors track the form rather than freezing at the
     // moment they were revealed.
-    expect(find.text('Required'), findsNWidgets(2));
+    expect(find.text('Required'), findsOneWidget);
   });
 
   testWidgets('a complete form moves on instead of complaining', (
@@ -131,8 +128,7 @@ void main() {
     container.read(createMemoryProvider.notifier)
       ..setTitle('Testing')
       ..setRecipient(buildIdentity(userId: 'u_1', displayName: 'Priyal'))
-      ..setRelation('partner_wife', 'Wife')
-      ..setDescription('Testing Memory');
+      ..setRelation('partner_wife', 'Wife');
     await tester.pumpAndSettle();
 
     await tapSaveAndContinue(tester);
@@ -162,26 +158,29 @@ void main() {
       if (present.contains(MemoryField.relation)) {
         state = state.copyWith(relationKey: 'r', relationLabel: 'Wife');
       }
-      if (present.contains(MemoryField.description)) {
-        state = state.copyWith(description: 'D');
-      }
       return state;
     }
 
     test('one missing field needs no list', () {
-      final state = stateWith([
-        MemoryField.title,
-        MemoryField.recipient,
-        MemoryField.description,
-      ]);
+      final state = stateWith([MemoryField.title, MemoryField.recipient]);
       expect(state.missingMessage, 'Add the Relation to continue.');
     });
 
     test('two are joined with "and", not a comma', () {
-      final state = stateWith([MemoryField.title, MemoryField.recipient]);
+      final state = stateWith([MemoryField.title]);
       expect(
         state.missingMessage,
-        'Add the Relation and Description to continue.',
+        'Add the WishMate and Relation to continue.',
+      );
+    });
+
+    test('three take a comma before the "and"', () {
+      // The only way to reach the comma path now that Description is gone: a
+      // form nobody has touched. Worth keeping — it is what an impatient user
+      // pressing the button on arrival actually sees.
+      expect(
+        const CreateMemoryState().missingMessage,
+        'Add the Memory name, WishMate and Relation to continue.',
       );
     });
 

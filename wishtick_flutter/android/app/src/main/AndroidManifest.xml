@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Reading the address book so a host can pick guests by name instead of
+      typing numbers. Asked for at the moment it is used, never at launch, and
+      only after the in-app explanation the host answers OK to — Android
+      remembers a refusal, so a prompt out of nowhere costs the feature for
+      good. Nothing is written back, so there is no WRITE_CONTACTS here.
+    -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <application
         android:label="wishtick_flutter"
         android:name="${applicationName}"

@@ -10,6 +10,7 @@ import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../domain/event_wishlist_request.dart';
 import '../domain/public_invite.dart';
 import 'invite_controller.dart';
 import 'widgets/event_wishlist_requests.dart';
@@ -56,6 +57,18 @@ class _InviteScreenState extends ConsumerState<InviteScreen> {
     ).showSnackBar(SnackBar(content: Text('RSVP saved — ${response.label}.')));
   }
 
+  /// This guest's own offer to this event, newest first, or null.
+  ///
+  /// Read from the caller's whole list rather than a per-event endpoint —
+  /// there is no such endpoint, and a guest has a handful of offers at most.
+  EventWishlistRequest? _myOfferFor(String eventId) {
+    final mine = ref.watch(myEventWishlistRequestsProvider).value;
+    if (mine == null) return null;
+    final forThis = mine.where((r) => r.eventId == eventId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return forThis.firstOrNull;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(inviteProvider(widget.token));
@@ -84,9 +97,17 @@ class _InviteScreenState extends ConsumerState<InviteScreen> {
           (final PublicInvite loaded, _) => _Body(
             invite: loaded,
             busy: state.busy,
+            // What this guest has already offered to this event, if anything.
+            // Offering used to end with one snackbar and no way to find out
+            // what became of it.
+            myOffer: _myOfferFor(loaded.eventId),
             onRespond: (r) => unawaited(_respond(r)),
-            onAddWishlist: () =>
-                unawaited(offerWishlistToEvent(context, ref, loaded.eventId)),
+            onAddWishlist: () async {
+              await offerWishlistToEvent(context, ref, loaded.eventId);
+              // The row below it reports the offer's state, so it has to be
+              // re-read once one has been made.
+              ref.invalidate(myEventWishlistRequestsProvider);
+            },
           ),
           _ => const Center(child: CircularProgressIndicator()),
         },
@@ -99,6 +120,7 @@ class _Body extends StatelessWidget {
   const _Body({
     required this.invite,
     required this.busy,
+    required this.myOffer,
     required this.onRespond,
     required this.onAddWishlist,
   });
@@ -106,6 +128,9 @@ class _Body extends StatelessWidget {
   final PublicInvite invite;
   final bool busy;
   final ValueChanged<RsvpResponse> onRespond;
+
+  /// This guest's own offer to this event, if they have made one.
+  final EventWishlistRequest? myOffer;
 
   /// Offering one of your own wishlists. Handed down rather than done here:
   /// only the stateful parent holds the ref and the invite's event.
@@ -169,14 +194,17 @@ class _Body extends StatelessWidget {
           _CancelledBanner(),
           const SizedBox(height: AppSpacing.lg),
         ],
-        // The mock shows the rendered invitation card. It is generated
-        // server-side (`coverUrl`), so when the host has not made one there is
-        // nothing to draw and the card is simply absent.
-        if (event.coverUrl != null)
-          AspectRatio(
-            aspectRatio: 3 / 4,
+        // The invitation the host made, whole and at its own proportions —
+        // it is the point of this screen. A fixed 3:4 box cropped the last
+        // line off every card of another shape, and reading `coverUrl` alone
+        // drew nothing at all: an event made in the app has a card and no
+        // cover. Absent when the host made neither.
+        if (event.artworkUrl != null)
+          SizedBox(
+            width: double.infinity,
             child: WishtickImage(
-              url: event.coverUrl,
+              url: event.artworkUrl,
+              fit: BoxFit.fitWidth,
               borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
           ),
@@ -215,9 +243,13 @@ class _Body extends StatelessWidget {
           ),
         ],
         const SizedBox(height: AppSpacing.lg),
-        // The mock's location line has no field behind it: an Event carries no
-        // venue, only a free-text slot inside an invite template. The time is
-        // real, so it is shown alone rather than beside a made-up address.
+        // Where, then when. The venue used to be missing here entirely — the
+        // server had carried it for a while and this view never read it, so
+        // every invitation told a guest a time and no place.
+        if (event.venue != null && event.venue!.trim().isNotEmpty) ...[
+          _IconLine(icon: Icons.place_outlined, text: event.venue!),
+          const SizedBox(height: AppSpacing.sm),
+        ],
         _IconLine(
           icon: Icons.schedule,
           text: DateFormat('EEE, d MMM • h:mm a').format(startsAt),
@@ -294,16 +326,22 @@ class _Body extends StatelessWidget {
                   context.push<void>(AppRoutes.publicWishlist(wishlist.slug!)),
                 ),
               ),
-        // Only once they are going: the access the host's approval grants is
-        // built on the RSVP, so someone still deciding would be offering a list
-        // they could not themselves see on the invitation.
-        if (invite.hasResponded)
-          _SuggestionRow(
-            icon: Icons.playlist_add,
-            title: 'Add your wishlist',
-            subtitle: 'The host decides whether it shows here',
-            onTap: onAddWishlist,
-          ),
+        // Only once they are actually coming. The server accepts an offer
+        // from Going and Maybe alone, so offering it to anyone who had merely
+        // answered — a guest who said Can't go included — meant a row that
+        // failed with "not found" when tapped.
+        if (invite.rsvp.isAttending)
+          if (myOffer == null)
+            _SuggestionRow(
+              icon: Icons.playlist_add,
+              title: 'Add your wishlist',
+              subtitle: 'The host decides whether it shows here',
+              onTap: onAddWishlist,
+            )
+          else
+            // What became of it. Before this the guest got one snackbar and
+            // then had no way to tell whether the host had ever answered.
+            _OfferStatusRow(offer: myOffer!, onOfferAnother: onAddWishlist),
         // `291:1008`'s Group Gifts row. Drawn only when a group is actually
         // running: an invitee cannot start one from here, so an empty row
         // would be an affordance for nothing.
@@ -321,6 +359,103 @@ class _Body extends StatelessWidget {
         // and "Add Your Wish" is an action on the invitee's *own* list rather
         // than on this event — so neither is drawn as a row that cannot open.
       ],
+    );
+  }
+}
+
+/// Where the guest's own offered wishlist has got to.
+///
+/// A row rather than a snackbar, because the answer arrives minutes or days
+/// after the offer: the host has to open the event and decide.
+class _OfferStatusRow extends StatelessWidget {
+  const _OfferStatusRow({required this.offer, required this.onOfferAnother});
+
+  final EventWishlistRequest offer;
+
+  /// A declined or withdrawn list frees the guest to offer a different one.
+  final VoidCallback onOfferAnother;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final (icon, tint, line) = switch (offer.status) {
+      EventWishlistRequestStatus.pending => (
+        Icons.hourglass_empty,
+        colors.warning,
+        'Waiting for the host to accept it',
+      ),
+      EventWishlistRequestStatus.approved => (
+        Icons.check_circle_outline,
+        colors.success,
+        'Showing on this event',
+      ),
+      EventWishlistRequestStatus.rejected => (
+        Icons.do_not_disturb_on_outlined,
+        colors.textMuted,
+        'The host did not add this one',
+      ),
+      EventWishlistRequestStatus.removed => (
+        Icons.remove_circle_outline,
+        colors.textMuted,
+        'Taken off this event',
+      ),
+    };
+    // Only a list that is not on the event leaves the guest free to offer
+    // another; a pending or showing one is already spoken for.
+    final canOfferAnother =
+        offer.status == EventWishlistRequestStatus.rejected ||
+        offer.status == EventWishlistRequestStatus.removed;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: AppSizes.avatarMd,
+              height: AppSizes.avatarMd,
+              decoration: BoxDecoration(
+                color: colors.primarySubtle,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Icon(icon, color: tint),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    offer.wishlistTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.text.titleSmall?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    line,
+                    style: context.text.bodySmall?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (canOfferAnother)
+              TextButton(
+                onPressed: onOfferAnother,
+                child: const Text('Offer another'),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

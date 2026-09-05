@@ -50,6 +50,8 @@ export enum NotificationType {
   GROUP_GIFT_PURCHASED = 'group_gift_purchased',
   GROUP_GIFT_FULFILLED = 'group_gift_fulfilled',
   EVENT_REMINDER = 'event_reminder',
+  EVENT_WISHLIST_OFFERED = 'event_wishlist_offered',
+  EVENT_WISHLIST_ANSWERED = 'event_wishlist_answered',
   ITEM_PRICE_DROP = 'item_price_drop',
   ITEM_OUT_OF_STOCK = 'item_out_of_stock',
   THANK_YOU = 'thank_you',
@@ -163,6 +165,24 @@ export const NOTIFICATION_SPECS: Record<NotificationType, NotificationSpec> = {
     priority: NotificationPriority.NORMAL,
     category: NotificationCategory.EVENTS,
     template: 'event-reminder',
+  },
+  [NotificationType.EVENT_WISHLIST_OFFERED]: {
+    // Not DIGEST, for the reason GROUP_GIFT_INVITE is not: this is a question
+    // waiting on the host's answer, and the guest cannot see their list on the
+    // invitation until it is given. Rolling it into tomorrow's summary is how
+    // a party happens with the list still pending.
+    channels: [NotificationChannel.IN_APP, NotificationChannel.PUSH],
+    priority: NotificationPriority.NORMAL,
+    category: NotificationCategory.EVENTS,
+    template: 'event-wishlist-offered',
+  },
+  [NotificationType.EVENT_WISHLIST_ANSWERED]: {
+    // The other half. Offering a list used to end in silence whichever way the
+    // host decided.
+    channels: [NotificationChannel.IN_APP, NotificationChannel.PUSH],
+    priority: NotificationPriority.NORMAL,
+    category: NotificationCategory.EVENTS,
+    template: 'event-wishlist-answered',
   },
   [NotificationType.ITEM_PRICE_DROP]: {
     channels: [NotificationChannel.IN_APP],

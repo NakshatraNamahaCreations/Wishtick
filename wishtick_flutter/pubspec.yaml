@@ -68,7 +68,8 @@ dependencies:
   video_player: ^2.10.1
   google_fonts: ^8.2.1
   crop_your_image: ^2.0.0
-
+  font_awesome_flutter: ^11.0.0
+  flutter_contacts: ^2.3.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -87,6 +87,9 @@ PublicInvite buildInvite({
   EventStatus status = EventStatus.published,
   List<InviteWishlistLink> wishlists = const [],
   List<InviteGroupGift> groupGifts = const [],
+  String? venue,
+  String? coverUrl,
+  String? inviteMediaUrl,
 }) => PublicInvite(
   eventId: 'ev_1',
   event: InviteEvent(
@@ -96,7 +99,9 @@ PublicInvite buildInvite({
     endsAt: null,
     timezone: 'Asia/Kolkata',
     description: 'Join us as we celebrate my special day.',
-    coverUrl: null,
+    coverUrl: coverUrl,
+    venue: venue,
+    inviteMediaUrl: inviteMediaUrl,
     status: status,
   ),
   hostFirstName: 'Siya',

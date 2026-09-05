@@ -13,6 +13,7 @@ import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../data/events_repository.dart';
+import 'create_event_controller.dart';
 import 'event_providers.dart';
 
 /// The four kinds of file `2248:70` offers.
@@ -35,9 +36,11 @@ const _kMaxBytes = 10 * 1024 * 1024;
 
 /// "Upload Invitation" (`2248:70`).
 class UploadInvitationScreen extends ConsumerStatefulWidget {
-  const UploadInvitationScreen({required this.eventId, super.key});
+  const UploadInvitationScreen({this.eventId, super.key});
 
-  final String eventId;
+  /// Null while the event is still being created: the file waits in the
+  /// wizard and goes up with the event once the host has seen the preview.
+  final String? eventId;
 
   @override
   ConsumerState<UploadInvitationScreen> createState() =>
@@ -78,6 +81,15 @@ class _UploadInvitationScreenState
     final bytes = file?.bytes;
     if (file == null || bytes == null || _busy) return;
 
+    final eventId = widget.eventId;
+    if (eventId == null) {
+      // Nothing to attach it to yet, so nothing goes up: the wizard keeps the
+      // bytes, and the preview's button uploads them with the event.
+      ref.read(createEventProvider.notifier).setInvitation(bytes, file.name);
+      await context.push<void>(AppRoutes.createEventInvitePreview);
+      return;
+    }
+
     setState(() {
       _busy = true;
       _error = null;
@@ -94,10 +106,10 @@ class _UploadInvitationScreenState
           );
       await ref
           .read(eventsRepositoryProvider)
-          .update(widget.eventId, inviteMediaId: media.id);
-      ref.invalidate(eventDetailProvider(widget.eventId));
+          .update(eventId, inviteMediaId: media.id);
+      ref.invalidate(eventDetailProvider(eventId));
       if (!mounted) return;
-      await context.push<void>(AppRoutes.eventInvitePreview(widget.eventId));
+      await context.push<void>(AppRoutes.eventInvitePreview(eventId));
     } catch (e) {
       if (mounted) {
         setState(() => _error = 'Could not upload that file. Try again.');

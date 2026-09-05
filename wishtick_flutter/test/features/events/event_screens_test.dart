@@ -1,21 +1,45 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:wishtick_flutter/core/media/media_repository.dart';
+import 'package:wishtick_flutter/core/network/api_exception.dart';
+import 'package:wishtick_flutter/core/router/app_routes.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/features/auth/presentation/session_controller.dart';
 import 'package:wishtick_flutter/features/events/data/events_repository.dart';
 import 'package:wishtick_flutter/features/events/domain/event.dart';
+import 'package:wishtick_flutter/features/events/presentation/create_event_controller.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_guest_detail_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_guests_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_invite_preview_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_invite_templates_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/invite_designer_screen.dart';
 import 'package:wishtick_flutter/features/events/presentation/widgets/rsvp_status_pill.dart';
+import 'package:wishtick_flutter/features/wishlist/domain/wishlist.dart';
 
 import '../../helpers/auth_fakes.dart';
 import '../../helpers/events_fakes.dart';
+import '../../helpers/wishlist_fakes.dart';
+
+/// A 1×1 PNG — real bytes, so a preview drawn from memory decodes.
+final kPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+);
+
+/// Both create steps, as a host would have filled them in.
+void fillWizard(CreateEventController draft) => draft
+  ..setPersonName('Rohan')
+  ..setRelation('friend', 'Friend')
+  ..setTitle("Rohan's Birthday")
+  ..setDate(DateTime(2030, 7, 19))
+  ..setTime(const TimeOfDayValue(20, 0))
+  ..setVenue('Kochi Marriott')
+  ..setDescription('Come along.');
 
 /// A session that starts authenticated as a named user.
 class _SignedIn extends SessionController {
@@ -34,6 +58,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FakeEventsRepository repo;
+  late FakeMediaRepository media;
 
   /// share_plus has no plugin behind it in a test, and its future would never
   /// complete — leaving the Download button spinning and `pumpAndSettle`
@@ -44,6 +69,7 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(shareChannel, (call) async => 'dev.test');
 
+    media = FakeMediaRepository();
     repo = FakeEventsRepository(
       invites: [
         buildInviteRow(
@@ -89,6 +115,7 @@ void main() {
       ProviderScope(
         overrides: [
           eventsRepositoryProvider.overrideWithValue(repo),
+          mediaRepositoryProvider.overrideWithValue(media),
           // The invitation's "Hosted by" line reads the signed-in user.
           if (signedInAs != null)
             sessionProvider.overrideWith(() => _SignedIn(signedInAs)),
@@ -98,6 +125,60 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  /// The same, under a router — for screens that `push` or `go`.
+  ///
+  /// [draft] fills the create wizard before the first frame, the way a host
+  /// arrives at these screens. Returns the container so a test can read the
+  /// wizard afterwards.
+  Future<ProviderContainer> pumpRouted(
+    WidgetTester tester, {
+    required String initialLocation,
+    required List<RouteBase> routes,
+    String? signedInAs,
+    void Function(CreateEventController draft)? draft,
+  }) async {
+    await tester.binding.setSurfaceSize(const Size(400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final container = ProviderContainer(
+      overrides: [
+        eventsRepositoryProvider.overrideWithValue(repo),
+        mediaRepositoryProvider.overrideWithValue(media),
+        if (signedInAs != null)
+          sessionProvider.overrideWith(() => _SignedIn(signedInAs)),
+      ],
+    );
+    addTearDown(container.dispose);
+    draft?.call(container.read(createEventProvider.notifier));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          theme: AppTheme.light,
+          routerConfig: GoRouter(
+            initialLocation: initialLocation,
+            routes: routes,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return container;
+  }
+
+  /// The event page with Share beneath it, as stubs — enough to see where
+  /// the wizard lands, without the share screen's own concerns.
+  GoRoute eventRoutes() => GoRoute(
+    path: '/events/:id',
+    builder: (_, s) => Scaffold(body: Text('event ${s.pathParameters['id']}')),
+    routes: [
+      GoRoute(
+        path: 'share',
+        builder: (_, s) =>
+            Scaffold(body: Text('share ${s.pathParameters['id']}')),
+      ),
+    ],
+  );
 
   group('Guest list (4099:1256)', () {
     testWidgets('counts come from the rows on screen, not a second source', (
@@ -377,6 +458,79 @@ void main() {
       expect(find.text('Mysore Socials'), findsWidgets);
       expect(find.text('Your Celebration'), findsNothing);
     });
+
+    group('for an event still being created', () {
+      testWidgets('the previews read the wizard, and nothing is fetched', (
+        tester,
+      ) async {
+        await pumpRouted(
+          tester,
+          initialLocation: AppRoutes.createEventInvite,
+          routes: [
+            GoRoute(
+              path: AppRoutes.createEventInvite,
+              builder: (_, _) => const EventInviteTemplatesScreen(),
+            ),
+          ],
+          signedInAs: 'Ananya',
+          draft: fillWizard,
+        );
+        await tester.tap(find.text('Use Wishtick Templates'));
+        await tester.pumpAndSettle();
+
+        expect(find.text("Rohan's Birthday"), findsWidgets);
+        expect(find.text('Kochi Marriott'), findsWidgets);
+        expect(find.text('Hosted by Ananya'), findsWidgets);
+        expect(find.text('Your Celebration'), findsNothing);
+        // There is no event to fetch, and none was made to get one.
+        expect(repo.createCalls, isEmpty);
+      });
+
+      testWidgets('Done keeps the card in the wizard and opens the preview '
+          '— no upload, no event', (tester) async {
+        final container = await pumpRouted(
+          tester,
+          initialLocation: AppRoutes.createEventInvite,
+          routes: [
+            GoRoute(
+              path: AppRoutes.createEventInvite,
+              builder: (_, _) => const EventInviteTemplatesScreen(),
+            ),
+            GoRoute(
+              path: AppRoutes.createEventInvitePreview,
+              builder: (_, _) => const EventInvitePreviewScreen(),
+            ),
+          ],
+          draft: fillWizard,
+        );
+        await tester.tap(find.text('Use Wishtick Templates'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('invite-style-classic')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
+        await tester.pumpAndSettle();
+
+        // What Done does, minus the rasterising: hand over the PNG, then pop
+        // with the design.
+        final designer = tester.widget<InviteDesignerScreen>(
+          find.byType(InviteDesignerScreen),
+        );
+        await designer.onDone!(kPng, designer.initial);
+        Navigator.of(
+          tester.element(find.byType(InviteDesignerScreen)),
+        ).pop(designer.initial);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Preview\nYour Invite'), findsOneWidget);
+        expect(
+          container.read(createEventProvider).invitation?.fileName,
+          'invitation.png',
+        );
+        expect(media.uploadCalls, isEmpty);
+        expect(repo.updateCalls, isEmpty);
+        expect(repo.createCalls, isEmpty);
+      });
+    });
   });
 
   group('Invite preview (263:1014)', () {
@@ -408,6 +562,154 @@ void main() {
         find.text('Your uploaded invitation will be sent as it is.'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('for an existing draft, Skip publishes it and lands on Share', (
+      tester,
+    ) async {
+      repo.event = buildEvent(inviteMediaUrl: 'https://cdn.test/invite.png');
+      await pumpRouted(
+        tester,
+        initialLocation: AppRoutes.eventInvitePreview('evt_1'),
+        routes: [
+          GoRoute(
+            path: '/events/:id/invite/preview',
+            builder: (_, s) =>
+                EventInvitePreviewScreen(eventId: s.pathParameters['id']),
+          ),
+          eventRoutes(),
+        ],
+      );
+
+      await tester.tap(find.text('Skip for now'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('share evt_1'), findsOneWidget);
+      expect(repo.publishCalls, ['evt_1']);
+      expect(repo.createCalls, isEmpty);
+    });
+
+    group('for an event still being created', () {
+      /// The preview, a stub wishlist form that saves [saves] or backs out,
+      /// and the event page with Share beneath it.
+      List<RouteBase> routes({Wishlist? saves}) => [
+        GoRoute(
+          path: AppRoutes.createEventInvitePreview,
+          builder: (_, _) => const EventInvitePreviewScreen(),
+        ),
+        GoRoute(
+          path: AppRoutes.wishlistCreate,
+          builder: (context, _) => Scaffold(
+            body: Column(
+              children: [
+                TextButton(
+                  onPressed: () => context.pop(saves),
+                  child: const Text('Save list'),
+                ),
+                TextButton(
+                  onPressed: () => context.pop(),
+                  child: const Text('Back out'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        eventRoutes(),
+      ];
+
+      Future<ProviderContainer> pumpPreview(
+        WidgetTester tester, {
+        Wishlist? saves,
+      }) => pumpRouted(
+        tester,
+        initialLocation: AppRoutes.createEventInvitePreview,
+        routes: routes(saves: saves),
+        draft: (n) {
+          fillWizard(n);
+          n.setInvitation(kPng, 'invitation.png');
+        },
+      );
+
+      testWidgets('draws the card from the wizard; nothing exists yet', (
+        tester,
+      ) async {
+        await pumpPreview(tester);
+
+        final image = tester.widget<Image>(find.byType(Image));
+        expect((image.image as MemoryImage).bytes, kPng);
+        expect(find.text('Create Wishlist'), findsOneWidget);
+        expect(find.text('Skip for now'), findsOneWidget);
+        expect(repo.createCalls, isEmpty);
+        expect(media.uploadCalls, isEmpty);
+      });
+
+      testWidgets('Skip creates, publishes and lands on Share', (tester) async {
+        final container = await pumpPreview(tester);
+
+        await tester.tap(find.text('Skip for now'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('share evt_1'), findsOneWidget);
+        expect(media.uploadCalls, [MediaPurpose.eventInvite]);
+        expect(repo.createCalls.single['inviteMediaId'], 'media_1');
+        expect(repo.publishCalls, ['evt_1']);
+        // The wizard is over: the next Create Event starts blank.
+        expect(container.read(createEventProvider).invitation, isNull);
+        expect(container.read(createEventProvider).title, isEmpty);
+      });
+
+      testWidgets('Create Wishlist links the new list, then shares', (
+        tester,
+      ) async {
+        await pumpPreview(tester, saves: buildWishlist(id: 'wl_new'));
+
+        await tester.tap(find.text('Create Wishlist'));
+        await tester.pumpAndSettle();
+        // Opening the form makes nothing.
+        expect(repo.createCalls, isEmpty);
+
+        await tester.tap(find.text('Save list'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('share evt_1'), findsOneWidget);
+        expect(repo.createCalls.single['wishlistIds'], ['wl_new']);
+        expect(repo.publishCalls, ['evt_1']);
+      });
+
+      testWidgets('backing out of the wishlist form creates nothing', (
+        tester,
+      ) async {
+        await pumpPreview(tester);
+
+        await tester.tap(find.text('Create Wishlist'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Back out'));
+        await tester.pumpAndSettle();
+
+        // Still on the preview, with nothing made on the host's behalf.
+        expect(find.text('Preview\nYour Invite'), findsOneWidget);
+        expect(repo.createCalls, isEmpty);
+        expect(repo.publishCalls, isEmpty);
+        expect(media.uploadCalls, isEmpty);
+      });
+
+      testWidgets('a refusal is shown here, with nothing half-made', (
+        tester,
+      ) async {
+        repo.failure = const ApiException(
+          code: 'EVENT_LIMIT_REACHED',
+          message: 'limit',
+          statusCode: 409,
+        );
+        await pumpPreview(tester);
+
+        await tester.tap(find.text('Skip for now'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('as many events'), findsOneWidget);
+        expect(find.text('Preview\nYour Invite'), findsOneWidget);
+        expect(repo.publishCalls, isEmpty);
+      });
     });
   });
 

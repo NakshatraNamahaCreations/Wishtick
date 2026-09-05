@@ -40,13 +40,6 @@ export class CreateMemoryDto {
   @Transform(trim)
   relation?: string | null;
 
-  @ApiPropertyOptional({ maxLength: 400 })
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  @Transform(trim)
-  description?: string | null;
-
   @ApiProperty({ example: 'birthday', description: 'An `occasion` taxonomy key' })
   @IsString()
   @MaxLength(60)
@@ -94,13 +87,6 @@ export class UpdateMemoryDto {
   @MaxLength(60)
   @Transform(trim)
   relation?: string | null;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  @Transform(trim)
-  description?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

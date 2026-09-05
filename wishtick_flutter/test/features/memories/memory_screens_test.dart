@@ -9,6 +9,7 @@ import 'package:wishtick_flutter/features/memories/presentation/create_memory_co
 import 'package:wishtick_flutter/features/memories/presentation/memories_tab_screen.dart';
 import 'package:wishtick_flutter/features/memories/presentation/memory_detail_screen.dart';
 import 'package:wishtick_flutter/features/memories/presentation/memory_experience_screen.dart';
+import 'package:wishtick_flutter/features/memories/presentation/my_wishes_screen.dart';
 import 'package:wishtick_flutter/features/memories/presentation/widgets/memory_players.dart';
 
 import '../../helpers/memory_fakes.dart';
@@ -160,30 +161,99 @@ void main() {
       expect(find.text('Add a Wish'), findsOneWidget);
     });
 
-    testWidgets('the host is warned before opening it early', (tester) async {
+    testWidgets('nothing on a sealed capsule can force it open', (
+      tester,
+    ) async {
       repo.mine = [buildCapsule(id: 'm1', wishCount: 2)];
       await pump(tester, const MemoryDetailScreen(memoryId: 'm1'));
 
-      await tester.tap(find.text('Open it now'));
-      await tester.pumpAndSettle();
+      // "Open it now" is gone for good: it revealed everyone's wishes at once,
+      // irreversibly, to answer a question the preview answers for free.
+      expect(find.text('Open it now'), findsNothing);
+      // And with nothing of the host's own inside, there is nothing to preview.
+      expect(find.textContaining('Preview my'), findsNothing);
+    });
 
-      expect(find.text('Open it now?'), findsOneWidget);
-      expect(find.textContaining('cannot be undone'), findsOneWidget);
+    testWidgets('having written one, the host is asked for another', (
+      tester,
+    ) async {
+      repo.mine = [buildCapsule(id: 'm1', wishCount: 3, myWishCount: 1)];
+      await pump(tester, const MemoryDetailScreen(memoryId: 'm1'));
 
-      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
-      await tester.pumpAndSettle();
-      expect(repo.unlockCalls, isEmpty);
+      expect(find.text('Add Another Wish'), findsOneWidget);
+      expect(find.text('Add a Wish'), findsNothing);
+      // Singular while there is one; the count is the host's own, not the four
+      // wishes in the capsule.
+      expect(find.text('Preview my wish'), findsOneWidget);
+    });
+
+    testWidgets('the preview counts only the host\'s own wishes', (
+      tester,
+    ) async {
+      repo.mine = [buildCapsule(id: 'm1', wishCount: 9, myWishCount: 2)];
+      await pump(tester, const MemoryDetailScreen(memoryId: 'm1'));
+
+      expect(find.text('Preview my 2 wishes'), findsOneWidget);
     });
 
     testWidgets('an opened capsule offers the story instead', (tester) async {
       repo.mine = [
-        buildCapsule(id: 'm1', status: MemoryStatus.unlocked, wishCount: 2),
+        buildCapsule(
+          id: 'm1',
+          status: MemoryStatus.unlocked,
+          wishCount: 2,
+          myWishCount: 1,
+        ),
       ];
       await pump(tester, const MemoryDetailScreen(memoryId: 'm1'));
 
       expect(find.text('Open the Memory'), findsOneWidget);
       expect(find.text('Add a Wish'), findsNothing);
       expect(find.text('Open it now'), findsNothing);
+      // Once it is open the whole story is readable, so a private preview of
+      // one's own corner of it is just a second door to the same room.
+      expect(find.textContaining('Preview my'), findsNothing);
+    });
+  });
+
+  group('Previewing your own wishes', () {
+    testWidgets('a sealed capsule still shows you what you wrote', (
+      tester,
+    ) async {
+      repo.mine = [buildCapsule(id: 'm1', wishCount: 5, myWishCount: 2)];
+      repo.ownWishes = [
+        buildWish(id: 'w1', contributorName: 'You', text: 'Many happy years'),
+        buildWish(id: 'w2', contributorName: 'You', text: 'See you Sunday'),
+      ];
+      await pump(tester, const MyWishesScreen(memoryId: 'm1'));
+
+      expect(find.text('Many happy years'), findsOneWidget);
+      expect(find.text('See you Sunday'), findsOneWidget);
+    });
+
+    testWidgets('it asks the server for your wishes, not the capsule\'s', (
+      tester,
+    ) async {
+      // The capsule's own `wishes` list is empty while sealed — that is the
+      // time-lock doing its job. Reading it instead would show nothing.
+      repo.mine = [buildCapsule(id: 'm1', wishCount: 5, myWishCount: 1)];
+      repo.ownWishes = [
+        buildWish(id: 'w1', contributorName: 'You', text: 'Mine alone'),
+      ];
+      await pump(tester, const MyWishesScreen(memoryId: 'm1'));
+
+      expect(find.text('Mine alone'), findsOneWidget);
+    });
+
+    testWidgets('with none of your own, it says so plainly', (tester) async {
+      repo.mine = [buildCapsule(id: 'm1', wishCount: 5)];
+      await pump(tester, const MyWishesScreen(memoryId: 'm1'));
+
+      expect(
+        find.textContaining('not added a wish'),
+        findsOneWidget,
+        reason: 'an empty list must not read as a loading failure',
+      );
     });
   });
 
@@ -333,15 +403,13 @@ void main() {
       notifier()
         ..setTitle("Ananya's Birthday")
         ..setRecipient(buildIdentity(userId: 'u_ananya', displayName: 'Ananya'))
-        ..setRelation('partner_wife', 'Wife')
-        ..setDescription('Join us.');
+        ..setRelation('partner_wife', 'Wife');
     }
 
     test('step 1 is not complete until a WishMate is chosen', () {
       notifier()
         ..setTitle("Ananya's Birthday")
-        ..setRelation('partner_wife', 'Wife')
-        ..setDescription('Join us.');
+        ..setRelation('partner_wife', 'Wife');
 
       // A memory is made *for* an account, and the server refuses a recipient
       // the host is not linked to — so there is nothing to submit yet.
@@ -366,12 +434,13 @@ void main() {
       expect(repo.createCalls.single.containsKey('personName'), isFalse);
     });
 
-    test('step 1 needs all four starred fields', () {
+    test('step 1 needs all three starred fields', () {
       expect(state().step1Complete, isFalse);
       notifier()
         ..setTitle("Ananya's Birthday")
-        ..setRecipient(buildIdentity(userId: 'u_ananya', displayName: 'Ananya'))
-        ..setDescription('Join us.');
+        ..setRecipient(
+          buildIdentity(userId: 'u_ananya', displayName: 'Ananya'),
+        );
       // Relation is still missing.
       expect(state().step1Complete, isFalse);
 
@@ -379,15 +448,30 @@ void main() {
       expect(state().step1Complete, isTrue);
     });
 
-    test('an unlock date with no time is not a moment', () {
-      fillStep1();
-      notifier().setUnlockDate(DateTime(2026, 7, 19));
-      expect(state().step2Complete, isFalse);
-      expect(state().unlockAt, isNull);
+    /// The time defaults to midnight, so a capsule is waiting the moment its
+    /// day starts and the date alone finishes the step. It used to *show*
+    /// 12:00 AM while holding null, which left Save & Continue disabled on a
+    /// form that looked complete.
+    test(
+      'the unlock time starts at midnight, so a date alone completes it',
+      () {
+        fillStep1();
+        expect(state().unlockTime, const MemoryTimeOfDay(0, 0));
 
-      notifier().setUnlockTime(const MemoryTimeOfDay(0, 0));
-      expect(state().step2Complete, isTrue);
-      expect(state().unlockAt, DateTime(2026, 7, 19));
+        notifier().setUnlockDate(DateTime(2026, 7, 19));
+
+        expect(state().step2Complete, isTrue);
+        expect(state().unlockAt, DateTime(2026, 7, 19));
+      },
+    );
+
+    test('picking a different time replaces the default', () {
+      fillStep1();
+      notifier()
+        ..setUnlockDate(DateTime(2026, 7, 19))
+        ..setUnlockTime(const MemoryTimeOfDay(18, 30));
+
+      expect(state().unlockAt, DateTime(2026, 7, 19, 18, 30));
     });
 
     test(

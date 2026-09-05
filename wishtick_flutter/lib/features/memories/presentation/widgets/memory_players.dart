@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -125,7 +126,12 @@ class _MemoryAudioPlayerState extends State<MemoryAudioPlayer> {
 
   Future<void> _load() async {
     try {
-      await _player.setUrl(widget.url);
+      // A file the host has picked but not uploaded yet is a path, not a URL.
+      if (isRemoteMedia(widget.url)) {
+        await _player.setUrl(widget.url);
+      } else {
+        await _player.setFilePath(widget.url);
+      }
       if (!mounted) return;
       if (widget.autoPlay) await _player.play();
     } catch (e) {
@@ -369,23 +375,30 @@ class _MemoryVideoPlayerState extends State<MemoryVideoPlayer> {
   }
 
   Future<void> _load() async {
-    // Ask before opening the player: a still-encoding clip answers 409, and a
-    // VideoPlayerController handed that just fails, which reads on screen as a
-    // broken video rather than one that is nearly ready.
-    final readiness = await probePlayback(widget.url);
-    if (!mounted) return;
+    final remote = isRemoteMedia(widget.url);
 
-    if (readiness == PlaybackReadiness.processing) {
-      setState(() => _processing = true);
-      _scheduleRetry();
-      return;
-    }
-    if (readiness == PlaybackReadiness.unavailable) {
-      setState(() => _failed = true);
-      return;
+    if (remote) {
+      // Ask before opening the player: a still-encoding clip answers 409, and a
+      // VideoPlayerController handed that just fails, which reads on screen as
+      // a broken video rather than one that is nearly ready. A local file has
+      // nothing to ask — there is no server in it.
+      final readiness = await probePlayback(widget.url);
+      if (!mounted) return;
+
+      if (readiness == PlaybackReadiness.processing) {
+        setState(() => _processing = true);
+        _scheduleRetry();
+        return;
+      }
+      if (readiness == PlaybackReadiness.unavailable) {
+        setState(() => _failed = true);
+        return;
+      }
     }
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    final controller = remote
+        ? VideoPlayerController.networkUrl(Uri.parse(widget.url))
+        : VideoPlayerController.file(File(widget.url));
     try {
       await controller.initialize();
       if (!mounted) {

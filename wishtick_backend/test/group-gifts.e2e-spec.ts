@@ -919,6 +919,96 @@ describe('Group gifting (e2e)', () => {
         .expect(404);
     });
 
+    /** The ids on the caller's Home rail. */
+    const homeGiftIds = async (who: Actor): Promise<string[]> => {
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/group-gifts/mine`)
+        .set(auth(who.token))
+        .expect(200);
+      return (res.body as Envelope<{ id: string }[]>).data.map((g) => g.id);
+    };
+
+    // Being asked is the whole point: the invitee sees the same chip-in card
+    // the members see, from the moment they are invited. Saying no takes it
+    // away — an unanswered ask and a refused one must not look the same.
+    it('puts the gift on the invitee’s Home until they decline it', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      await becomeWishmates(initiator, friend);
+      const { itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      // Nothing before the invitation: it is a private list they cannot see.
+      expect(await homeGiftIds(friend)).not.toContain(gg.data.id);
+
+      await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      expect(await homeGiftIds(friend)).toContain(gg.data.id);
+
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gift-invites/${mine.data[0].id}/decline`)
+        .set(auth(friend.token))
+        .expect(200);
+
+      expect(await homeGiftIds(friend)).not.toContain(gg.data.id);
+    });
+
+    // "Contribute to Gift" is the accept button on the invitation screen, so
+    // paying has to answer the invitation by itself — including the access
+    // grant, without which the payment could not go through at all.
+    it('treats contributing as accepting, on a list they could not gift from', async () => {
+      const owner = await newUser();
+      const initiator = await newUser();
+      const friend = await newUser();
+      await becomeWishmates(initiator, friend);
+      const { wishlistId, itemId } = await privateListSharedWith(owner, initiator);
+      const gg = (
+        await createGroupGift(initiator, itemId, { targetAmountMinor: 500000 }).expect(201)
+      ).body as Envelope<{ id: string }>;
+      await inviteTo(initiator, gg.data.id, [friend.userId]).expect(200);
+      const pending = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+      const inviteId = pending.data[0].id;
+
+      // Straight to paying — no accept call in between. It goes through, which
+      // it could not if the access grant had not come with it.
+      await contribute(friend, gg.data.id, { amountMinor: 10000 }).expect(201);
+
+      // Off the pending list, which is the list that asks.
+      const after = (
+        await request(app.getHttpServer())
+          .get(`${V1}/group-gift-invites/mine`)
+          .set(auth(friend.token))
+          .expect(200)
+      ).body as Envelope<{ id: string }[]>;
+      expect(after.data).toHaveLength(0);
+
+      // Answered, not merely hidden: there is nothing left to say yes to.
+      await request(app.getHttpServer())
+        .post(`${V1}/group-gift-invites/${inviteId}/accept`)
+        .set(auth(friend.token))
+        .expect(409);
+
+      // And the access the acceptance carries is real.
+      await request(app.getHttpServer())
+        .get(`${V1}/wishlists/${wishlistId}`)
+        .set(auth(friend.token))
+        .expect(200);
+      expect(await homeGiftIds(friend)).toContain(gg.data.id);
+    });
+
     it('answering twice is refused rather than silently re-run', async () => {
       const owner = await newUser();
       const initiator = await newUser();

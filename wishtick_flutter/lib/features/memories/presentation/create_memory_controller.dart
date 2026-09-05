@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// For XFile, which MediaRepository takes. cross_file is not a direct
+// dependency; image_picker re-exports it and is.
+import 'package:image_picker/image_picker.dart';
 
+import '../../../core/media/media_repository.dart';
 import '../../../core/network/api_exception.dart';
 import '../../wishmates/domain/wishmate.dart';
 import '../data/memories_repository.dart';
@@ -21,9 +25,6 @@ const kMemoryOccasions = <({String key, String label})>[
   (key: 'rakhi', label: 'Rakhi'),
   (key: 'best_wishes', label: 'Best Wishes'),
 ];
-
-/// The description counter on `4104:1539` reads "12/40".
-const kMemoryDescriptionMax = 400;
 
 /// A wall-clock time, kept free of Flutter's `TimeOfDay` so the state stays
 /// testable without a widget binding.
@@ -51,8 +52,7 @@ class MemoryTimeOfDay {
 enum MemoryField {
   title('Memory name'),
   recipient('WishMate'),
-  relation('Relation'),
-  description('Description');
+  relation('Relation');
 
   const MemoryField(this.label);
 
@@ -68,17 +68,18 @@ class CreateMemoryState {
     this.recipient,
     this.relationKey,
     this.relationLabel,
-    this.description = '',
     this.occasionKey = 'birthday',
     this.occasionDay = 17,
     this.occasionMonth = 7,
     this.occasionYear,
     this.includeYear = false,
-    this.coverMediaId,
-    this.coverLocalPath,
+    this.wishKind,
+    this.wishText = '',
+    this.wishFilePath,
+    this.wishFileName,
     this.unlockDate,
     this.unlockDateChosen = false,
-    this.unlockTime,
+    this.unlockTime = const MemoryTimeOfDay(0, 0),
     this.created,
     this.error,
     this.busy = false,
@@ -94,18 +95,48 @@ class CreateMemoryState {
   final PersonIdentity? recipient;
   final String? relationKey;
   final String? relationLabel;
-  final String description;
   final String occasionKey;
   final int occasionDay;
   final int occasionMonth;
   final int? occasionYear;
   final bool includeYear;
-  final String? coverMediaId;
 
-  /// The picked file's path, so the tile shows the photo before it uploads.
-  final String? coverLocalPath;
+  /// How the host wants to record their own first wish, chosen between naming
+  /// the memory and sealing it.
+  ///
+  /// Held on the draft rather than posted straight away because the capsule
+  /// does not exist yet — `/memories/:id/wishes` needs an id, and the id only
+  /// arrives when [CreateMemoryController.submit] creates it.
+  final MemoryWishKind? wishKind;
 
-  // Step 2 (`2198:73`)
+  /// The host's own first wish, composed while the capsule is still a draft.
+  ///
+  /// Optional on a media wish and required on a text one, exactly as the
+  /// contributor's compose screen has it — the label says "(Optional)", and
+  /// the rule has to match the label.
+  final String wishText;
+
+  /// The picked file, still on the device.
+  ///
+  /// Deliberately not uploaded yet. A memory is only real once the host sets
+  /// its unlock moment and confirms, and plenty of drafts are abandoned before
+  /// that — uploading on pick would leave those files in storage, paid for and
+  /// referenced by nothing. The bytes go up in [CreateMemoryController.submit],
+  /// which is the first moment they are certainly wanted.
+  final String? wishFilePath;
+
+  /// The file's real name, which the picker's own path may not carry — an
+  /// upload named wrongly is a `.m4a` stored as a JPEG.
+  final String? wishFileName;
+
+  /// Whether the composed wish is complete enough to preview.
+  bool get wishReady => switch (wishKind) {
+    null => false,
+    MemoryWishKind.text => wishText.trim().isNotEmpty,
+    _ => wishFilePath != null,
+  };
+
+  // Step 3 (`2198:73`)
   final DateTime? unlockDate;
 
   /// Whether [unlockDate] came from the host rather than from the occasion.
@@ -114,6 +145,14 @@ class CreateMemoryState {
   /// suggestion, while a date the host typed or picked is never overwritten.
   final bool unlockDateChosen;
 
+  /// When on the unlock day the capsule opens. Defaults to midnight, so the
+  /// memory is waiting the moment the day starts.
+  ///
+  /// A real value rather than a placeholder: the field used to *show* 12:00 AM
+  /// while holding null, which left Save & Continue disabled for a form that
+  /// looked complete — and the only way out was to tap the picker and choose
+  /// the time it was already displaying. Still fully editable; this only
+  /// decides where the picker starts.
   final MemoryTimeOfDay? unlockTime;
 
   final MemoryCapsule? created;
@@ -136,7 +175,6 @@ class CreateMemoryState {
     if (title.trim().isEmpty) MemoryField.title,
     if (recipient == null) MemoryField.recipient,
     if (relationKey == null) MemoryField.relation,
-    if (description.trim().isEmpty) MemoryField.description,
   ];
 
   bool get step1Complete => missingStep1.isEmpty;
@@ -202,14 +240,16 @@ class CreateMemoryState {
     PersonIdentity? recipient,
     String? relationKey,
     String? relationLabel,
-    String? description,
     String? occasionKey,
     int? occasionDay,
     int? occasionMonth,
     int? occasionYear,
     bool? includeYear,
-    String? coverMediaId,
-    String? coverLocalPath,
+    MemoryWishKind? wishKind,
+    String? wishText,
+    String? wishFilePath,
+    String? wishFileName,
+    bool clearWishMedia = false,
     DateTime? unlockDate,
     bool? unlockDateChosen,
     MemoryTimeOfDay? unlockTime,
@@ -224,14 +264,15 @@ class CreateMemoryState {
     recipient: recipient ?? this.recipient,
     relationKey: relationKey ?? this.relationKey,
     relationLabel: relationLabel ?? this.relationLabel,
-    description: description ?? this.description,
     occasionKey: occasionKey ?? this.occasionKey,
     occasionDay: occasionDay ?? this.occasionDay,
     occasionMonth: occasionMonth ?? this.occasionMonth,
     occasionYear: occasionYear ?? this.occasionYear,
     includeYear: includeYear ?? this.includeYear,
-    coverMediaId: coverMediaId ?? this.coverMediaId,
-    coverLocalPath: coverLocalPath ?? this.coverLocalPath,
+    wishKind: wishKind ?? this.wishKind,
+    wishText: wishText ?? this.wishText,
+    wishFilePath: clearWishMedia ? null : (wishFilePath ?? this.wishFilePath),
+    wishFileName: clearWishMedia ? null : (wishFileName ?? this.wishFileName),
     unlockDate: clearUnlockDate ? null : (unlockDate ?? this.unlockDate),
     unlockDateChosen: unlockDateChosen ?? this.unlockDateChosen,
     unlockTime: unlockTime ?? this.unlockTime,
@@ -262,9 +303,6 @@ class CreateMemoryController extends Notifier<CreateMemoryState> {
   void setRelation(String key, String label) =>
       state = state.copyWith(relationKey: key, relationLabel: label);
 
-  void setDescription(String value) =>
-      state = state.copyWith(description: value);
-
   void setOccasion(String key) => state = state.copyWith(occasionKey: key);
 
   void setOccasionDay(int day) => state = state.copyWith(occasionDay: day);
@@ -276,8 +314,23 @@ class CreateMemoryController extends Notifier<CreateMemoryState> {
 
   void setIncludeYear(bool value) => state = state.copyWith(includeYear: value);
 
-  void setCover({required String mediaId, required String localPath}) =>
-      state = state.copyWith(coverMediaId: mediaId, coverLocalPath: localPath);
+  /// Picks how the host will record their wish.
+  ///
+  /// Changing the kind drops whatever was picked for the previous one — a
+  /// video left behind on a wish that is now a voice note would be uploaded,
+  /// paid for, and never shown.
+  void setWishKind(MemoryWishKind value) {
+    if (state.wishKind == value) return;
+    state = state.copyWith(wishKind: value, clearWishMedia: true);
+  }
+
+  void setWishText(String value) => state = state.copyWith(wishText: value);
+
+  /// Remembers the picked file. Nothing is uploaded until submit.
+  void setWishFile({required String path, required String name}) =>
+      state = state.copyWith(wishFilePath: path, wishFileName: name);
+
+  void clearWishMedia() => state = state.copyWith(clearWishMedia: true);
 
   void setUnlockDate(DateTime value) =>
       state = state.copyWith(unlockDate: value, unlockDateChosen: true);
@@ -313,6 +366,11 @@ class CreateMemoryController extends Notifier<CreateMemoryState> {
 
     state = state.copyWith(busy: true, clearError: true);
     try {
+      // The wish's bytes go up first, before anything is created. If the
+      // upload fails there is nothing to undo — better than a sealed capsule
+      // whose only wish never made it.
+      final wishMediaId = await _uploadWishMedia();
+
       final capsule = await ref
           .read(memoriesRepositoryProvider)
           .create(
@@ -324,16 +382,63 @@ class CreateMemoryController extends Notifier<CreateMemoryState> {
             // see kDefaultTimezone in the events create controller.
             timezone: kMemoryTimezone,
             relation: state.relationKey,
-            description: state.description.trim(),
             occasionDate: state.occasionDateValue,
             includeYear: state.includeYear,
-            coverMediaId: state.coverMediaId,
           );
+      await _postFirstWish(capsule.id, wishMediaId);
       state = state.copyWith(busy: false, created: capsule);
       return capsule;
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: _message(e));
       return null;
+    }
+  }
+
+  /// Adds the wish the host composed during creation, now that there is a
+  /// capsule to add it to.
+  ///
+  /// Deliberately does not fail the creation. The memory exists by this point
+  /// and is the thing the host asked for; losing the whole capsule because one
+  /// wish did not post would be a far worse outcome than a memory the host can
+  /// add a wish to from its own screen. The wish is kept on the draft so a
+  /// retry has something to send.
+  /// Uploads the file the host picked, at the moment it is certainly wanted.
+  ///
+  /// Nothing was sent while they were composing: a memory only becomes real
+  /// when its unlock moment is confirmed, and every abandoned draft before
+  /// that would otherwise have left a paid-for file referenced by nothing.
+  Future<String?> _uploadWishMedia() async {
+    final path = state.wishFilePath;
+    final name = state.wishFileName;
+    if (path == null || name == null) return null;
+
+    final media = await ref
+        .read(mediaRepositoryProvider)
+        .uploadFile(
+          file: XFile(path),
+          purpose: MediaPurpose.memoryWish,
+          // XFile's own name can be the picker's temp path, so the real one is
+          // handed over separately — otherwise a .m4a uploads as a JPEG.
+          fileName: name,
+        );
+    return media.id;
+  }
+
+  Future<void> _postFirstWish(String capsuleId, String? mediaId) async {
+    final kind = state.wishKind;
+    if (kind == null || !state.wishReady) return;
+
+    try {
+      await ref
+          .read(memoriesRepositoryProvider)
+          .addWish(
+            capsuleId,
+            kind: kind,
+            text: state.wishText.trim().isEmpty ? null : state.wishText.trim(),
+            mediaId: mediaId,
+          );
+    } on ApiException catch (e) {
+      debugPrint('First wish failed for $capsuleId: ${e.message}');
     }
   }
 

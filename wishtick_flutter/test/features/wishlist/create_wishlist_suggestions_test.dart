@@ -56,6 +56,7 @@ void main() {
   // asterisk, so no plain Text reads exactly 'Wishlist Name'. The name field
   // is the first field on the screen.
   Finder nameField() => find.byType(TextFormField).first;
+  Finder occasionField() => find.byType(TextFormField).at(1);
 
   testWidgets('typing a name offers the WishMates it could be', (tester) async {
     await pump(tester);
@@ -70,7 +71,7 @@ void main() {
     expect(find.text('Priyal Sharma'), findsNothing);
   });
 
-  testWidgets('picking one names the list after them and links it', (
+  testWidgets('picking one puts their name in the field, with no chip', (
     tester,
   ) async {
     await pump(tester);
@@ -79,18 +80,36 @@ void main() {
     await tester.tap(find.text('Siya Kapoor'));
     await tester.pumpAndSettle();
 
-    // Filled, and the link is said out loud with a way to undo it.
     expect(
       tester.widget<TextFormField>(nameField()).controller!.text,
       'Siya Kapoor',
     );
-    expect(find.text('For Siya Kapoor'), findsOneWidget);
-    // The suggestion rows give way to the pill.
+    // No chip beside the field: one read as though a second WishMate could be
+    // added next.
+    expect(find.byType(InputChip), findsNothing);
+    expect(find.textContaining('For Siya'), findsNothing);
+    // And the rows step aside once one is chosen.
     expect(find.widgetWithText(ListTile, 'Siya Kapoor'), findsNothing);
   });
 
+  // The link is invisible now, so this is what tells it apart: a typed name is
+  // *not* a link, and the rows stay up offering to make one.
+  //
+  // A prefix, not the whole name: matching is per word, so "Siya Kapoor"
+  // matches no single word and would offer nothing for the wrong reason.
+  testWidgets('a typed name is not a link, and still offers one', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.enterText(nameField(), 'siya');
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(ListTile, 'Siya Kapoor'), findsOneWidget);
+  });
+
   // "Camping gear" quietly still linked to Siya is the stale link nobody
-  // notices until it is wrong.
+  // notices until it is wrong. With the chip gone the rows coming back are how
+  // you can see the link was dropped.
   testWidgets('editing the name away from theirs drops the link', (
     tester,
   ) async {
@@ -99,30 +118,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Siya Kapoor'));
     await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Siya Kapoor'), findsNothing);
 
-    await tester.enterText(nameField(), 'Camping gear');
+    await tester.enterText(nameField(), 'siya');
     await tester.pumpAndSettle();
 
-    expect(find.text('For Siya Kapoor'), findsNothing);
-  });
-
-  testWidgets('the cross on the pill unlinks without clearing the name', (
-    tester,
-  ) async {
-    await pump(tester);
-    await tester.enterText(nameField(), 'si');
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Siya Kapoor'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('Unlink'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('For Siya Kapoor'), findsNothing);
-    expect(
-      tester.widget<TextFormField>(nameField()).controller!.text,
-      'Siya Kapoor',
-    );
+    expect(find.widgetWithText(ListTile, 'Siya Kapoor'), findsOneWidget);
   });
 
   testWidgets('a name that matches nobody is still a fine name', (
@@ -134,26 +135,98 @@ void main() {
 
     expect(find.widgetWithText(ListTile, 'Siya Kapoor'), findsNothing);
     expect(find.widgetWithText(ListTile, 'Priyal Sharma'), findsNothing);
-    expect(find.textContaining('For '), findsNothing);
   });
 
-  // Only while typing, right under the field: no standing block of every
-  // occasion there is.
-  testWidgets('occasion suggestions appear as you type and fill the field', (
+  // Images with labels, as Home draws them, right under the field.
+  testWidgets('offers the occasions as a grid of pictures', (tester) async {
+    await pump(tester);
+
+    expect(find.text('Birthday'), findsOneWidget);
+    expect(find.text('Anniversary'), findsOneWidget);
+    // An action on Home, not an occasion a wishlist could be for.
+    expect(find.text('Custom Events'), findsNothing);
+  });
+
+  testWidgets('tapping an occasion fills the field', (tester) async {
+    await pump(tester);
+
+    await tester.tap(find.text('Anniversary'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextFormField>(occasionField()).controller!.text,
+      'Anniversary',
+    );
+  });
+
+  testWidgets('typing narrows the grid, and free text is still allowed', (
     tester,
   ) async {
     await pump(tester);
-    final occasion = find.widgetWithText(TextFormField, 'Occasion (Optional)');
 
+    await tester.enterText(occasionField(), 'wed');
+    await tester.pumpAndSettle();
+    expect(find.text('Wedding'), findsOneWidget);
     expect(find.text('Birthday'), findsNothing);
 
-    await tester.enterText(occasion, 'bir');
+    // A reason to give a gift that the taxonomy has never heard of.
+    await tester.enterText(occasionField(), 'Passed the bar');
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ListTile, 'Birthday'), findsOneWidget);
+    expect(find.text('Wedding'), findsNothing);
+    expect(
+      tester.widget<TextFormField>(occasionField()).controller!.text,
+      'Passed the bar',
+    );
+  });
 
-    await tester.tap(find.text('Birthday'));
+  testWidgets('occasion is required now', (tester) async {
+    await pump(tester);
+
+    await tester.tap(find.text('Save Wishlist'));
     await tester.pumpAndSettle();
-    expect(tester.widget<TextFormField>(occasion).controller!.text, 'Birthday');
+
+    expect(find.text('Please choose an occasion'), findsOneWidget);
+  });
+
+  // Showing the message is not the same as refusing to save. Edit mode fills
+  // every other field from the list being edited, so occasion is the only
+  // thing missing — nothing else can mask a guard that is not there.
+  testWidgets('a missing occasion actually blocks the save', (tester) async {
+    tester.view
+      ..physicalSize = const Size(393, 1800)
+      ..devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final repo = FakeWishlistRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        key: UniqueKey(),
+        overrides: [
+          wishlistRepositoryProvider.overrideWithValue(repo),
+          wishmatesRepositoryProvider.overrideWithValue(
+            FakeWishmatesRepository(mates: const []),
+          ),
+          onboardingRepositoryProvider.overrideWithValue(
+            FakeOnboardingRepository(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: CreateWishlistScreen(
+            // buildWishlist leaves occasionLabel null; the cover fills _cover.
+            editing: buildWishlist(id: 'wl_1', coverUrl: 'https://x/cover.jpg'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 'Save Changes' in edit mode, not 'Save Wishlist'.
+    await tester.tap(find.text('Save Changes'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Please choose an occasion'), findsOneWidget);
+    expect(repo.updateCalls, isEmpty);
   });
 
   testWidgets('the field is who the list is for', (tester) async {

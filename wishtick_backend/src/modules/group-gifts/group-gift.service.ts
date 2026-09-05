@@ -29,6 +29,8 @@ import {
   type WishlistItemDocument,
 } from 'src/modules/wishlists/schemas/wishlist-item.schema';
 import { WishlistItemStatus } from 'src/modules/wishlists/wishlist.types';
+import { ParticipantsService } from 'src/modules/wishlists/participants.service';
+import { ParticipantRole } from 'src/modules/wishlists/wishlist.types';
 import { WishlistsService } from 'src/modules/wishlists/wishlists.service';
 import type { OpenGraphPreview } from 'src/modules/wishlists/wishlist.views';
 import {
@@ -68,6 +70,11 @@ import {
 } from './group-gift.types';
 import { Contribution, type ContributionDocument } from './schemas/contribution.schema';
 import { GroupGift, type GroupGiftDocument } from './schemas/group-gift.schema';
+import {
+  GroupGiftInvite,
+  GroupGiftInviteStatus,
+  type GroupGiftInviteDocument,
+} from './schemas/group-gift-invite.schema';
 
 // Same unambiguous 16-char alphabet as wishlist/event share slugs.
 const generateSlug = customAlphabet('23456789abcdefghijkmnpqrstuvwxyz', 16);
@@ -94,6 +101,10 @@ export class GroupGiftService {
   constructor(
     @InjectModel(GroupGift.name) private readonly groupGiftModel: Model<GroupGiftDocument>,
     @InjectModel(Contribution.name) private readonly contributionModel: Model<ContributionDocument>,
+    // An invitation is a claim on a group gift too: it decides what shows on
+    // the invitee's Home, and paying against one answers it.
+    @InjectModel(GroupGiftInvite.name)
+    private readonly inviteModel: Model<GroupGiftInviteDocument>,
     @InjectModel(WishlistItem.name) private readonly itemModel: Model<WishlistItemDocument>,
     @InjectConnection() private readonly connection: Connection,
     private readonly status: GiftStatusService,
@@ -101,6 +112,7 @@ export class GroupGiftService {
     private readonly locks: LockService,
     private readonly access: AccessPolicyService,
     private readonly wishlists: WishlistsService,
+    private readonly participants: ParticipantsService,
     private readonly users: UsersService,
     @InjectModel(UserProfile.name)
     private readonly profiles: Model<UserProfileDocument>,
@@ -355,6 +367,7 @@ export class GroupGiftService {
     }
 
     const gift = await this.loadOrFail(groupGiftId);
+    await this.acceptPendingInvite(gift, userId);
     await this.authorizeParticipation(gift, userId);
 
     // Fast path for a durable replay (Redis flushed between retries): the row is
@@ -1095,12 +1108,25 @@ export class GroupGiftService {
       .distinct('groupGiftId')
       .exec();
 
+    // Being asked counts as taking part until you say otherwise: an invitee
+    // sees the same chip-in card the members see, which is what the invitation
+    // is for. Declining drops it — the row stops matching, so the card leaves
+    // their Home and does not come back.
+    const invitedIds = await this.inviteModel
+      .find({
+        invitedUserId: _userId,
+        status: { $in: [GroupGiftInviteStatus.PENDING, GroupGiftInviteStatus.ACCEPTED] },
+      })
+      .distinct('groupGiftId')
+      .exec();
+
     const gifts = await this.groupGiftModel
       .find({
         $or: [
           { initiatorId: _userId },
           { participantIds: _userId },
           ...(contributedIds.length > 0 ? [{ _id: { $in: contributedIds } }] : []),
+          ...(invitedIds.length > 0 ? [{ _id: { $in: invitedIds } }] : []),
         ],
         $nor: [
           {
@@ -1336,6 +1362,42 @@ export class GroupGiftService {
     if (!decision.canGift) {
       throw new AppException(ErrorCode.FORBIDDEN, 'You cannot gift from this wishlist', 403);
     }
+  }
+
+  /**
+   * Paying is answering.
+   *
+   * The invitation screen offers "Contribute to Gift" where a bare Accept used
+   * to be: someone putting money in has plainly said yes, and asking them to
+   * say it a second time would leave invitations sitting pending behind gifts
+   * that had already been paid for.
+   *
+   * Runs *before* the access check because accepting is what grants the
+   * access — on a private list the invitee cannot gift until they hold a role
+   * on it. Same two steps `GroupGiftInvitesService.respond` takes, minus the
+   * join: the contribution itself decides membership, and does not add an
+   * anonymous contributor to the visible participant list.
+   *
+   * A no-op for anyone without a pending invitation, which is most people.
+   */
+  private async acceptPendingInvite(gift: GroupGiftDocument, userId: string): Promise<void> {
+    const invite = await this.inviteModel
+      .findOne({
+        groupGiftId: gift._id,
+        invitedUserId: new Types.ObjectId(userId),
+        status: GroupGiftInviteStatus.PENDING,
+      })
+      .exec();
+    if (!invite) return;
+
+    await this.participants.addForInvite(
+      gift.wishlistId.toString(),
+      userId,
+      ParticipantRole.VIEWER,
+    );
+    invite.status = GroupGiftInviteStatus.ACCEPTED;
+    invite.respondedAt = new Date();
+    await invite.save();
   }
 
   private parseDeadline(raw?: string): Date | null {

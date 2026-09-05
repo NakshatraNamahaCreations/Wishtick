@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../home/presentation/home_controller.dart';
 import '../data/wishlist_repository.dart';
 import '../domain/wishlist.dart';
 import '../domain/wishlist_item.dart';
+import 'wishlists_controller.dart';
 
 enum ItemSort {
   position('Position'),
@@ -125,6 +127,7 @@ class WishlistDetailController extends Notifier<WishlistDetailState> {
         forUserId: forUserId,
       );
       state = state.copyWith(wishlist: updated, busy: false);
+      await _refreshTheListsThatShowIt();
       return true;
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: e.message);
@@ -138,6 +141,8 @@ class WishlistDetailController extends Notifier<WishlistDetailState> {
       state = state.copyWith(
         items: state.items?.where((i) => i.id != itemId).toList(),
       );
+      // The rows elsewhere carry an item count.
+      await _refreshTheListsThatShowIt();
       return true;
     } on ApiException catch (e) {
       state = state.copyWith(error: e.message);
@@ -148,11 +153,30 @@ class WishlistDetailController extends Notifier<WishlistDetailState> {
   Future<bool> archive() async {
     try {
       await _repo.archive(arg);
+      await _refreshTheListsThatShowIt();
       return true;
     } on ApiException catch (e) {
       state = state.copyWith(error: e.message);
       return false;
     }
+  }
+
+  /// Everywhere else this wishlist appears, told that it has changed.
+  ///
+  /// The Wishlist tab and Home each hold their own copy, fetched once and kept
+  /// for as long as the tab stays mounted — which is the whole session. A list
+  /// deleted here therefore stayed on both, and stayed tappable, until
+  /// something happened to reload them.
+  ///
+  /// Refreshed rather than invalidated: both notifiers build an empty state and
+  /// fill it from an `ensureLoaded` in their screen's `initState`, which does
+  /// not run a second time. Invalidating would empty them instead.
+  ///
+  /// Awaited so the caller pops onto a list that is already right, rather than
+  /// onto the deleted row disappearing under the reader's thumb.
+  Future<void> _refreshTheListsThatShowIt() async {
+    await ref.read(wishlistsProvider.notifier).refresh();
+    await ref.read(homeProvider.notifier).refresh();
   }
 }
 

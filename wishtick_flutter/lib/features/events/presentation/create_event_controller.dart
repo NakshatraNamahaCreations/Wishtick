@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// For XFile, which MediaRepository takes. cross_file is not a direct
+// dependency; image_picker re-exports it and is.
+import 'package:image_picker/image_picker.dart';
 
+import '../../../core/media/media_repository.dart';
 import '../../../core/network/api_exception.dart';
 import '../../auth/presentation/session_controller.dart';
 import '../data/events_repository.dart';
@@ -30,7 +34,27 @@ const kEventOccasions = <({String key, String label, EventType type})>[
 /// honest answer, and it matches the fallback the home feed already uses.
 const kDefaultTimezone = 'Asia/Kolkata';
 
-/// The draft an event is composed from, across both create steps.
+/// The invitation the host designed or picked, held until the event exists.
+///
+/// Bytes rather than a file: the designer produces a PNG in memory, and the
+/// upload screen already reads its pick into memory to enforce the size cap,
+/// so this is what both naturally have — and what the preview draws.
+@immutable
+class PendingInvitation {
+  const PendingInvitation({required this.bytes, required this.fileName});
+
+  final Uint8List bytes;
+
+  /// The name the upload is made under. `XFile.fromData` drops its `name` on
+  /// io, so without this an MP4 or a PDF would go up as a JPEG.
+  final String fileName;
+}
+
+/// The draft an event is composed from, across the create steps.
+///
+/// Everything — the person, the details, the invitation — stays here until
+/// [CreateEventController.publish]. Nothing exists on the server before that,
+/// so a host who backs out at any step has made nothing to clean up.
 @immutable
 class CreateEventState {
   const CreateEventState({
@@ -45,6 +69,8 @@ class CreateEventState {
     this.time,
     this.venue = '',
     this.description = '',
+    this.invitation,
+    this.inviteMediaId,
     this.created,
     this.error,
     this.busy = false,
@@ -102,6 +128,16 @@ class CreateEventState {
   final String venue;
   final String description;
 
+  /// The card the host designed or the file they picked, waiting for the
+  /// event it will be attached to. Null until the invitation step is done.
+  final PendingInvitation? invitation;
+
+  /// The server's id for [invitation] once it has gone up — kept so a retry
+  /// after a failed create does not upload the same bytes twice.
+  final String? inviteMediaId;
+
+  /// The event, once [CreateEventController.publish] has created it. Kept so
+  /// a retry after a failed publish does not create a second one.
   final WishtickEventDetail? created;
   final String? error;
   final bool busy;
@@ -148,6 +184,8 @@ class CreateEventState {
     TimeOfDayValue? time,
     String? venue,
     String? description,
+    PendingInvitation? invitation,
+    String? inviteMediaId,
     WishtickEventDetail? created,
     String? error,
     bool? busy,
@@ -155,6 +193,7 @@ class CreateEventState {
     bool clearDate = false,
     bool clearWishmate = false,
     bool clearRelation = false,
+    bool clearInviteMediaId = false,
   }) => CreateEventState(
     personName: personName ?? this.personName,
     forSelf: forSelf ?? this.forSelf,
@@ -167,6 +206,10 @@ class CreateEventState {
     time: time ?? this.time,
     venue: venue ?? this.venue,
     description: description ?? this.description,
+    invitation: invitation ?? this.invitation,
+    inviteMediaId: clearInviteMediaId
+        ? null
+        : (inviteMediaId ?? this.inviteMediaId),
     created: created ?? this.created,
     error: clearError ? null : (error ?? this.error),
     busy: busy ?? this.busy,
@@ -267,29 +310,81 @@ class CreateEventController extends Notifier<CreateEventState> {
     return "$person's ${state.occasion.label}";
   }
 
-  /// Creates the event as a **draft** — nothing is sent and no reminders are
-  /// scheduled until it is published, which happens after the invitation is
-  /// designed.
-  Future<WishtickEventDetail?> submit() async {
+  /// The card the designer exported, or the file the host picked.
+  ///
+  /// Replaces whatever was there, and forgets any upload of it: a host who
+  /// goes back and designs again means the new one, and a stale media id
+  /// would attach the old card to the event.
+  void setInvitation(Uint8List bytes, String fileName) =>
+      state = state.copyWith(
+        invitation: PendingInvitation(bytes: bytes, fileName: fileName),
+        clearInviteMediaId: true,
+        clearError: true,
+      );
+
+  /// Back to a blank wizard — once the event exists and the host has moved on
+  /// to sharing it. The provider is not auto-disposed, so without this the
+  /// next "Create Event" would open on the last one's details.
+  void reset() => state = const CreateEventState();
+
+  /// Creates the event — the first request that makes it exist — and
+  /// publishes it, in one go.
+  ///
+  /// Called from the preview, on the way to the share screen, and nowhere
+  /// earlier: until the host has seen the finished card there is no event on
+  /// the server, so there is no half-made draft for the home rail to show or
+  /// for them to have to delete after backing out.
+  ///
+  /// Three requests — upload the card, create with its id, publish — ordered
+  /// so a retry after a failure never makes a second event: the media id and
+  /// the created event are kept in the state, and the next call resumes from
+  /// whichever step failed.
+  ///
+  /// [wishlistId] is a list the host made on the way, linked to the event as
+  /// it is created.
+  Future<WishtickEventDetail?> publish({String? wishlistId}) async {
     if (!state.step2Complete || state.busy) return null;
     state = state.copyWith(busy: true, clearError: true);
     try {
-      final event = await ref
-          .read(eventsRepositoryProvider)
-          .create(
-            title: state.title.trim(),
-            type: state.occasion.type,
-            startsAt: state.startsAt!,
-            timezone: kDefaultTimezone,
-            description: state.description.trim(),
-            venue: state.venue.trim(),
-            // For the host's own event neither is sent: the server would
-            // otherwise store an empty name and a null relation as if they
-            // were answers.
-            personName: state.forSelf ? null : state.personName.trim(),
-            relation: state.forSelf ? null : state.relationKey,
-            forSelf: state.forSelf,
-          );
+      final repo = ref.read(eventsRepositoryProvider);
+      var event = state.created;
+      if (event == null) {
+        final mediaId = await _uploadInvitation();
+        event = await repo.create(
+          title: state.title.trim(),
+          type: state.occasion.type,
+          startsAt: state.startsAt!,
+          timezone: kDefaultTimezone,
+          description: state.description.trim(),
+          venue: state.venue.trim(),
+          // For the host's own event neither is sent: the server would
+          // otherwise store an empty name and a null relation as if they
+          // were answers.
+          personName: state.forSelf ? null : state.personName.trim(),
+          relation: state.forSelf ? null : state.relationKey,
+          forSelf: state.forSelf,
+          inviteMediaId: mediaId,
+          wishlistIds: wishlistId == null ? null : [wishlistId],
+          // Invite-only, not the server's default of private: the share
+          // screen this leads to hands out the event's link, and the server
+          // answers a private event's link with a 404 for everybody. Invite
+          // only is "invitees, plus anyone holding the link" — exactly the
+          // two ways the host is offered to invite people.
+          visibility: EventVisibility.inviteOnly,
+        );
+        state = state.copyWith(created: event);
+      } else if (wishlistId != null &&
+          !event.wishlistIds.contains(wishlistId)) {
+        // Created on an earlier attempt, before this wishlist existed.
+        event = await repo.update(
+          event.id,
+          wishlistIds: [...event.wishlistIds, wishlistId],
+        );
+        state = state.copyWith(created: event);
+      }
+      if (event.status == EventStatus.draft) {
+        event = await repo.publish(event.id);
+      }
       state = state.copyWith(busy: false, created: event);
       return event;
     } on ApiException catch (e) {
@@ -298,11 +393,32 @@ class CreateEventController extends Notifier<CreateEventState> {
     }
   }
 
+  /// The invitation's media id, uploading it if this is the first attempt.
+  Future<String?> _uploadInvitation() async {
+    final invitation = state.invitation;
+    if (invitation == null) return null;
+    final already = state.inviteMediaId;
+    if (already != null) return already;
+
+    final media = await ref
+        .read(mediaRepositoryProvider)
+        .uploadFile(
+          file: XFile.fromData(invitation.bytes, name: invitation.fileName),
+          purpose: MediaPurpose.eventInvite,
+          fileName: invitation.fileName,
+        );
+    state = state.copyWith(inviteMediaId: media.id);
+    return media.id;
+  }
+
   String _message(ApiException e) => switch (e.code) {
     'EVENT_LIMIT_REACHED' =>
       'You already have as many events as Wishtick allows. '
           'Finish or cancel one first.',
-    'VALIDATION_FAILED' => 'Check the date — an event has to be in the future.',
+    'VALIDATION_FAILED' || 'EVENT_DATE_IN_PAST' =>
+      'Check the date — an event has to be in the future.',
+    'MEDIA_TYPE_NOT_ALLOWED' =>
+      'That file cannot be used as an invitation. Pick a different one.',
     _ => e.message,
   };
 }

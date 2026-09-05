@@ -1,17 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/format/currency.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/network/idempotency_key.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
+import '../../home/presentation/home_controller.dart';
 import '../data/group_gift_repository.dart';
 import '../domain/group_gift.dart';
 import 'group_gift_invites_screen.dart';
+import 'widgets/contribute_sheet.dart';
 
 /// One invitation, with the gift behind it.
 final groupGiftInviteDetailProvider =
@@ -39,53 +44,111 @@ class _GroupGiftInviteDetailScreenState
     extends ConsumerState<GroupGiftInviteDetailScreen> {
   bool _busy = false;
 
-  Future<void> _respond(
-    GroupGiftInviteDetail detail, {
-    required bool accept,
-  }) async {
+  /// Paying, which is also how the invitation is accepted.
+  ///
+  /// The sheet opens here rather than on the group's own screen: the invitee
+  /// is not a member yet and, on a private list, cannot read the group at all
+  /// until they are. The server takes the contribution as the answer.
+  Future<void> _contribute(GroupGiftInviteDetail detail) async {
     if (_busy) return;
-    // Declining is the one that cannot be taken back — the invitation is gone
-    // and only the host can send another — so it asks first. Accepting is
-    // recoverable by leaving the group, and a confirm on both would train
-    // people to tap through the one that matters.
-    if (!accept && !await _confirmDecline(detail)) return;
+    final draft = await showContributeSheet(
+      context,
+      suggestedAmountsMinor: detail.suggestedAmountsMinor,
+    );
+    if (draft == null || !mounted) return;
 
     setState(() => _busy = true);
     try {
       await ref
           .read(groupGiftRepositoryProvider)
-          .respondToInvite(widget.inviteId, accept: accept);
+          .contribute(
+            detail.invite.groupGiftId,
+            amountMinor: draft.amountMinor,
+            message: draft.message,
+            // Minted per confirmed intent: a retry of *this* pledge must not
+            // become a second one.
+            idempotencyKey: newIdempotencyKey(),
+          );
       if (!mounted) return;
-      ref.invalidate(groupGiftInvitesProvider);
-      if (accept) {
-        // Into the group they just joined: the answer to yes is the page where
-        // they can put money in.
-        context.pushReplacement(AppRoutes.groupGift(detail.invite.groupGiftId));
-      } else {
-        // Back to the list — or *to* it, when this screen is the whole stack.
-        // A notification or a cold link can land here directly, and popping
-        // the only route throws "There is nothing to pop".
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go(AppRoutes.groupGiftInvites);
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Invitation declined')));
-      }
+      _refreshWhatThisChanged();
+      // The designed confirmation (`316:298`) — where to send the money is the
+      // one thing a contributor must not lose.
+      await context.push<void>(
+        AppRoutes.groupGiftContributed(detail.invite.groupGiftId),
+        extra: (
+          amountMinor: draft.amountMinor,
+          hostName: detail.hostName,
+          hostUpiId: detail.hostUpiId,
+        ),
+      );
     } on ApiException catch (e) {
       if (!mounted) return;
-      // The group can close, or the invitation be answered on another device,
-      // between the screen being drawn and the button being pressed.
-      ref.invalidate(groupGiftInviteDetailProvider(widget.inviteId));
-      ref.invalidate(groupGiftInvitesProvider);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      _showFailure(e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// "Not Interested? Decline Invitation".
+  ///
+  /// The one answer that cannot be taken back — the invitation is gone and
+  /// only the host can send another — so it asks first, and it is the only
+  /// action here that does.
+  Future<void> _decline(GroupGiftInviteDetail detail) async {
+    if (_busy || !await _confirmDecline(detail)) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(groupGiftRepositoryProvider)
+          .respondToInvite(widget.inviteId, accept: false);
+      if (!mounted) return;
+      _refreshWhatThisChanged();
+      _leave();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invitation declined')));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _showFailure(e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Home's chip-in rail carries this gift for as long as the invitation
+  /// stands, so both answers change what is on Home — not just this list.
+  ///
+  /// Home is *refreshed*, not invalidated: its notifier builds an empty state
+  /// and fills it from `ensureLoaded` in the screen's `initState`, which does
+  /// not run again while the tab stays mounted underneath. Invalidating it
+  /// would blank Home until a pull-to-refresh. The invitations list is a
+  /// FutureProvider that fetches in its own build, so it is the other way
+  /// round there.
+  void _refreshWhatThisChanged() {
+    ref.invalidate(groupGiftInvitesProvider);
+    unawaited(ref.read(homeProvider.notifier).refresh());
+  }
+
+  /// Back to the list — or *to* it, when this screen is the whole stack. A
+  /// notification or a cold link can land here directly, and popping the only
+  /// route throws "There is nothing to pop".
+  void _leave() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.groupGiftInvites);
+    }
+  }
+
+  void _showFailure(ApiException e) {
+    // The group can close, or the invitation be answered on another device,
+    // between the screen being drawn and the button being pressed.
+    ref.invalidate(groupGiftInviteDetailProvider(widget.inviteId));
+    ref.invalidate(groupGiftInvitesProvider);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(e.message)));
   }
 
   Future<bool> _confirmDecline(GroupGiftInviteDetail detail) async {
@@ -141,23 +204,38 @@ class _GroupGiftInviteDetailScreenState
           top: false,
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _respond(value, accept: false),
-                    child: const Text('Decline'),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _busy ? null : () => _contribute(value),
+                        child: const Text('Contribute to Gift'),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: ElevatedButton(
+                        // No answer at all: the invitation stays pending and
+                        // the card stays on Home, to be decided later.
+                        onPressed: _busy ? null : _leave,
+                        child: const Text('Maybe Later'),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _respond(value, accept: true),
-                    child: const Text('Accept'),
+                const SizedBox(height: AppSpacing.md),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _busy ? null : () => _decline(value),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colors.warning,
+                      side: BorderSide(color: colors.warning),
+                    ),
+                    child: const Text('Not Interested? Decline Invitation'),
                   ),
                 ),
               ],
@@ -216,6 +294,16 @@ class _Body extends StatelessWidget {
           '${detail.invite.inviterName} asked you to chip in',
           style: context.text.bodyMedium?.copyWith(color: colors.textSecondary),
         ),
+        if (_deadlineLabel(detail) case final label?) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            label,
+            style: context.text.bodyMedium?.copyWith(
+              color: colors.warning,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.xl),
         _Progress(detail: detail),
         const SizedBox(height: AppSpacing.xl),
@@ -275,6 +363,18 @@ class _Body extends StatelessWidget {
     );
   }
 }
+
+/// How long is left to pay, in the words the design uses (`316:536` shows
+/// "2 days left"). Null when the collection has no deadline, and when it has
+/// already passed — a negative countdown is worse than none.
+String? _deadlineLabel(GroupGiftInviteDetail detail) =>
+    switch (detail.daysToDeadline()) {
+      null => null,
+      < 0 => null,
+      0 => 'Last day to chip in',
+      1 => '1 day left',
+      final days => '$days days left',
+    };
 
 /// Total Goal / Collected / Left to go, and the bar.
 class _Progress extends StatelessWidget {

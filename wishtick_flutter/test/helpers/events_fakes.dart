@@ -3,7 +3,33 @@ import 'package:wishtick_flutter/features/events/domain/event.dart';
 import 'package:wishtick_flutter/features/events/domain/event_wishlist_request.dart';
 import 'package:wishtick_flutter/features/events/domain/invite_template.dart';
 import 'package:wishtick_flutter/features/events/domain/invited_event.dart';
+// The guest-side event uses the public invite's own enums, which are distinct
+// types from `event.dart`'s of the same names.
+import 'package:wishtick_flutter/features/events/domain/public_invite.dart'
+    as guest;
 import 'package:wishtick_flutter/features/wishmates/domain/wishmate.dart';
+
+/// An event somebody else invited you to, as the Invites tab lists it.
+InvitedEvent buildInvitedEvent({
+  String id = 'evt_9',
+  String title = "Rohan's Housewarming",
+  String? inviteMediaUrl,
+  String? coverUrl,
+  String? hostName = 'Rohan',
+  guest.RsvpResponse myRsvp = guest.RsvpResponse.pending,
+  String? inviteToken = 'tok_9',
+}) => InvitedEvent(
+  id: id,
+  title: title,
+  type: guest.EventType.generic,
+  startsAt: DateTime.now().add(const Duration(days: 3)),
+  timezone: 'Asia/Kolkata',
+  coverUrl: coverUrl,
+  inviteMediaUrl: inviteMediaUrl,
+  hostName: hostName,
+  myRsvp: myRsvp,
+  inviteToken: inviteToken,
+);
 
 WishtickEventDetail buildEvent({
   String id = 'evt_1',
@@ -17,13 +43,19 @@ WishtickEventDetail buildEvent({
   List<String> wishlistIds = const [],
   RsvpCounts? rsvpCounts,
   bool forSelf = false,
+  // False for a guest's view: the link is host-only, and its absence is what
+  // tells a screen it cannot manage the event.
+  bool shareable = true,
+  // Private is the server's default, and the one whose link admits nobody.
+  EventVisibility visibility = EventVisibility.private,
+  int pendingWishlistCount = 0,
 }) => WishtickEventDetail(
   id: id,
   title: title,
   type: type,
   startsAt: DateTime.utc(2026, 7, 19, 14, 30),
   timezone: 'Asia/Kolkata',
-  visibility: EventVisibility.private,
+  visibility: visibility,
   status: status,
   wishlistIds: wishlistIds,
   createdAt: DateTime.utc(2026, 7, 1),
@@ -35,10 +67,10 @@ WishtickEventDetail buildEvent({
   inviteTemplate: inviteTemplate,
   inviteMediaUrl: inviteMediaUrl,
   forSelf: forSelf,
-  share: const EventShare(
-    slug: 'siya-24th',
-    url: 'https://wt.test/e/siya-24th',
-  ),
+  pendingWishlistCount: pendingWishlistCount,
+  share: shareable
+      ? const EventShare(slug: 'siya-24th', url: 'https://wt.test/e/siya-24th')
+      : null,
 );
 
 EventInvite buildInviteRow({
@@ -112,15 +144,20 @@ class FakeEventsRepository implements EventsRepository {
     List<EventInvite>? invites,
     WishtickEventDetail? event,
     List<WishtickEventDetail>? hosted,
+    List<InvitedEvent>? invited,
   }) : guests = invites ?? [],
        event = event ?? buildEvent(),
-       hosted = hosted ?? [event ?? buildEvent()];
+       hosted = hosted ?? [event ?? buildEvent()],
+       invited = invited ?? [];
 
   WishtickEventDetail event;
 
   /// What "My Events" lists. Separate from [event], which is the single
   /// capsule the detail screens read.
   List<WishtickEventDetail> hosted;
+
+  /// What the Invites tab lists — other people's events.
+  List<InvitedEvent> invited;
 
   /// Not named `invites` — that collides with `EventsRepository.invites()`.
   List<EventInvite> guests;
@@ -152,10 +189,13 @@ class FakeEventsRepository implements EventsRepository {
     return hosted;
   }
 
-  /// Empty by default: these tests exercise the host's side, and inventing an
+  /// Empty by default: most tests exercise the host's side, and inventing an
   /// invitation would put a guest rail in front of screens that have none.
   @override
-  Future<List<InvitedEvent>> listInvited() async => const [];
+  Future<List<InvitedEvent>> listInvited() async {
+    _maybeThrow();
+    return invited;
+  }
 
   @override
   Future<WishtickEventDetail> get(String id) async {
@@ -177,6 +217,7 @@ class FakeEventsRepository implements EventsRepository {
     bool? forSelf,
     EventVisibility? visibility,
     String? coverMediaId,
+    String? inviteMediaId,
     List<String>? wishlistIds,
     InviteTemplateChoice? inviteTemplate,
   }) async {
@@ -191,9 +232,16 @@ class FakeEventsRepository implements EventsRepository {
       'personName': personName,
       'relation': relation,
       'forSelf': forSelf,
+      'inviteMediaId': inviteMediaId,
+      'wishlistIds': wishlistIds,
+      'visibility': visibility,
     });
     return event;
   }
+
+  /// Thrown by [publish] alone, so a test can fail the last step of a create
+  /// and watch the retry pick up from there rather than start over.
+  Object? publishFailure;
 
   @override
   Future<WishtickEventDetail> update(
@@ -221,6 +269,7 @@ class FakeEventsRepository implements EventsRepository {
       'inviteMediaId': inviteMediaId,
       'clearInviteMedia': clearInviteMedia,
       'forSelf': forSelf,
+      'wishlistIds': wishlistIds,
       'templateId': inviteTemplate?.templateId,
       'colorVariant': inviteTemplate?.colorVariant,
     });
@@ -229,6 +278,8 @@ class FakeEventsRepository implements EventsRepository {
 
   @override
   Future<WishtickEventDetail> publish(String id) async {
+    final f = publishFailure;
+    if (f != null) throw f;
     publishCalls.add(id);
     return event;
   }
@@ -336,6 +387,28 @@ class FakeEventsRepository implements EventsRepository {
     deletedIds.addAll(ids);
     hosted = hosted.where((e) => !ids.contains(e.id)).toList();
     return ids.length;
+  }
+
+  /// Every invite-by-phone, as (eventId, numbers) — so a test can assert that
+  /// what left the app was E.164 numbers rather than whatever the address
+  /// book had written down.
+  final phoneInviteCalls = <(String, List<String>)>[];
+
+  @override
+  Future<BulkInviteResult> inviteByPhone(
+    String eventId,
+    List<String> phones,
+  ) async {
+    _maybeThrow();
+    phoneInviteCalls.add((eventId, phones));
+    return BulkInviteResult(
+      created: [
+        for (final _ in phones)
+          buildInviteRow(id: 'i_${phoneInviteCalls.length}', name: 'Invited'),
+      ],
+      duplicates: 0,
+      skipped: 0,
+    );
   }
 
   @override

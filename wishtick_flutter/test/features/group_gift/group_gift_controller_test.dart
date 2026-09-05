@@ -26,32 +26,62 @@ void main() {
   tearDown(() => container.dispose());
 
   group('CreateGroupGiftController', () {
-    test('needs a title, a UPI ID and a goal before it can submit', () {
+    /// A date the picker would allow: the server refuses one already past.
+    final aDate = DateTime.now().add(const Duration(days: 7));
+
+    test(
+      'needs a title, a UPI ID, a goal and a deadline before it can submit',
+      () {
+        final notifier = container.read(
+          createGroupGiftProvider('item_1').notifier,
+        );
+        expect(
+          container.read(createGroupGiftProvider('item_1')).canSubmit,
+          isFalse,
+        );
+
+        notifier.primeGoal(kItemMinor);
+        expect(
+          container.read(createGroupGiftProvider('item_1')).canSubmit,
+          isFalse,
+        );
+
+        notifier.setTitle("Siya's birthday gift");
+        // Still not submittable: nobody can be asked to pay into a blank UPI ID.
+        expect(
+          container.read(createGroupGiftProvider('item_1')).canSubmit,
+          isFalse,
+        );
+
+        notifier.setUpiId('rohanr1@okaxis');
+        // And still not: the chip-in card and the invitation both count down to
+        // a deadline, and neither has anything to say without one.
+        expect(
+          container.read(createGroupGiftProvider('item_1')).canSubmit,
+          isFalse,
+        );
+
+        notifier.setDeadline(aDate);
+        expect(
+          container.read(createGroupGiftProvider('item_1')).canSubmit,
+          isTrue,
+        );
+      },
+    );
+
+    // The picker hands back midnight, and the server refuses a deadline that
+    // has already passed — so a date chosen today would come back rejected for
+    // being nine hours ago.
+    test('a deadline is stored as the end of the day chosen', () {
       final notifier = container.read(
         createGroupGiftProvider('item_1').notifier,
       );
-      expect(
-        container.read(createGroupGiftProvider('item_1')).canSubmit,
-        isFalse,
-      );
 
-      notifier.primeGoal(kItemMinor);
-      expect(
-        container.read(createGroupGiftProvider('item_1')).canSubmit,
-        isFalse,
-      );
+      notifier.setDeadline(DateTime(2026, 9, 20));
 
-      notifier.setTitle("Siya's birthday gift");
-      // Still not submittable: nobody can be asked to pay into a blank UPI ID.
       expect(
-        container.read(createGroupGiftProvider('item_1')).canSubmit,
-        isFalse,
-      );
-
-      notifier.setUpiId('rohanr1@okaxis');
-      expect(
-        container.read(createGroupGiftProvider('item_1')).canSubmit,
-        isTrue,
+        container.read(createGroupGiftProvider('item_1')).deadline,
+        DateTime(2026, 9, 20, 23, 59, 59),
       );
     });
 
@@ -121,6 +151,7 @@ void main() {
         notifier.setTitle("  Siya's birthday gift  ");
         notifier.setUpiId(' rohanr1@okaxis ');
         notifier.setMode(ContributionMode.custom);
+        notifier.setDeadline(DateTime(2026, 9, 20));
 
         await notifier.submit();
         await notifier.submit();
@@ -131,6 +162,10 @@ void main() {
         expect(
           repo.createArgs.first['contributionMode'],
           ContributionMode.custom,
+        );
+        expect(
+          repo.createArgs.first['deadline'],
+          DateTime(2026, 9, 20, 23, 59, 59),
         );
         // A retry of the same intent must not claim the item twice.
         expect(
@@ -151,6 +186,7 @@ void main() {
       notifier.primeGoal(kItemMinor);
       notifier.setTitle('t');
       notifier.setUpiId('a@b');
+      notifier.setDeadline(aDate);
 
       expect(await notifier.submit(), isNull);
       expect(

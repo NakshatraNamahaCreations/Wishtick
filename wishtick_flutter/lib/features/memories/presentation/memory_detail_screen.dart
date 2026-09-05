@@ -10,7 +10,6 @@ import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
-import '../data/memories_repository.dart';
 import '../domain/memory.dart';
 import 'memory_providers.dart';
 import 'widgets/memory_cards.dart';
@@ -31,8 +30,6 @@ class MemoryDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _MemoryDetailScreenState extends ConsumerState<MemoryDetailScreen> {
-  bool _busy = false;
-
   Future<void> _share(MemoryCapsule capsule) async {
     final url = capsule.share?.url;
     if (url == null) return;
@@ -45,46 +42,6 @@ class _MemoryDetailScreenState extends ConsumerState<MemoryDetailScreen> {
         subject: capsule.title,
       ),
     );
-  }
-
-  Future<void> _unlockNow(MemoryCapsule capsule) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Open it now?'),
-        content: Text(
-          'Everyone will be able to read all ${capsule.wishCount} '
-          '${capsule.wishCount == 1 ? 'wish' : 'wishes'} straight away, and '
-          'nobody can add another. This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Open now'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _busy = true);
-    try {
-      await ref.read(memoriesRepositoryProvider).unlockNow(widget.memoryId);
-      ref.invalidate(memoryProvider(widget.memoryId));
-      ref.invalidate(myMemoriesProvider);
-      if (!mounted) return;
-      context.go(AppRoutes.memoryExperience(widget.memoryId));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open it. Try again.')),
-      );
-    }
   }
 
   @override
@@ -132,15 +89,6 @@ class _MemoryDetailScreenState extends ConsumerState<MemoryDetailScreen> {
                 color: colors.textSecondary,
               ),
             ),
-            if (memory.description != null) ...[
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                memory.description!,
-                style: context.text.bodyMedium?.copyWith(
-                  color: colors.textSecondary,
-                ),
-              ),
-            ],
             const SizedBox(height: AppSpacing.xl),
             Align(
               alignment: Alignment.centerLeft,
@@ -155,9 +103,14 @@ class _MemoryDetailScreenState extends ConsumerState<MemoryDetailScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
+                  // Straight to "How would you like to add the wish?" — the
+                  // kind is chosen first now, so the compose screen no longer
+                  // has to offer it again.
                   onPressed: () =>
-                      context.push<void>(AppRoutes.memoryAddWish(memory.id)),
-                  child: const Text('Add a Wish'),
+                      context.push<void>(AppRoutes.memoryWishKind(memory.id)),
+                  child: Text(
+                    memory.hasContributed ? 'Add Another Wish' : 'Add a Wish',
+                  ),
                 ),
               )
             else
@@ -180,13 +133,22 @@ class _MemoryDetailScreenState extends ConsumerState<MemoryDetailScreen> {
                 ),
               ),
             ],
-            if (memory.isHost && !memory.isOpen) ...[
+            // Reading back your own wishes, rather than forcing the capsule
+            // open to check what is in it. "Open it now" used to sit here: it
+            // revealed everyone's wishes to everyone, immediately and
+            // irreversibly, which is a heavy price for "what did I write?".
+            if (!memory.isOpen && memory.hasContributed) ...[
               const SizedBox(height: AppSpacing.md),
               SizedBox(
                 width: double.infinity,
-                child: TextButton(
-                  onPressed: _busy ? null : () => _unlockNow(memory),
-                  child: const Text('Open it now'),
+                child: OutlinedButton(
+                  onPressed: () =>
+                      context.push<void>(AppRoutes.memoryMyWishes(memory.id)),
+                  child: Text(
+                    memory.myWishCount == 1
+                        ? 'Preview my wish'
+                        : 'Preview my ${memory.myWishCount} wishes',
+                  ),
                 ),
               ),
             ],

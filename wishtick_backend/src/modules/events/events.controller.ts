@@ -28,6 +28,7 @@ import {
   BulkInviteDto,
   CreateEventDto,
   ExportGuestListQueryDto,
+  InviteByPhoneDto,
   ListTemplatesQueryDto,
   PreviewInviteDto,
   SubmitEventWishlistDto,
@@ -41,6 +42,8 @@ import { InvitesService, type BulkInviteResult } from './invites.service';
 import { GuestListExportService, GuestListFormat } from './guest-list-export.service';
 import { templatesForType, type InviteTemplate } from './invite-templates.data';
 import { InviteNotificationsService } from './invite-notifications.service';
+import type { EventInviteDocument } from './schemas/event-invite.schema';
+import type { EventDocument } from './schemas/event.schema';
 
 /** Each invite is a real email or SMS with a real cost. */
 const INVITE_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
@@ -95,9 +98,17 @@ export class EventsController {
   @ApiResponseDoc({
     status: 404,
     description:
-      'EVENT_NOT_FOUND — unknown slug, a draft, cancelled, private, or an invite the host revoked. ' +
+      'EVENT_NOT_FOUND — unknown slug, a draft, cancelled, or an invite the host revoked. ' +
       'Deliberately indistinguishable: the slug is public and a stranger learns nothing beyond ' +
       '“not for you”.',
+  })
+  @ApiResponseDoc({
+    status: 403,
+    description:
+      'EVENT_INVITE_REQUIRED — the event is private and the caller is not on its guest list. ' +
+      'Named rather than folded into the 404 because a host now sends this link to phone ' +
+      'numbers, and somebody who was sent it needs to be told why it will not open. A private ' +
+      'event opens only for a *verified* number the host invited.',
   })
   @ApiResponseDoc({ status: 400, description: 'CANNOT_INVITE_HOST — you are hosting this one' })
   async joinBySlug(
@@ -120,25 +131,32 @@ export class EventsController {
   @ApiOperation({ summary: "Events you've been invited to" })
   async listInvited(@CurrentUser('id') userId: string): Promise<InvitedEventView[]> {
     const invites = await this.invites.listInvitesForUser(userId);
-    const views: InvitedEventView[] = [];
+    const found: Array<{ invite: EventInviteDocument; event: EventDocument }> = [];
 
     for (const invite of invites) {
       const event = await this.events.findOrFail(invite.eventId.toString()).catch(() => null);
-      if (!event) continue;
-      views.push({
-        id: event._id.toString(),
-        title: event.title,
-        type: event.type,
-        startsAt: event.startsAt,
-        timezone: event.timezone,
-        coverUrl: event.coverUrl,
-        hostName: null,
-        myRsvp: invite.rsvp,
-        // Their own token, so the app can deep-link them into the invite.
-        inviteToken: invite.token,
-      });
+      if (event) found.push({ invite, event });
     }
-    return views;
+
+    // Who is hosting, in one lookup for the whole list rather than one per row.
+    const hosts = await this.invites.hostNamesFor(found.map((f) => f.event.hostId.toString()));
+
+    return found.map(({ invite, event }) => ({
+      id: event._id.toString(),
+      title: event.title,
+      type: event.type,
+      startsAt: event.startsAt,
+      timezone: event.timezone,
+      coverUrl: event.coverUrl,
+      // The same invitation the guest's invite page shows. Left out, the list
+      // drew a blank tile for every event made in the app — they carry a card
+      // and no cover.
+      inviteMediaUrl: event.inviteMediaUrl,
+      hostName: hosts.get(event.hostId.toString()) ?? null,
+      myRsvp: invite.rsvp,
+      // Their own token, so the app can deep-link them into the invite.
+      inviteToken: invite.token,
+    }));
   }
 
   @Get('events/:id')
@@ -283,6 +301,28 @@ export class EventsController {
     @Body() dto: BulkInviteDto,
   ): Promise<BulkInviteResult> {
     return this.invites.inviteMany(id, userId, dto);
+  }
+
+  @Post('events/:id/invites/by-phone')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(INVITE_THROTTLE)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Invite people by phone number, from the host’s contacts',
+    description:
+      'For the friends who are not on Wishtick yet, which on day one is most of them. Each ' +
+      'number becomes a guest-list row addressed to the number itself; it binds to an account ' +
+      'the first time somebody with that number, verified, opens the event link. A number that ' +
+      'already has an account is bound immediately, so the guest list names them at once. ' +
+      'Duplicates are collapsed rather than rejected.',
+  })
+  @ApiResponseDoc({ status: 409, description: 'EVENT_NOT_PUBLISHED / INVITE_LIMIT_REACHED' })
+  inviteByPhone(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: InviteByPhoneDto,
+  ): Promise<BulkInviteResult> {
+    return this.invites.inviteByPhone(id, userId, dto.phones);
   }
 
   @Delete('events/:id/invites/:inviteId')

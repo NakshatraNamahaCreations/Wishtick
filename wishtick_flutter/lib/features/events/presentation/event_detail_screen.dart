@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/media/media_repository.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
@@ -14,9 +15,11 @@ import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
 import '../../auth/presentation/session_controller.dart';
 import '../../wishlist/presentation/widgets/wishlist_picker_sheet.dart';
+import '../../wishmates/presentation/widgets/quick_share_sheet.dart';
 import '../data/events_repository.dart';
 import '../domain/event.dart';
 import 'event_providers.dart';
+import 'invite_contacts_screen.dart';
 import 'widgets/event_wishlist_requests.dart';
 
 /// The host's own event, opened from "My Events".
@@ -38,10 +41,17 @@ class EventDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
     final event = ref.watch(eventDetailProvider(eventId));
+    // Inviting people is the thing a host comes back to this page to do, so it
+    // sits in the bar rather than as two rows down in Quick Suggestions.
+    // Nothing to invite to until the event has loaded.
+    final loaded = event.value;
 
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: circleBackAppBar(context),
+      appBar: circleBackAppBar(
+        context,
+        actions: loaded == null ? null : [_InviteAction(event: loaded)],
+      ),
       // Error before loading: Riverpod retries a failed provider, so a failed
       // one is *also* loading — matching `hasValue: false` first would spin
       // forever on a request that has already given up.
@@ -122,7 +132,11 @@ class _Body extends ConsumerWidget {
     // The invitation the host made, falling back to the event's cover. Either
     // may be absent — a draft often has neither — and the card is simply not
     // drawn rather than replaced by an empty box.
-    final artwork = event.inviteMediaUrl ?? event.coverUrl;
+    final invitation = event.inviteMediaUrl;
+    final artwork =
+        invitation != null && MediaRepository.isDrawableImage(invitation)
+        ? invitation
+        : event.coverUrl;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -163,10 +177,14 @@ class _Body extends ConsumerWidget {
         _StatusChip(status: event.status),
         const SizedBox(height: AppSpacing.lg),
         if (artwork != null)
-          AspectRatio(
-            aspectRatio: 3 / 4,
+          // Whole, at its own proportions. The card is the host's work and is
+          // read as a whole; a fixed 3:4 box cropped the last line off every
+          // design that was any other shape.
+          SizedBox(
+            width: double.infinity,
             child: WishtickImage(
               url: artwork,
+              fit: BoxFit.fitWidth,
               borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
           ),
@@ -222,13 +240,7 @@ class _Body extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        _SuggestionRow(
-          icon: Icons.people_alt_outlined,
-          title: 'Guest List',
-          subtitle: _guestLine(event),
-          onTap: () =>
-              unawaited(context.push<void>(AppRoutes.eventGuests(event.id))),
-        ),
+        // The design's order: what the party needs, then who is coming.
         _SuggestionRow(
           icon: Icons.favorite_border,
           title: 'View Wishlist',
@@ -246,17 +258,16 @@ class _Body extends ConsumerWidget {
                 ),
         ),
         _SuggestionRow(
-          icon: Icons.mail_outline,
-          title: 'Invitation',
-          subtitle: artwork == null
-              ? 'Design one to send'
-              : 'Change the design',
-          onTap: () => unawaited(
-            context.push<void>(AppRoutes.eventInviteTemplates(event.id)),
-          ),
+          icon: Icons.people_alt_outlined,
+          title: 'Guest List',
+          subtitle: _guestLine(event),
+          onTap: () =>
+              unawaited(context.push<void>(AppRoutes.eventGuests(event.id))),
         ),
-        // Group Gifts and Add Your Wish, the design's other two rows, are
-        // deliberately absent rather than drawn dead:
+        // Inviting people moved to the bar's invite action, which is where a
+        // host reaches for it — it is the errand they open this page to run,
+        // not a suggestion. Group Gifts and Add Your Wish, the design's other
+        // two rows, stay absent rather than drawn dead:
         //
         //  * a GroupGift hangs off a wishlist *item*, not an event, so "the
         //    group gifts for this party" is a query no endpoint answers — it
@@ -290,6 +301,185 @@ class _Body extends ConsumerWidget {
     if (counts == null || counts.invited == 0) return 'Nobody invited yet';
     return '${counts.yes} going · ${counts.pending} pending';
   }
+}
+
+/// The bar's invite action: the two ways a host gets people to their party.
+///
+/// It used to be two rows in Quick Suggestions. Inviting is the errand a host
+/// opens this page to run, not a suggestion, so it sits in the bar — and the
+/// list below is back to what the design has on it.
+class _InviteAction extends ConsumerWidget {
+  const _InviteAction({required this.event});
+
+  final WishtickEventDetail event;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => IconButton(
+    onPressed: () => unawaited(_showInviteSheet(context, ref, event)),
+    icon: const Icon(Icons.person_add_alt_1_outlined),
+    tooltip: 'Invite people',
+    color: context.colors.textPrimary,
+  );
+}
+
+/// "Invite WishMates" and "Share Invitation Link", as a sheet.
+///
+/// Shown even for a draft, with both ways greyed and the reason on them: an
+/// action that vanishes teaches a host nothing about when it comes back.
+Future<void> _showInviteSheet(
+  BuildContext context,
+  WidgetRef ref,
+  WishtickEventDetail event,
+) async {
+  // Only a published event can be invited to: the server refuses invites for
+  // a draft, and a cancelled or finished party has nobody left to invite.
+  final canInvite = event.status.acceptsInvites;
+
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      final colors = sheetContext.colors;
+      return Material(
+        color: colors.background,
+        clipBehavior: Clip.antiAlias,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              AppSpacing.lg,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.border,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  'Invite people',
+                  style: sheetContext.text.titleMedium?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _SuggestionRow(
+                  icon: Icons.person_add_alt_1_outlined,
+                  title: 'Invite WishMates',
+                  subtitle: canInvite
+                      ? 'Pick who to send the invitation to'
+                      : 'Only a published event can be shared',
+                  // The sheet closes first: the WishMates picker is itself a
+                  // sheet, and two stacked on one another is a dead end.
+                  onTap: canInvite
+                      ? () {
+                          Navigator.of(sheetContext).pop();
+                          unawaited(_inviteWishmates(context, ref, event));
+                        }
+                      : null,
+                ),
+                _SuggestionRow(
+                  icon: Icons.contacts_outlined,
+                  title: 'Invite from Contacts',
+                  subtitle: canInvite
+                      ? 'For friends who are not on Wishtick yet'
+                      : 'Only a published event can be shared',
+                  onTap: canInvite
+                      ? () {
+                          Navigator.of(sheetContext).pop();
+                          unawaited(_inviteFromContacts(context, ref, event));
+                        }
+                      : null,
+                ),
+                _SuggestionRow(
+                  icon: Icons.link,
+                  title: 'Share Invitation Link',
+                  subtitle: canInvite
+                      ? 'WhatsApp, Instagram, or copy the link'
+                      : 'Only a published event can be shared',
+                  onTap: canInvite
+                      ? () {
+                          Navigator.of(sheetContext).pop();
+                          unawaited(
+                            context.push<void>(AppRoutes.eventShare(event.id)),
+                          );
+                        }
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// Picking guests out of the host's address book.
+///
+/// The explanation comes first and the OS prompt only after "OK": a permission
+/// sheet that appears out of nowhere is the one people refuse, and refusing it
+/// on Android is often permanent.
+Future<void> _inviteFromContacts(
+  BuildContext context,
+  WidgetRef ref,
+  WishtickEventDetail event,
+) async {
+  if (!await confirmContactsPermission(context)) return;
+  if (!context.mounted) return;
+
+  final invited = await Navigator.of(context).push<int>(
+    MaterialPageRoute(builder: (_) => InviteContactsScreen(event: event)),
+  );
+  if (invited == null || !context.mounted) return;
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        invited == 1
+            ? 'Invited 1 person. They can open the invitation once they sign '
+                  'in with that number.'
+            : 'Invited $invited people. They can open the invitation once '
+                  'they sign in with those numbers.',
+      ),
+    ),
+  );
+}
+
+/// The grid of WishMates, one send. What the guest list is made of.
+Future<void> _inviteWishmates(
+  BuildContext context,
+  WidgetRef ref,
+  WishtickEventDetail event,
+) async {
+  await showQuickShareSheet(
+    context,
+    EventShareTarget(
+      eventId: event.id,
+      title: event.title,
+      slug: event.share?.slug,
+      // Whether the link admits anyone: it does for public *and* invite-only
+      // events; only a private event's link is refused by the server.
+      isPublic: event.visibility != EventVisibility.private,
+    ),
+  );
+  // The guest line on this page counts what was just sent.
+  ref.invalidate(eventDetailProvider(event.id));
 }
 
 /// Draft / published / cancelled, which only the host can see.
@@ -382,11 +572,15 @@ class _SuggestionRow extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+
+  /// Null draws the row dead — greyed, with the subtitle saying why — rather
+  /// than hiding it, so the host can see what the page will offer.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final enabled = onTap != null;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -411,7 +605,7 @@ class _SuggestionRow extends StatelessWidget {
                   child: Icon(
                     icon,
                     size: AppSizes.iconMd,
-                    color: colors.primary,
+                    color: enabled ? colors.primary : colors.textMuted,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
@@ -422,7 +616,9 @@ class _SuggestionRow extends StatelessWidget {
                       Text(
                         title,
                         style: context.text.titleSmall?.copyWith(
-                          color: colors.textPrimary,
+                          color: enabled
+                              ? colors.textPrimary
+                              : colors.textMuted,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

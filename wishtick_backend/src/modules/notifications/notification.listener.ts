@@ -4,6 +4,8 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
+  EVENT_WISHLIST_ANSWERED,
+  EVENT_WISHLIST_OFFERED,
   GIFT_FULFILLED,
   GIFT_PURCHASED,
   GIFT_RESERVED,
@@ -16,6 +18,8 @@ import {
   MEMORY_UNLOCKED,
   REEL_RELEASED,
   USER_REGISTERED,
+  type EventWishlistAnsweredEvent,
+  type EventWishlistOfferedEvent,
   type GiftLifecycleEvent,
   type GroupGiftContributionReceivedEvent,
   type GroupGiftFulfilledEvent,
@@ -182,6 +186,42 @@ export class NotificationListener {
         payload: {
           itemTitle: await this.itemTitle(gg.itemId.toString()),
           inviterName: await this.userName(e.invitedById),
+        },
+      });
+    });
+  }
+
+  @OnEvent(EVENT_WISHLIST_OFFERED)
+  async onEventWishlistOffered(e: EventWishlistOfferedEvent): Promise<void> {
+    await this.guard('event-wishlist-offered', async () => {
+      await this.notifications.enqueue({
+        userId: e.hostId,
+        type: NotificationType.EVENT_WISHLIST_OFFERED,
+        // The submission, not the event: a host with two offers on one party
+        // has two things to answer, and collapsing them would hide the second.
+        refId: e.submissionId,
+        payload: {
+          guestName: e.guestName,
+          eventTitle: e.eventTitle,
+          wishlistTitle: e.wishlistTitle,
+          url: `${this.web}/events/${e.eventId}`,
+        },
+      });
+    });
+  }
+
+  @OnEvent(EVENT_WISHLIST_ANSWERED)
+  async onEventWishlistAnswered(e: EventWishlistAnsweredEvent): Promise<void> {
+    await this.guard('event-wishlist-answered', async () => {
+      await this.notifications.enqueue({
+        userId: e.guestId,
+        type: NotificationType.EVENT_WISHLIST_ANSWERED,
+        refId: e.submissionId,
+        payload: {
+          eventTitle: e.eventTitle,
+          wishlistTitle: e.wishlistTitle,
+          approved: e.approved,
+          url: `${this.web}/events/${e.eventId}`,
         },
       });
     });

@@ -6,6 +6,7 @@ import { Types, type Model } from 'mongoose';
 import { ErrorCode } from 'src/common/errors/error-codes';
 import { EVENT_REMINDER_JOB } from 'src/modules/events/event-reminders.service';
 import { Event, type EventDocument } from 'src/modules/events/schemas/event.schema';
+import { User, type UserDocument } from 'src/modules/users/schemas/user.schema';
 import { WishlistVisibility } from 'src/modules/wishlists/wishlist.types';
 import { createTestApp, V1, type TestApp } from './utils/test-app';
 
@@ -50,6 +51,7 @@ describe('Events & invites (e2e)', () => {
   let ctx: TestApp;
   let app: INestApplication;
   let eventModel: Model<EventDocument>;
+  let userModel: Model<UserDocument>;
   let seq = 0;
 
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -94,6 +96,7 @@ describe('Events & invites (e2e)', () => {
     ctx = await createTestApp();
     app = ctx.app;
     eventModel = app.get<Model<EventDocument>>(getModelToken(Event.name));
+    userModel = app.get<Model<UserDocument>>(getModelToken(User.name));
   }, 120_000);
 
   afterAll(async () => {
@@ -595,6 +598,57 @@ describe('Events & invites (e2e)', () => {
       expect(publicView.data.event.inviteMediaUrl).toBe(patched.data.inviteMediaUrl);
     });
 
+    it('attaches artwork uploaded before the event existed', async () => {
+      // The app uploads the card first and creates the event only once the
+      // host has seen the preview, so create has to take the id — a PATCH
+      // afterwards would mean a moment where the event exists with no card.
+      const host = await newUser();
+      const mediaId = await uploadMedia(host, 'event_invite');
+
+      const event = (await createEvent(host, { inviteMediaId: mediaId })) as EventView & {
+        inviteMediaUrl: string | null;
+      };
+      expect(event.inviteMediaUrl).toEqual(expect.any(String));
+
+      const fetched = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ inviteMediaUrl: string | null }>;
+      expect(fetched.data.inviteMediaUrl).toBe(event.inviteMediaUrl);
+    });
+
+    it("reaches the guest's own list of invitations, with who is hosting", async () => {
+      // The list used to carry only the cover, which an event made in the app
+      // never has — so every card on the guest's Invites tab was blank. And
+      // the host's name was hard-coded to null.
+      const host = await newUser('Aarav Sharma');
+      const guest = await newUser('Priya Nair');
+      const mediaId = await uploadMedia(host, 'event_invite');
+      const event = (await createEvent(host, { inviteMediaId: mediaId })) as EventView & {
+        inviteMediaUrl: string | null;
+      };
+      await publish(host, event.id);
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/invites`)
+        .set(auth(host.token))
+        .send({ recipients: [{ userId: guest.userId }] })
+        .expect(200);
+
+      const list = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/invited`)
+          .set(auth(guest.token))
+          .expect(200)
+      ).body as Envelope<{ id: string; inviteMediaUrl: string | null; hostName: string | null }[]>;
+
+      expect(list.data).toHaveLength(1);
+      expect(list.data[0].inviteMediaUrl).toBe(event.inviteMediaUrl);
+      expect(list.data[0].inviteMediaUrl).toEqual(expect.any(String));
+      expect(list.data[0].hostName).toBe('Aarav Sharma');
+    });
+
     it('refuses a cover image passed off as an invitation', async () => {
       // event_invite is the only purpose that admits GIF, MP4 and PDF, so
       // accepting any ready media here would smuggle those types in.
@@ -609,6 +663,30 @@ describe('Events & invites (e2e)', () => {
         .expect(400);
 
       expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEDIA_TYPE_NOT_ALLOWED);
+    });
+
+    it('refuses the same at create, and creates nothing on the way', async () => {
+      const host = await newUser();
+      const coverId = await uploadMedia(host, 'event_cover');
+
+      const res = await request(app.getHttpServer())
+        .post(`${V1}/events`)
+        .set(auth(host.token))
+        .send({
+          title: 'Big Party',
+          type: 'birthday',
+          startsAt: IN_A_MONTH(),
+          timezone: 'Asia/Kolkata',
+          inviteMediaId: coverId,
+        })
+        .expect(400);
+
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEDIA_TYPE_NOT_ALLOWED);
+      // The media is checked before the insert, not after: a refused card
+      // must not leave an event behind for the host to find on their list.
+      expect(
+        await eventModel.countDocuments({ hostId: new Types.ObjectId(host.userId) }).exec(),
+      ).toBe(0);
     });
 
     it("refuses somebody else's upload", async () => {
@@ -1221,13 +1299,19 @@ describe('Events & invites (e2e)', () => {
       expect(view.body.data.invitee.rsvp).toBe('yes');
     });
 
-    it('refuses a private event — there the host decides who comes', async () => {
+    it('refuses a private event, naming the reason — the host decides who comes', async () => {
+      // This used to 404 like everything else, so a stranger could not learn
+      // the event existed. It says why now: a host sends this same link to
+      // phone numbers from their contacts, and somebody who was sent it has
+      // to be told they are not on the list rather than shown a dead page.
+      // The slug is still unguessable, so what leaks is only that the link
+      // they were handed is a real one.
       const host = await newUser();
       const guest = await newUser();
       const event = await publicEvent(host, { visibility: 'private' });
 
-      const res = await join(guest, event.slug).expect(404);
-      expect(res.body.error.code).toBe('EVENT_NOT_FOUND');
+      const res = await join(guest, event.slug).expect(403);
+      expect(res.body.error.code).toBe(ErrorCode.EVENT_INVITE_REQUIRED);
     });
 
     it('lets an invite_only event in — it is defined as reachable by link', async () => {
@@ -1289,6 +1373,184 @@ describe('Events & invites (e2e)', () => {
     });
   });
 
+  // -- Inviting from the host's contacts ------------------------------------
+
+  describe('invites by phone number', () => {
+    let phoneSeq = 0;
+    const uniquePhone = (): string => `+9199${String(1000000 + ++phoneSeq).slice(-7)}`;
+
+    /** A private event, which is the case phone invites exist for. */
+    const privateEvent = async (host: Actor): Promise<{ id: string; slug: string }> => {
+      const event = await createEvent(host, { visibility: 'private' });
+      await publish(host, event.id);
+      const full = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<EventView & { share?: { slug: string } }>;
+      return { id: event.id, slug: full.data.share!.slug };
+    };
+
+    const inviteByPhone = (host: Actor, eventId: string, phones: string[]) =>
+      request(app.getHttpServer())
+        .post(`${V1}/events/${eventId}/invites/by-phone`)
+        .set(auth(host.token))
+        .send({ phones });
+
+    /**
+     * An account whose number is verified — what a passwordless sign-in leaves
+     * behind, which is the state a claim requires.
+     *
+     * Set on the document rather than driven through `/auth/otp/*`: that route
+     * allows three requests per five minutes per caller, and a block that
+     * needs half a dozen accounts would exhaust the budget and start 429ing
+     * every later test in the file. What the OTP flow itself does is
+     * otp-login's own suite to prove; this one is about invitations.
+     */
+    const signInByPhone = async (phone: string): Promise<Actor> => {
+      const actor = await newUser();
+      await userModel
+        .updateOne(
+          { _id: new Types.ObjectId(actor.userId) },
+          { $set: { phone, phoneVerifiedAt: new Date() } },
+        )
+        .exec();
+      return actor;
+    };
+
+    const join = (actor: Actor, slug: string) =>
+      request(app.getHttpServer())
+        .post(`${V1}/events/by-slug/${slug}/join`)
+        .set(auth(actor.token));
+
+    it('lets somebody with no account yet be invited, and claim it after signing up', async () => {
+      // The whole point: on the day a host starts, none of their friends are
+      // on Wishtick, so there is no account to address an invite to.
+      const host = await newUser();
+      const event = await privateEvent(host);
+      const phone = uniquePhone();
+
+      const invited = (await inviteByPhone(host, event.id, [phone]).expect(200))
+        .body as Envelope<{ created: unknown[]; duplicates: number }>;
+      expect(invited.data.created).toHaveLength(1);
+
+      // They install, sign in with that number, and open the link.
+      const guest = await signInByPhone(phone);
+      const joined = (await join(guest, event.slug).expect(201)).body as Envelope<{
+        token: string;
+      }>;
+      expect(joined.data.token).toEqual(expect.any(String));
+
+      // Claimed, not duplicated: the host's one row now names them.
+      const list = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}/invites`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ invitedUserId: string | null; invitedPhone: string | null }[]>;
+      expect(list.data).toHaveLength(1);
+      expect(list.data[0].invitedUserId).toBe(guest.userId);
+      expect(list.data[0].invitedPhone).toBe(phone);
+    });
+
+    it('opening the link twice lands on the same invite', async () => {
+      const host = await newUser();
+      const event = await privateEvent(host);
+      const phone = uniquePhone();
+      await inviteByPhone(host, event.id, [phone]).expect(200);
+      const guest = await signInByPhone(phone);
+
+      const first = (await join(guest, event.slug).expect(201)).body as Envelope<{ token: string }>;
+      const second = (await join(guest, event.slug).expect(201)).body as Envelope<{ token: string }>;
+
+      expect(second.data.token).toBe(first.data.token);
+    });
+
+    it('tells an uninvited caller they are not on the list, rather than 404', async () => {
+      // A private event's link used to 404 for everyone. Now a host sends that
+      // link to numbers, so the people who get it must be told why it will not
+      // open. The slug is still unguessable.
+      const host = await newUser();
+      const event = await privateEvent(host);
+      const stranger = await signInByPhone(uniquePhone());
+
+      const res = await join(stranger, event.slug).expect(403);
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.EVENT_INVITE_REQUIRED);
+    });
+
+    it('refuses an unverified number, however it got onto the account', async () => {
+      // Otherwise typing a friend's number onto your own profile would be a
+      // way into their private event.
+      const host = await newUser();
+      const event = await privateEvent(host);
+      const phone = uniquePhone();
+      await inviteByPhone(host, event.id, [phone]).expect(200);
+
+      // An account carrying the number with nothing verifying it.
+      const impostor = await newUser();
+      await userModel
+        .updateOne(
+          { _id: new Types.ObjectId(impostor.userId) },
+          { $set: { phone, phoneVerifiedAt: null } },
+        )
+        .exec();
+
+      const res = await join(impostor, event.slug).expect(403);
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.EVENT_INVITE_REQUIRED);
+    });
+
+    it('binds a number that already has an account straight away', async () => {
+      // So the guest list names them from the start rather than showing a bare
+      // number until they happen to open the link.
+      const host = await newUser();
+      const event = await privateEvent(host);
+      const phone = uniquePhone();
+      const friend = await signInByPhone(phone);
+
+      await inviteByPhone(host, event.id, [phone]).expect(200);
+
+      const list = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}/invites`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ invitedUserId: string | null }[]>;
+      expect(list.data[0].invitedUserId).toBe(friend.userId);
+    });
+
+    it('collapses the same number written two ways, and skips the host', async () => {
+      // A contacts list routinely holds one person twice, spaced differently.
+      const host = await newUser();
+      const event = await privateEvent(host);
+      const phone = uniquePhone();
+      const spaced = `${phone.slice(0, 3)} ${phone.slice(3, 8)} ${phone.slice(8)}`;
+
+      const res = (
+        await inviteByPhone(host, event.id, [phone, spaced, phone]).expect(200)
+      ).body as Envelope<{ created: unknown[]; duplicates: number }>;
+
+      expect(res.data.created).toHaveLength(1);
+      expect(res.data.duplicates).toBe(2);
+    });
+
+    it('refuses to invite anyone to an unpublished event', async () => {
+      const host = await newUser();
+      const draft = await createEvent(host, { visibility: 'private' });
+
+      const res = await inviteByPhone(host, draft.id, [uniquePhone()]).expect(409);
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.EVENT_NOT_PUBLISHED);
+    });
+
+    it('is the host’s alone to send', async () => {
+      const host = await newUser();
+      const stranger = await newUser();
+      const event = await privateEvent(host);
+
+      await inviteByPhone(stranger, event.id, [uniquePhone()]).expect(404);
+    });
+  });
+
   // -- Guests offering their own wishlists ----------------------------------
 
   describe('guest wishlists on an event', () => {
@@ -1345,6 +1607,119 @@ describe('Events & invites (e2e)', () => {
      */
     const inviteView = (token: string, viewer: Actor) =>
       request(app.getHttpServer()).get(`${V1}/public/invites/${token}`).set(auth(viewer.token));
+
+    /** Let the fire-and-forget listener enqueue, then run the queued jobs. */
+    const settle = async (): Promise<void> => {
+      await new Promise((r) => setTimeout(r, 150));
+      await ctx.drainNotifications();
+    };
+
+    const inAppFor = async (actor: Actor): Promise<{ type: string }[]> => {
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/notifications`)
+        .set(auth(actor.token))
+        .expect(200);
+      return (res.body as Envelope<{ type: string }[]>).data;
+    };
+
+    it("badges the host's event list with how many offers are waiting", async () => {
+      // The queue lives at the foot of one event's page. Without a count on
+      // the event itself, "My Events" had nothing to badge and a host had no
+      // reason to scroll there.
+      const host = await newUser('Rohan');
+      const guest = await newUser('Priya');
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const listId = await privateList(guest, 'For Rohan');
+      const offered = (await offer(guest, event.id, listId).expect(200))
+        .body as Envelope<{ id: string }>;
+
+      const mine = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/mine`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ id: string; pendingWishlistCount?: number }[]>;
+      expect(mine.data.find((e) => e.id === event.id)?.pendingWishlistCount).toBe(1);
+
+      const one = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/${event.id}`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ pendingWishlistCount?: number }>;
+      expect(one.data.pendingWishlistCount).toBe(1);
+
+      // Answering it clears the badge, whichever way the host decides.
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/approve`)
+        .set(auth(host.token))
+        .expect(200);
+
+      const after = (
+        await request(app.getHttpServer())
+          .get(`${V1}/events/mine`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<{ id: string; pendingWishlistCount?: number }[]>;
+      expect(after.data.find((e) => e.id === event.id)?.pendingWishlistCount).toBe(0);
+    });
+
+    it('tells the host an offer arrived, and the guest how it was answered', async () => {
+      // Both halves used to be silent: the host was never told an offer was
+      // waiting, and the guest was never told it had been answered.
+      const host = await newUser('Rohan');
+      const guest = await newUser('Priya');
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const listId = await privateList(guest, 'For Rohan');
+      await settle(); // flush the signup notifications first
+
+      const offered = (await offer(guest, event.id, listId).expect(200))
+        .body as Envelope<{ id: string }>;
+      await settle();
+
+      expect(
+        (await inAppFor(host)).filter((n) => n.type === 'event_wishlist_offered'),
+      ).toHaveLength(1);
+      // And not to the guest, who is the one who sent it.
+      expect(
+        (await inAppFor(guest)).filter((n) => n.type === 'event_wishlist_offered'),
+      ).toHaveLength(0);
+
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/approve`)
+        .set(auth(host.token))
+        .expect(200);
+      await settle();
+
+      expect(
+        (await inAppFor(guest)).filter((n) => n.type === 'event_wishlist_answered'),
+      ).toHaveLength(1);
+    });
+
+    it('tells the guest when the host declines, too', async () => {
+      const host = await newUser('Rohan');
+      const guest = await newUser('Priya');
+      const event = await publicEvent(host);
+      await attend(guest, event.slug);
+      const listId = await privateList(guest, 'For Rohan');
+      await settle();
+
+      const offered = (await offer(guest, event.id, listId).expect(200))
+        .body as Envelope<{ id: string }>;
+      await request(app.getHttpServer())
+        .post(`${V1}/events/${event.id}/wishlist-requests/${offered.data.id}/reject`)
+        .set(auth(host.token))
+        .expect(200);
+      await settle();
+
+      // Silence on a decline is the worse half: the guest waits forever for a
+      // list that is never going to appear.
+      expect(
+        (await inAppFor(guest)).filter((n) => n.type === 'event_wishlist_answered'),
+      ).toHaveLength(1);
+    });
 
     it('stays off the invitation until the host approves it', async () => {
       const host = await newUser('Rohan');

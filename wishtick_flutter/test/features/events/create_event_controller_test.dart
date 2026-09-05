@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wishtick_flutter/core/media/media_repository.dart';
 import 'package:wishtick_flutter/core/network/api_exception.dart';
 import 'package:wishtick_flutter/features/auth/presentation/session_controller.dart';
 import 'package:wishtick_flutter/features/events/data/events_repository.dart';
@@ -8,6 +11,7 @@ import 'package:wishtick_flutter/features/events/presentation/create_event_contr
 
 import '../../helpers/auth_fakes.dart';
 import '../../helpers/events_fakes.dart';
+import '../../helpers/wishlist_fakes.dart';
 
 /// A session that starts authenticated as a named user.
 class _SignedIn extends SessionController {
@@ -24,12 +28,20 @@ class _SignedIn extends SessionController {
 
 void main() {
   late FakeEventsRepository repo;
+  late FakeMediaRepository media;
   late ProviderContainer container;
+
+  /// Stands in for the designer's PNG; the bytes are never decoded here.
+  final card = Uint8List.fromList([1, 2, 3]);
 
   setUp(() {
     repo = FakeEventsRepository();
+    media = FakeMediaRepository();
     container = ProviderContainer(
-      overrides: [eventsRepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        eventsRepositoryProvider.overrideWithValue(repo),
+        mediaRepositoryProvider.overrideWithValue(media),
+      ],
     );
   });
 
@@ -95,50 +107,200 @@ void main() {
     expect(state().occasion.type, EventType.special);
   });
 
-  test(
-    'submit sends an IANA timezone, not the platform abbreviation',
-    () async {
+  group('publish — the one call that makes the event exist', () {
+    // Nothing reaches the server before this: the person, the details and
+    // the card all wait in the state until the host has seen the preview.
+
+    test('uploads the card, creates with its id, then publishes', () async {
+      fillStep1();
+      fillStep2();
+      notifier().setInvitation(card, 'invitation.png');
+
+      final event = await notifier().publish();
+
+      expect(event, isNotNull);
+      expect(media.uploadCalls, [MediaPurpose.eventInvite]);
+      // The name travels separately — XFile.fromData drops it on io.
+      expect(media.uploadedNames, ['invitation.png']);
+      expect(repo.createCalls.single['inviteMediaId'], 'media_1');
+      expect(repo.publishCalls, ['evt_1']);
+    });
+
+    test('sends an IANA timezone, not the platform abbreviation', () async {
       fillStep1();
       fillStep2();
 
-      await notifier().submit();
+      await notifier().publish();
 
       expect(repo.createCalls.single['timezone'], 'Asia/Kolkata');
-    },
-  );
+    });
 
-  test('submit carries person, relation and venue', () async {
-    fillStep1();
-    fillStep2();
+    test('carries person, relation and venue', () async {
+      fillStep1();
+      fillStep2();
 
-    final created = await notifier().submit();
+      final created = await notifier().publish();
 
-    expect(created, isNotNull);
-    final call = repo.createCalls.single;
-    expect(call['personName'], 'Siya');
-    expect(call['relation'], 'friend');
-    expect(call['venue'], 'Mysore Socials');
-    expect(call['type'], EventType.birthday);
-  });
+      expect(created, isNotNull);
+      final call = repo.createCalls.single;
+      expect(call['personName'], 'Siya');
+      expect(call['relation'], 'friend');
+      expect(call['venue'], 'Mysore Socials');
+      expect(call['type'], EventType.birthday);
+    });
 
-  test('an incomplete step 2 never reaches the server', () async {
-    fillStep1();
-    expect(await notifier().submit(), isNull);
-    expect(repo.createCalls, isEmpty);
-  });
+    test('an incomplete step 2 never reaches the server', () async {
+      fillStep1();
+      expect(await notifier().publish(), isNull);
+      expect(repo.createCalls, isEmpty);
+      expect(media.uploadCalls, isEmpty);
+    });
 
-  test('a past date is explained in the words the picker used', () async {
-    fillStep1();
-    fillStep2();
-    repo.failure = const ApiException(
-      code: 'VALIDATION_FAILED',
-      message: 'startsAt must be in the future',
-      statusCode: 400,
+    test(
+      'the event is created invite-only, so its link admits people',
+      () async {
+        // The server defaults to private, whose link 404s for everybody — and
+        // the share screen this flow ends on hands that link out.
+        fillStep1();
+        fillStep2();
+
+        await notifier().publish();
+
+        expect(
+          repo.createCalls.single['visibility'],
+          EventVisibility.inviteOnly,
+        );
+      },
     );
 
-    expect(await notifier().submit(), isNull);
-    expect(state().error, contains('has to be in the future'));
-    expect(state().busy, isFalse);
+    test('no invitation means no upload, and an event with no card', () async {
+      fillStep1();
+      fillStep2();
+
+      await notifier().publish();
+
+      expect(media.uploadCalls, isEmpty);
+      expect(repo.createCalls.single['inviteMediaId'], isNull);
+      expect(repo.publishCalls, ['evt_1']);
+    });
+
+    test(
+      'a wishlist made on the way is linked as the event is created',
+      () async {
+        fillStep1();
+        fillStep2();
+
+        await notifier().publish(wishlistId: 'wl_9');
+
+        expect(repo.createCalls.single['wishlistIds'], ['wl_9']);
+      },
+    );
+
+    test(
+      'a retry after a failed publish does not create a second event',
+      () async {
+        fillStep1();
+        fillStep2();
+        notifier().setInvitation(card, 'invitation.png');
+        repo.publishFailure = const ApiException(
+          code: 'EVENT_DATE_IN_PAST',
+          message: 'Move the event to a future date',
+          statusCode: 400,
+        );
+
+        expect(await notifier().publish(), isNull);
+        expect(state().error, contains('has to be in the future'));
+        expect(state().busy, isFalse);
+        expect(repo.createCalls, hasLength(1));
+
+        repo.publishFailure = null;
+        final event = await notifier().publish();
+
+        expect(event, isNotNull);
+        // Same event, same upload: neither step is repeated.
+        expect(repo.createCalls, hasLength(1));
+        expect(media.uploadCalls, hasLength(1));
+        expect(repo.publishCalls, ['evt_1']);
+      },
+    );
+
+    test(
+      'a retry after a failed create does not upload the card again',
+      () async {
+        fillStep1();
+        fillStep2();
+        notifier().setInvitation(card, 'invitation.png');
+        repo.failure = const ApiException(
+          code: 'EVENT_LIMIT_REACHED',
+          message: 'limit',
+          statusCode: 409,
+        );
+
+        expect(await notifier().publish(), isNull);
+        expect(state().error, contains('as many events'));
+        expect(media.uploadCalls, hasLength(1));
+        expect(repo.createCalls, isEmpty);
+
+        repo.failure = null;
+        await notifier().publish();
+
+        expect(media.uploadCalls, hasLength(1));
+        expect(repo.createCalls.single['inviteMediaId'], 'media_1');
+      },
+    );
+
+    test('a new design replaces the old one, upload and all', () async {
+      fillStep1();
+      fillStep2();
+      notifier().setInvitation(card, 'invitation.png');
+      repo.failure = const ApiException(
+        code: 'EVENT_LIMIT_REACHED',
+        message: 'limit',
+        statusCode: 409,
+      );
+      await notifier().publish();
+      expect(state().inviteMediaId, 'media_1');
+
+      // Back to the designer, and out again with a different card.
+      notifier().setInvitation(Uint8List.fromList([9]), 'party.gif');
+
+      expect(state().invitation?.fileName, 'party.gif');
+      // The old upload is forgotten, or the old card would be attached.
+      expect(state().inviteMediaId, isNull);
+
+      repo.failure = null;
+      await notifier().publish();
+
+      expect(media.uploadedNames, ['invitation.png', 'party.gif']);
+      expect(repo.createCalls.single['inviteMediaId'], 'media_2');
+    });
+
+    test('a past date is explained in the words the picker used', () async {
+      fillStep1();
+      fillStep2();
+      repo.failure = const ApiException(
+        code: 'VALIDATION_FAILED',
+        message: 'startsAt must be in the future',
+        statusCode: 400,
+      );
+
+      expect(await notifier().publish(), isNull);
+      expect(state().error, contains('has to be in the future'));
+      expect(state().busy, isFalse);
+    });
+
+    test('reset returns the wizard to blank', () {
+      fillStep1();
+      fillStep2();
+      notifier().setInvitation(card, 'invitation.png');
+
+      notifier().reset();
+
+      expect(state().step1Complete, isFalse);
+      expect(state().title, isEmpty);
+      expect(state().invitation, isNull);
+      expect(state().created, isNull);
+    });
   });
 
   group('who the event is for', () {
@@ -253,7 +415,7 @@ void main() {
         ..setOccasion('birthday');
       fillStep2();
 
-      await notifier().submit();
+      await notifier().publish();
 
       final call = repo.createCalls.single;
       expect(call['forSelf'], isTrue);
@@ -266,7 +428,7 @@ void main() {
       fillStep1();
       fillStep2();
 
-      await notifier().submit();
+      await notifier().publish();
 
       expect(repo.createCalls.single['forSelf'], isFalse);
       expect(repo.createCalls.single['personName'], 'Siya');

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/format/phone.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/router/pending_link.dart';
@@ -37,6 +38,9 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
   String? _error;
   bool _needsSignIn = false;
 
+  /// The event is private and this account is not on its guest list.
+  bool _notInvited = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +52,7 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
       setState(() {
         _error = null;
         _needsSignIn = false;
+        _notInvited = false;
       });
     }
 
@@ -68,15 +73,21 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = switch (e.code) {
-          // The server refuses to say which of these it is — see joinBySlug.
-          'EVENT_NOT_FOUND' =>
-            'This invitation is no longer available. The link may have expired, '
-                'or the host may have cancelled the event.',
-          'CANNOT_INVITE_HOST' => 'You are hosting this event.',
-          'INVITE_LIMIT_REACHED' => 'This event is full.',
-          _ => e.message,
-        };
+        // Named separately from the rest: this is the one a person who *was*
+        // sent the link hits, and "no longer available" would be a lie.
+        _notInvited = e.code == 'EVENT_INVITE_REQUIRED';
+        _error = _notInvited
+            ? null
+            : switch (e.code) {
+                // The server refuses to say which of these it is — see
+                // joinBySlug.
+                'EVENT_NOT_FOUND' =>
+                  'This invitation is no longer available. The link may have '
+                      'expired, or the host may have cancelled the event.',
+                'CANNOT_INVITE_HOST' => 'You are hosting this event.',
+                'INVITE_LIMIT_REACHED' => 'This event is full.',
+                _ => e.message,
+              };
       });
     }
   }
@@ -103,9 +114,13 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.xxl),
-            child: switch ((_needsSignIn, _error)) {
-              (true, _) => _SignInPrompt(onSignIn: _signIn),
-              (_, final String message) => _Problem(
+            child: switch ((_needsSignIn, _notInvited, _error)) {
+              (true, _, _) => _SignInPrompt(onSignIn: _signIn),
+              (_, true, _) => _NotInvited(
+                phone: ref.watch(sessionProvider).user?.phone,
+                onRetry: () => unawaited(_resolve()),
+              ),
+              (_, _, final String message) => _Problem(
                 message: message,
                 onRetry: () => unawaited(_resolve()),
               ),
@@ -114,6 +129,97 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The link is real, the event is private, and this account is not on the
+/// guest list.
+///
+/// Its own state rather than a line of red text: this is what a host's invite
+/// looks like when it went to a different number from the one the person
+/// signed in with, which is the likeliest way to arrive here — so the number
+/// that *was* checked is the single most useful thing to show.
+class _NotInvited extends StatelessWidget {
+  const _NotInvited({required this.phone, required this.onRetry});
+
+  /// The number this session is signed in with, when there is one.
+  final String? phone;
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final signedInAs = phone == null || phone!.isEmpty
+        ? null
+        : formatE164ForDisplay(phone!);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.lock_outline,
+          size: AppSizes.avatarLg,
+          color: colors.primary,
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text(
+          'This event is private',
+          textAlign: TextAlign.center,
+          style: context.text.headlineSmall?.copyWith(
+            color: colors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'Only the people the host invited can open it, and this account is '
+          'not on the guest list.',
+          textAlign: TextAlign.center,
+          style: context.text.bodyMedium?.copyWith(color: colors.textSecondary),
+        ),
+        if (signedInAs != null) ...[
+          const SizedBox(height: AppSpacing.lg),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: colors.surfaceAlt,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  'Signed in as $signedInAs',
+                  textAlign: TextAlign.center,
+                  style: context.text.bodyMedium?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  'If the host invited a different number, sign in with that '
+                  'one and open the link again.',
+                  textAlign: TextAlign.center,
+                  style: context.text.bodySmall?.copyWith(
+                    color: colors.textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.xxl),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: onRetry,
+            child: const Text('Try again'),
+          ),
+        ),
+      ],
     );
   }
 }

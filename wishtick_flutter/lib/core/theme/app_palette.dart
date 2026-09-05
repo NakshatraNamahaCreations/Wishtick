@@ -260,4 +260,22 @@ abstract final class AppPalette {
   static const darkAmberSubtle = Color(0xFF3D2E18);
   static const darkBlueSubtle = Color(0xFF1B2B3D);
   static const darkGoldSubtle = Color(0xFF3A2E1E);
+
+  // --- Share targets (`288:780`) --------------------------------------------
+  // The third-party marks on the share grid, sampled off the export. Brand
+  // colours are their owners', not ours, and do not follow the theme: WhatsApp
+  // is the same green at night. Only the neutral "More Apps" disc is themed —
+  // see `WishtickColors.shareBrand`.
+  static const shareLinkBlue = Color(0xFF224AFA);
+  static const whatsAppGreen = Color(0xFF4BAE4F);
+  static const facebookBlue = Color(0xFF1877F2);
+  static const telegramBlue = Color(0xFF27ACE2);
+  static const snapchatYellow = Color(0xFFFFFD00);
+
+  /// Instagram's mark is a gradient, top-left to bottom-right: violet, then
+  /// the pink at its centre, then orange. Three stops sampled from the export.
+  static const instagramViolet = Color(0xFF8A3AB9);
+  static const instagramPink = Color(0xFFDE317D);
+  static const instagramOrange = Color(0xFFFDAA4B);
+  static const shareMoreFill = Color(0xFFE8E8E8);
 }

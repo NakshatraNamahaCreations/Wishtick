@@ -22,6 +22,7 @@ import { migration020 } from './scripts/020-memory-indexes';
 import { migration021 } from './scripts/021-device-tokens';
 import { migration022 } from './scripts/022-addresses';
 import { migration023 } from './scripts/023-catalogue-clicks';
+import { migration024 } from './scripts/024-memory-description';
 
 /** Every migration must be registered here to run. Order comes from the id. */
 export const MIGRATIONS: Migration[] = [
@@ -48,6 +49,7 @@ export const MIGRATIONS: Migration[] = [
   migration021,
   migration022,
   migration023,
+  migration024,
 ];
 
 export { MigrationRunner } from './migration.runner';

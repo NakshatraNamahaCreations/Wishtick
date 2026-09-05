@@ -188,3 +188,40 @@ export interface ContentFlaggedEvent {
   reason: string;
   senderId: string | null;
 }
+
+/**
+ * A guest offered one of their own wishlists to an event they are going to.
+ *
+ * The host has to answer it before the list shows on the invitation, and the
+ * queue lives at the foot of one event's page — so without this the offer sat
+ * there unseen and the guest was never told why nothing happened.
+ */
+export const EVENT_WISHLIST_OFFERED = 'event.wishlist_offered';
+
+/**
+ * Carries the resolved names rather than ids alone, so the notification
+ * listener needs no Event or Wishlist model of its own: the service that
+ * emits this has already loaded both.
+ */
+export interface EventWishlistOfferedEvent {
+  eventId: string;
+  submissionId: string;
+  /** The host, who has to answer it. */
+  hostId: string;
+  guestName: string;
+  eventTitle: string;
+  wishlistTitle: string;
+}
+
+/** The host approved or declined a guest's offered wishlist. */
+export const EVENT_WISHLIST_ANSWERED = 'event.wishlist_answered';
+
+export interface EventWishlistAnsweredEvent {
+  eventId: string;
+  submissionId: string;
+  /** Whoever offered the list, and has been waiting to hear. */
+  guestId: string;
+  eventTitle: string;
+  wishlistTitle: string;
+  approved: boolean;
+}

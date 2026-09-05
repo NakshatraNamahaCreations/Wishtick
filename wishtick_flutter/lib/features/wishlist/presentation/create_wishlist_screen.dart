@@ -1,18 +1,21 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/media/media_repository.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../../home/presentation/widgets/occasion_grid.dart';
 import '../../wishmates/domain/wishmate.dart';
 import '../../wishmates/presentation/wishmates_providers.dart';
 import '../domain/wishlist.dart';
 import 'cover_crop_screen.dart';
-import 'occasion_labels_provider.dart';
 import 'wishlist_detail_controller.dart';
 import 'wishlist_suggestions.dart';
 import 'wishlists_controller.dart';
@@ -26,6 +29,29 @@ import 'wishlists_controller.dart';
 /// [editing] to prefill the form and save via `PATCH` instead of `POST`.
 class CreateWishlistScreen extends ConsumerStatefulWidget {
   const CreateWishlistScreen({this.editing, super.key});
+
+  /// Where a cover comes from: the gallery, then the cropper. Null if either
+  /// step was backed out of.
+  ///
+  /// A hook rather than a direct call because neither half can run in a widget
+  /// test — `ImagePicker` needs a platform gallery, and the cropper needs to
+  /// decode a real image — while everything the screen does *with* the bytes
+  /// afterwards is exactly what wants testing.
+  @visibleForTesting
+  static Future<Uint8List?> Function(BuildContext context) chooseCover =
+      _cropFromGallery;
+
+  static Future<Uint8List?> _cropFromGallery(BuildContext context) async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null || !context.mounted) return null;
+
+    // Framed on the device before anything is sent: covers are shown
+    // landscape, so what is confirmed here is exactly what gets stored, and
+    // there is no full-size original left on the server to crop again.
+    final original = await picked.readAsBytes();
+    if (!context.mounted) return null;
+    return CoverCropScreen.show(context, original);
+  }
 
   final Wishlist? editing;
 
@@ -43,8 +69,19 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
     text: widget.editing?.description,
   );
 
+  /// The cover already on the CDN — the one the list being edited was saved
+  /// with, or the one this screen uploaded on a save that then failed.
   MediaView? _cover;
-  bool _uploadingCover = false;
+
+  /// A cover chosen but not yet sent anywhere.
+  ///
+  /// Held on the device until Save: uploading at pick time meant every
+  /// abandoned Create Wishlist left an orphaned file on Bunny that nothing
+  /// ever pointed at and nothing ever cleaned up.
+  ///
+  /// Outranks [_cover] wherever both are set — what is in hand is always the
+  /// newer choice.
+  Uint8List? _coverBytes;
 
   /// The WishMate picked from the name suggestions, if any.
   ///
@@ -92,38 +129,44 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
   }
 
   Future<void> _pickCover() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (picked == null || !mounted) return;
-
-    // Framed on the device before anything is sent: covers are shown
-    // landscape, so what is confirmed here is exactly what gets stored, and
-    // there is no full-size original left on the server to crop again.
-    final original = await picked.readAsBytes();
-    if (!mounted) return;
-    final cropped = await CoverCropScreen.show(context, original);
+    final cropped = await CreateWishlistScreen.chooseCover(context);
     if (cropped == null || !mounted) return;
-    final file = XFile.fromData(
-      cropped,
-      name: 'cover.jpg',
-      mimeType: 'image/jpeg',
-    );
+    // [_cover] is left as it was: bytes in hand outrank it everywhere, so a
+    // fresh pick replaces the list's old cover — and any copy a failed save
+    // already uploaded — without a second field to keep in step.
+    setState(() => _coverBytes = cropped);
+  }
 
-    setState(() => _uploadingCover = true);
+  /// Sends the held cover to the CDN, and answers the id to save against.
+  ///
+  /// Null means the upload failed and the error is already on screen; the
+  /// wishlist must not be written without its cover. Kept on [_cover] so a
+  /// retry after a *save* failure does not upload the same picture twice.
+  Future<String?> _uploadCover() async {
+    final bytes = _coverBytes;
+    if (bytes == null) return _cover?.id;
+
     try {
       final media = await ref
           .read(mediaRepositoryProvider)
-          .uploadFile(file: file, purpose: MediaPurpose.wishlistCover);
-      if (!mounted) return;
-      setState(() {
-        _cover = media;
-        _uploadingCover = false;
-      });
+          .uploadFile(
+            file: XFile.fromData(
+              bytes,
+              name: 'cover.jpg',
+              mimeType: 'image/jpeg',
+            ),
+            purpose: MediaPurpose.wishlistCover,
+          );
+      if (mounted) {
+        setState(() {
+          _cover = media;
+          _coverBytes = null;
+        });
+      }
+      return media.id;
     } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _uploadingCover = false;
-        _error = e.message;
-      });
+      if (mounted) setState(() => _error = e.message);
+      return null;
     }
   }
 
@@ -134,7 +177,16 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
 
   String? get _coverError {
     if (!_submitted) return null;
-    return _cover == null ? 'Please add a cover image' : null;
+    return _cover == null && _coverBytes == null
+        ? 'Please add a cover image'
+        : null;
+  }
+
+  String? get _occasionError {
+    if (!_submitted) return null;
+    return _occasionLabel.text.trim().isEmpty
+        ? 'Please choose an occasion'
+        : null;
   }
 
   String? get _descriptionError {
@@ -152,6 +204,7 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
   Future<void> _submit() async {
     setState(() => _submitted = true);
     if (_titleError != null ||
+        _occasionError != null ||
         _coverError != null ||
         _descriptionError != null ||
         _visibilityError != null) {
@@ -163,35 +216,47 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
       _error = null;
     });
 
+    // Only now does the picture leave the device. A cover the reader chose and
+    // then walked away from never becomes a file on the CDN.
+    final coverMediaId = await _uploadCover();
+    if (!mounted) return;
+    if (coverMediaId == null) {
+      setState(() => _busy = false);
+      return;
+    }
+
     final editing = widget.editing;
-    final ok = editing == null
-        ? await ref
-              .read(wishlistsProvider.notifier)
-              .create(
-                title: _title.text.trim(),
-                description: _description.text.trim(),
-                occasionLabel: _occasionLabel.text.trim().isEmpty
-                    ? null
-                    : _occasionLabel.text.trim(),
-                visibility: _visibility!,
-                coverMediaId: _cover!.id,
-                forUserId: _forMate?.userId,
-              )
-        : await ref
-              .read(wishlistDetailProvider(editing.id).notifier)
-              .update(
-                title: _title.text.trim(),
-                description: _description.text.trim(),
-                occasionLabel: _occasionLabel.text.trim().isEmpty
-                    ? null
-                    : _occasionLabel.text.trim(),
-                visibility: _visibility!,
-                coverMediaId: _cover!.id,
-                forUserId: _forMate?.userId,
-              );
+    // Pops with the new list, so whoever opened this to *get* a wishlist —
+    // the event wizard, linking one to the invitation — has it in hand.
+    Wishlist? created;
+    final bool ok;
+    if (editing == null) {
+      created = await ref
+          .read(wishlistsProvider.notifier)
+          .create(
+            title: _title.text.trim(),
+            description: _description.text.trim(),
+            occasionLabel: _occasionLabel.text.trim(),
+            visibility: _visibility!,
+            coverMediaId: coverMediaId,
+            forUserId: _forMate?.userId,
+          );
+      ok = created != null;
+    } else {
+      ok = await ref
+          .read(wishlistDetailProvider(editing.id).notifier)
+          .update(
+            title: _title.text.trim(),
+            description: _description.text.trim(),
+            occasionLabel: _occasionLabel.text.trim(),
+            visibility: _visibility!,
+            coverMediaId: coverMediaId,
+            forUserId: _forMate?.userId,
+          );
+    }
     if (!mounted) return;
     if (ok) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(created);
     } else {
       setState(() {
         _busy = false;
@@ -265,19 +330,19 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
                         _forMate = mate;
                         _forUserIdToResolve = null;
                       }),
-                      onUnlink: () => setState(() => _forMate = null),
                     ),
                     const SizedBox(height: AppSpacing.xxl),
                     TextFormField(
                       controller: _occasionLabel,
                       textCapitalization: TextCapitalization.words,
                       onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'Occasion (Optional)',
-                        hintText: 'Enter Occasion name',
+                      decoration: InputDecoration(
+                        label: _RequiredLabel('Occasion'),
+                        hintText: 'Pick one below, or type your own',
+                        errorText: _occasionError,
                       ),
                     ),
-                    _OccasionSuggestions(
+                    _OccasionPicker(
                       typed: _occasionLabel.text,
                       onPick: (label) => setState(() {
                         _occasionLabel.text = label;
@@ -291,8 +356,8 @@ class _CreateWishlistScreenState extends ConsumerState<CreateWishlistScreen> {
                     const SizedBox(height: AppSpacing.sm),
                     _CoverImagePicker(
                       cover: _cover,
-                      busy: _uploadingCover,
-                      onTap: _uploadingCover ? null : _pickCover,
+                      bytes: _coverBytes,
+                      onTap: _busy ? null : _pickCover,
                     ),
                     if (_coverError != null) ...[
                       const SizedBox(height: AppSpacing.xs),
@@ -421,12 +486,16 @@ class _RequiredLabel extends StatelessWidget {
 class _CoverImagePicker extends StatelessWidget {
   const _CoverImagePicker({
     required this.cover,
-    required this.busy,
+    required this.bytes,
     required this.onTap,
   });
 
   final MediaView? cover;
-  final bool busy;
+
+  /// A cover chosen but not yet uploaded. Drawn from memory, so the reader
+  /// sees what they cropped without a round trip to a CDN that has never
+  /// heard of it.
+  final Uint8List? bytes;
   final VoidCallback? onTap;
 
   static const _height = 160.0;
@@ -447,8 +516,16 @@ class _CoverImagePicker extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(color: colors.border),
           ),
-          child: busy
-              ? Center(child: CircularProgressIndicator(color: colors.primary))
+          child: bytes != null
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: Image.memory(
+                    bytes!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: _height,
+                  ),
+                )
               : cover != null
               ? WishtickImage(
                   url: cover!.url,
@@ -575,11 +652,10 @@ class _PrivacyOption extends StatelessWidget {
 
 /// WishMates whose name matches what has been typed, and the link once picked.
 ///
-/// "Type the name and we suggest from your WishMates": a strip of chips under
-/// the field, not a dropdown that steals the keyboard. Picking one names the
-/// list after them and links it to them; the pill that replaces the strip says
-/// so, and its cross is how the link is undone. Free text stays free — a name
-/// that matches nobody is still a fine name.
+/// "Type the name and we suggest from your WishMates": rows under the field,
+/// not a dropdown that steals the keyboard. Picking one puts their name in the
+/// field and links the list to them, and the rows step aside. Free text stays
+/// free — a name that matches nobody is still a fine name.
 class _NameSuggestions extends ConsumerWidget {
   const _NameSuggestions({
     required this.typed,
@@ -587,7 +663,6 @@ class _NameSuggestions extends ConsumerWidget {
     required this.pendingUserId,
     required this.onPick,
     required this.onResolved,
-    required this.onUnlink,
   });
 
   final String typed;
@@ -595,7 +670,6 @@ class _NameSuggestions extends ConsumerWidget {
   final String? pendingUserId;
   final ValueChanged<PersonIdentity> onPick;
   final ValueChanged<PersonIdentity> onResolved;
-  final VoidCallback onUnlink;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -615,21 +689,11 @@ class _NameSuggestions extends ConsumerWidget {
       }
     }
 
-    final mate = linked;
-    if (mate != null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: AppSpacing.sm),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: InputChip(
-            avatar: const Icon(Icons.person_outline, size: AppSizes.iconSm),
-            label: Text('For ${mate.name}'),
-            onDeleted: onUnlink,
-            deleteButtonTooltipMessage: 'Unlink',
-          ),
-        ),
-      );
-    }
+    // Nothing once one is picked: their name is in the field, and a chip
+    // beside it read as one of several — as though the next tap would add a
+    // second WishMate. Editing the name away is what unlinks, which is the
+    // same gesture as changing your mind about it.
+    if (linked != null) return const SizedBox.shrink();
 
     final matches = matchingWishmates(mates, typed);
     if (matches.isEmpty) return const SizedBox.shrink();
@@ -662,46 +726,115 @@ class _NameSuggestions extends ConsumerWidget {
   }
 }
 
-/// Occasions worth suggesting, only while typing: the user's own recorded
-/// dates first, worded as the list would be named, then the taxonomy. A
-/// standing block of every occasion under an empty field is a menu, not a
-/// suggestion.
-class _OccasionSuggestions extends ConsumerWidget {
-  const _OccasionSuggestions({required this.typed, required this.onPick});
+/// The occasions to choose from, as Home draws them: a photo and a label.
+///
+/// A grid rather than a list of words, because that is what the picker on Home
+/// already is and an occasion is a thing people recognise by its picture. What
+/// is typed filters it, so the field still narrows as you go — and a name that
+/// matches no tile is still allowed, since the taxonomy is not everybody's
+/// list of reasons to give a gift.
+///
+/// "Custom Events" is deliberately absent: on Home it starts an event, which
+/// is an action, not an occasion a wishlist could be for.
+class _OccasionPicker extends StatelessWidget {
+  const _OccasionPicker({required this.typed, required this.onPick});
 
   final String typed;
   final ValueChanged<String> onPick;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final dates = ref.watch(importantDatesProvider).value ?? const [];
-    final taxonomy = ref.watch(occasionLabelsProvider).value ?? const {};
-    final labels = occasionSuggestions(
-      dates: dates,
-      taxonomy: taxonomy,
-      typed: typed,
-    );
-    // Nothing to offer, or the field already says exactly one of them.
-    if (labels.isEmpty ||
-        (labels.length == 1 &&
-            labels.single.toLowerCase() == typed.trim().toLowerCase())) {
-      return const SizedBox.shrink();
-    }
+  Widget build(BuildContext context) {
+    final q = typed.trim().toLowerCase();
+    final tiles = kHomeOccasions
+        .where((o) => q.isEmpty || o.label.toLowerCase().contains(q))
+        .toList();
+    if (tiles.isEmpty) return const SizedBox.shrink();
 
-    return _SuggestionList(
-      children: [
-        for (final label in labels)
-          ListTile(
-            dense: true,
-            title: Text(
-              label,
-              style: context.text.bodyMedium?.copyWith(
-                color: context.colors.textPrimary,
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: GridView.count(
+        crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        mainAxisSpacing: AppSpacing.sm,
+        crossAxisSpacing: AppSpacing.sm,
+        childAspectRatio: 0.82,
+        children: [
+          for (final o in tiles)
+            _OccasionTile(
+              tile: o,
+              // Compared against the field, not against a second piece of
+              // state: typing a label by hand and tapping its tile mean the
+              // same thing, so they had better look the same.
+              selected: o.label.toLowerCase() == q,
+              onTap: () => onPick(o.label),
+              colors: colors,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OccasionTile extends StatelessWidget {
+  const _OccasionTile({
+    required this.tile,
+    required this.selected,
+    required this.onTap,
+    required this.colors,
+  });
+
+  final OccasionTile tile;
+  final bool selected;
+  final VoidCallback onTap;
+  final WishtickColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: tile.label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: onTap,
+        child: Column(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(
+                    color: selected ? colors.primary : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: Image.asset(
+                    tile.image,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
               ),
             ),
-            onTap: () => onPick(label),
-          ),
-      ],
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              tile.label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: context.text.bodySmall?.copyWith(
+                color: colors.textPrimary,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -199,7 +199,10 @@ class _GroupGiftRailState extends ConsumerState<_GroupGiftRail> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            height: 260,
+            // The card's artwork is 552x450, and the rail's card is 361 wide
+            // on the 393-px frame: 361 * 450/552 = 294, rounded onto the grid.
+            // Any shorter and `cover` crops the balloons off the top.
+            height: 296,
             child: PageView.builder(
               controller: _controller,
               itemCount: gifts.length,

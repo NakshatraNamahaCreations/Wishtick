@@ -67,6 +67,19 @@ class GroupGiftCard extends StatelessWidget {
     super.key,
   });
 
+  /// The card's own celebration photograph — the frame's export, balloons,
+  /// cake and gift already arranged down its right-hand side.
+  ///
+  /// Not a flat fill built from tokens: the artwork *is* the design, and the
+  /// empty gold field on its left is the space the copy is laid into. Named
+  /// for the frame it came from, as the other banners in this file are.
+  static const artwork = "assets/images/Home_page_banners/Ananya's 24th.png";
+
+  /// The share of the width the copy may use, leaving the rest to the cake and
+  /// the balloons. Anything wider runs underneath them and stops being legible.
+  static const _copyFlex = 3;
+  static const _artworkFlex = 2;
+
   final GroupGift gift;
 
   /// What the gift is for. The list endpoint carries no item title, so the
@@ -78,90 +91,134 @@ class GroupGiftCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final days = gift.daysToDeadline();
+    // The artwork is a photograph: it stays gold whichever theme is on, so its
+    // ink has to as well. `primaryDeep` is the one dark token that holds in
+    // both — and it is the plum the progress bar is already drawn in.
+    final ink = colors.primaryDeep;
+    final message = gift.message?.trim();
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        // The gold treatment the mock uses. `gradients.celebration` is the
-        // plum sweep — a different token for a different card.
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [colors.celebrationSubtle, colors.celebration],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Material(
+      // Shows through only where `cover` cannot reach; the artwork is the card.
+      color: colors.celebrationSubtle,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.passthrough,
         children: [
-          if (days != null && days >= 0) WhenPill(daysAway: days),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: context.text.titleLarge?.copyWith(
-              color: colors.textPrimary,
-              fontWeight: FontWeight.w700,
+          Positioned.fill(
+            child: Image.asset(
+              artwork,
+              fit: BoxFit.cover,
+              // Crop off the empty gold on the left rather than the artwork on
+              // the right: the left is the part the copy covers anyway.
+              alignment: Alignment.centerRight,
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            'Group Gift',
-            style: context.text.labelSmall?.copyWith(
-              color: colors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            '${formatInrMinor(gift.collectedAmountMinor)} of '
-            '${formatInrMinor(gift.targetAmountMinor)}',
-            style: context.text.titleMedium?.copyWith(
-              color: colors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            child: LinearProgressIndicator(
-              // Server-computed, so the bar and the amounts cannot disagree.
-              value: gift.percentFunded / 100,
-              minHeight: 6,
-              backgroundColor: colors.surface.withValues(alpha: 0.6),
-              valueColor: AlwaysStoppedAnimation(colors.primaryDeep),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Material(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              onTap: onChipIn,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.lg,
-                  vertical: AppSpacing.sm,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Chip in',
-                      style: context.text.titleSmall?.copyWith(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w700,
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: _copyFlex,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (days != null && days >= 0) WhenPill(daysAway: days),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        title.toUpperCase(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.headlineSmall?.copyWith(
+                          color: ink,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    Icon(
-                      Icons.chevron_right,
-                      size: AppSizes.iconSm,
-                      color: colors.textPrimary,
-                    ),
-                  ],
+                      if (message != null && message.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          message,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.text.bodySmall?.copyWith(
+                            color: ink.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
+                      // Pins the goal and the button to the foot of the card,
+                      // however much or little the host wrote above them.
+                      const Spacer(),
+                      Text(
+                        'Group Gift',
+                        style: context.text.labelSmall?.copyWith(
+                          color: ink.withValues(alpha: 0.8),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      Text(
+                        '${formatInrMinor(gift.collectedAmountMinor)} of '
+                        '${formatInrMinor(gift.targetAmountMinor)}',
+                        style: context.text.titleMedium?.copyWith(
+                          color: ink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        child: LinearProgressIndicator(
+                          // Server-computed, so the bar and the amounts cannot
+                          // disagree.
+                          value: gift.percentFunded / 100,
+                          minHeight: 6,
+                          backgroundColor: colors.surface.withValues(
+                            alpha: 0.6,
+                          ),
+                          valueColor: AlwaysStoppedAnimation(
+                            colors.primaryDeep,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Material(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          onTap: onChipIn,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.lg,
+                              vertical: AppSpacing.sm,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Chip in',
+                                  style: context.text.titleSmall?.copyWith(
+                                    color: colors.textPrimary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.chevron_right,
+                                  size: AppSizes.iconSm,
+                                  color: colors.textPrimary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                // Left bare on purpose: the cake and the balloons live here.
+                const Expanded(flex: _artworkFlex, child: SizedBox.shrink()),
+              ],
             ),
           ),
         ],
@@ -191,8 +248,8 @@ class HomeEventCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.passthrough,
           children: [
-            if (event.coverUrl != null) ...[
-              Positioned.fill(child: WishtickImage(url: event.coverUrl)),
+            if (event.artworkUrl != null) ...[
+              Positioned.fill(child: WishtickImage(url: event.artworkUrl)),
               const Positioned.fill(child: _CoverScrim()),
             ],
             Padding(

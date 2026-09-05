@@ -13,6 +13,7 @@ Wishlist buildWishlist({
   String id = 'wl_1',
   String title = 'Ananya\'s Wishlist',
   String? description = 'A few special things',
+  String? occasionLabel,
   WishlistVisibility visibility = WishlistVisibility.public,
   String? coverUrl,
   int itemCount = 0,
@@ -34,6 +35,7 @@ Wishlist buildWishlist({
     relationship: 'owner',
     role: null,
   ),
+  DateTime? archivedAt,
 }) {
   return Wishlist(
     id: id,
@@ -41,12 +43,12 @@ Wishlist buildWishlist({
     description: description,
     visibility: visibility,
     coverUrl: coverUrl,
-    occasionLabel: null,
+    occasionLabel: occasionLabel,
     chatEnabled: chatEnabled,
     eventId: null,
     itemCount: itemCount,
     fulfilledCount: fulfilledCount,
-    archivedAt: null,
+    archivedAt: archivedAt,
     createdAt: DateTime(2026, 6, 1),
     updatedAt: DateTime(2026, 6, 1),
     access: access,
@@ -202,9 +204,12 @@ class FakeWishlistRepository implements WishlistRepository {
     _throwIfFailing();
     final index = wishlists.indexWhere((w) => w.id == id);
     if (index != -1) {
+      // Stamped, not just rebuilt: [listMine] filters on this, so a fake that
+      // left it null archived nothing anybody could see.
       wishlists[index] = buildWishlist(
         id: wishlists[index].id,
         title: wishlists[index].title,
+        archivedAt: DateTime(2026, 9, 5),
       );
     }
   }
@@ -508,12 +513,21 @@ class FakeProductRepository implements ProductRepository {
   }
 }
 
-/// Skips the real upload handshake — returns the picked file's own path.
+/// Skips the real upload handshake.
+///
+/// Ids are minted in order (`media_1`, `media_2`…) rather than taken from the
+/// file's path: a file built from bytes has no path, and an empty id would
+/// pass through a "was it attached?" assertion unnoticed.
 class FakeMediaRepository implements MediaRepository {
   final uploadCalls = <MediaPurpose>[];
 
+  /// The name each upload was made under — what decides its content type.
+  final uploadedNames = <String?>[];
+
   /// What `getMedia` answers; ready unless a test is exercising a transcode.
   MediaStatus status = MediaStatus.ready;
+
+  Object? failure;
 
   @override
   Future<MediaView> uploadFile({
@@ -521,10 +535,14 @@ class FakeMediaRepository implements MediaRepository {
     required MediaPurpose purpose,
     String? fileName,
   }) async {
+    final f = failure;
+    if (f != null) throw f;
     uploadCalls.add(purpose);
+    uploadedNames.add(fileName ?? file.name);
+    final id = 'media_${uploadCalls.length}';
     return MediaView(
-      id: file.path,
-      url: file.path,
+      id: id,
+      url: file.path.isEmpty ? 'https://cdn.test/$id' : file.path,
       purpose: purpose.wireValue,
       contentType: null,
       sizeBytes: null,

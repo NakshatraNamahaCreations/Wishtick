@@ -3,6 +3,18 @@ import { MediaPurpose } from './schemas/media.schema';
 export interface PurposeRule {
   mimeTypes: string[];
   maxBytes: number;
+  /**
+   * How long a clip may run, where a duration is knowable at all.
+   *
+   * Separate from [maxBytes] because they refuse different things: a size cap
+   * is about what we pay to store and how long an upload takes, a duration cap
+   * is about what anyone will sit through. A well-compressed five-minute video
+   * can slip under 10 MB, and a 15-second one shot on a modern phone can blow
+   * past it — neither limit implies the other.
+   *
+   * Undefined means "no ceiling", not "zero".
+   */
+  maxDurationSeconds?: number;
   /** Extension used for the storage key, keyed by mime type. */
   extensions: Record<string, string>;
 }
@@ -56,8 +68,13 @@ export const MEDIA_RULES: Record<MediaPurpose, PurposeRule> = {
     extensions: IMAGE_EXTENSIONS,
   },
   // A wish may be a photo, a video or a voice note (`2073:55`, `2074:129`,
-  // `2074:152`). Roomier than a cover and tighter than a reel clip: nothing
-  // here is re-encoded, so what a contributor uploads is what plays.
+  // `2074:152`). Roomier than a cover and tighter than a reel clip.
+  //
+  // 20 seconds because a wish is a greeting, not a film: it is watched in a
+  // story viewer, one wish after another, and a capsule of twenty of them is
+  // already seven minutes. The cap applies to what is uploaded — a video wish
+  // IS re-encoded when a Stream driver is configured, but that happens after
+  // the phone has sent the whole file, so it does nothing for the upload.
   [MediaPurpose.MEMORY_WISH]: {
     mimeTypes: [
       ...IMAGE_TYPES,
@@ -69,6 +86,7 @@ export const MEDIA_RULES: Record<MediaPurpose, PurposeRule> = {
       'audio/wav',
     ],
     maxBytes: 50 * MB,
+    maxDurationSeconds: 20,
     extensions: {
       ...IMAGE_EXTENSIONS,
       'video/mp4': 'mp4',

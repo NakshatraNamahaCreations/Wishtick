@@ -53,8 +53,10 @@ enum MediaStatus {
 
   final String wireValue;
 
-  static MediaStatus fromWire(String? value) =>
-      MediaStatus.values.firstWhere((s) => s.wireValue == value, orElse: () => ready);
+  static MediaStatus fromWire(String? value) => MediaStatus.values.firstWhere(
+    (s) => s.wireValue == value,
+    orElse: () => ready,
+  );
 }
 
 /// A confirmed, ready-to-use upload — `id` is what a feature DTO stores
@@ -187,6 +189,24 @@ class MediaRepository {
   /// not play.
   static String contentTypeFor(XFile file, {String? fileName}) =>
       file.mimeType ?? _guessFromName(fileName ?? file.name);
+
+  /// Whether a filename or URL points at something a widget can draw inline.
+  ///
+  /// Stills and GIFs can be. An MP4 or a PDF invitation cannot, and inventing
+  /// a thumbnail for one would misrepresent what the guest receives — those
+  /// get an honest placeholder instead.
+  ///
+  /// The query string and fragment are stripped first. A signed URL ends with
+  /// its signature rather than with `.png`, so testing the whole address would
+  /// call every signed image undrawable and blank out real artwork.
+  ///
+  /// An address with **no** extension is treated as drawable: that is what a
+  /// CDN or proxy URL usually looks like, and the image widget already falls
+  /// back to its own placeholder if the bytes turn out not to be an image.
+  /// The alternative — an allowlist — hides real photos behind a placeholder.
+  static bool isDrawableImage(String nameOrUrl) => _guessFromName(
+    nameOrUrl.split('?').first.split('#').first,
+  ).startsWith('image/');
 
   static String _guessFromName(String fileName) {
     const byExtension = {

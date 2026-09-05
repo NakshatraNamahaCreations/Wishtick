@@ -119,6 +119,65 @@ void main() {
       );
     });
 
+    // Nothing else on the form can supply this, and both the chip-in card on
+    // Home and the invitation count down to it — so the host is asked.
+    testWidgets('asks when the money has to be in by', (tester) async {
+      // Tall enough that the whole lazy form is built: the date field sits
+      // well below the fold on a phone-sized viewport.
+      tester.view
+        ..physicalSize = const Size(393, 4000)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await pumpCreate(tester);
+
+      final field = find.text('Pick a date');
+      expect(field, findsOneWidget);
+
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      // The day after tomorrow: today and tomorrow are both selectable, but
+      // "26" is unambiguous in the grid in a way that today's number is not
+      // once the picker highlights it.
+      final target = DateTime.now().add(const Duration(days: 2));
+      await tester.tap(find.text('${target.day}').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(CreateGroupGiftScreen)),
+      );
+      final chosen = container.read(createGroupGiftProvider('item_1')).deadline;
+      expect(chosen, isNotNull);
+      expect(chosen!.day, target.day);
+      // The last moment of that day, not its midnight: the server refuses a
+      // deadline that has already gone by.
+      expect(chosen.hour, 23);
+    });
+
+    // A goal with no date is the state the form opens in, and it is not
+    // submittable — so the button has to say so rather than fail on tap.
+    testWidgets('will not create one without a deadline', (tester) async {
+      await pumpCreate(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(CreateGroupGiftScreen)),
+      );
+      final notifier = container.read(
+        createGroupGiftProvider('item_1').notifier,
+      );
+      notifier.setTitle("Siya's birthday gift");
+      notifier.setUpiId('rohanr1@okaxis');
+      await tester.pumpAndSettle();
+
+      final button = find.widgetWithText(ElevatedButton, 'Create Group Gift');
+      expect(tester.widget<ElevatedButton>(button).onPressed, isNull);
+
+      notifier.setDeadline(DateTime.now().add(const Duration(days: 7)));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<ElevatedButton>(button).onPressed, isNotNull);
+    });
+
     testWidgets('renders in dark mode', (tester) async {
       await pumpCreate(tester, theme: AppTheme.dark);
       expect(tester.takeException(), isNull);

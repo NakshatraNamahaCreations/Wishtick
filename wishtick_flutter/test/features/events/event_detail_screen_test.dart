@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:wishtick_flutter/core/router/app_routes.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
+import 'package:wishtick_flutter/core/widgets/wishtick_image.dart';
 import 'package:wishtick_flutter/features/auth/domain/auth_user.dart';
 import 'package:wishtick_flutter/features/auth/presentation/session_controller.dart';
 import 'package:wishtick_flutter/features/events/data/events_repository.dart';
 import 'package:wishtick_flutter/features/events/domain/event.dart';
 import 'package:wishtick_flutter/features/events/presentation/event_detail_screen.dart';
+import 'package:wishtick_flutter/features/wishmates/data/wishmates_repository.dart';
 
 import '../../helpers/events_fakes.dart';
+import '../../helpers/wishmates_fakes.dart';
 
 /// The host's own view of an event.
 ///
@@ -22,6 +26,20 @@ void main() {
 
   setUp(() => repo = FakeEventsRepository());
 
+  late FakeWishmatesRepository mates;
+
+  setUp(() => mates = FakeWishmatesRepository(mates: [buildWishmate()]));
+
+  // Riverpod 3 does not export the `Override` type, so this cannot be a typed
+  // helper; the inferred return type is what `ProviderScope` takes.
+  overrides() => [
+    eventsRepositoryProvider.overrideWithValue(repo),
+    wishmatesRepositoryProvider.overrideWithValue(mates),
+    // The screen names the host from the session — it is only ever
+    // reached from that user's own "My Events".
+    sessionProvider.overrideWith(_SignedInAsJayanth.new),
+  ];
+
   Future<void> pump(WidgetTester tester, {ThemeData? theme}) async {
     tester.view
       ..physicalSize = const Size(393, 1400)
@@ -31,12 +49,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         key: UniqueKey(),
-        overrides: [
-          eventsRepositoryProvider.overrideWithValue(repo),
-          // The screen names the host from the session — it is only ever
-          // reached from that user's own "My Events".
-          sessionProvider.overrideWith(_SignedInAsJayanth.new),
-        ],
+        overrides: overrides(),
         child: MaterialApp(
           theme: theme ?? AppTheme.light,
           home: const EventDetailScreen(eventId: 'evt_1'),
@@ -45,6 +58,49 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  /// Under a router with Share beneath the event, as in the app's own route
+  /// table — for the row that navigates.
+  Future<void> pumpRouted(WidgetTester tester) async {
+    tester.view
+      ..physicalSize = const Size(393, 1400)
+      ..devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: overrides(),
+        child: MaterialApp.router(
+          theme: AppTheme.light,
+          routerConfig: GoRouter(
+            initialLocation: AppRoutes.eventDetail('evt_1'),
+            routes: [
+              GoRoute(
+                path: '/events/:id',
+                builder: (_, s) =>
+                    EventDetailScreen(eventId: s.pathParameters['id']!),
+                routes: [
+                  GoRoute(
+                    path: 'share',
+                    builder: (_, s) =>
+                        Scaffold(body: Text('share ${s.pathParameters['id']}')),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  /// The tappable behind a suggestion row, or null when the row is dead.
+  VoidCallback? rowTap(WidgetTester tester, String title) => tester
+      .widget<InkWell>(
+        find.ancestor(of: find.text(title), matching: find.byType(InkWell)),
+      )
+      .onTap;
 
   testWidgets('shows the event the host made, not their guest list', (
     tester,
@@ -126,13 +182,116 @@ void main() {
     expect(find.text('Jayanth'), findsOneWidget);
   });
 
-  testWidgets('the invitation row invites you to make one when there is none', (
+  testWidgets('the invitation is shown whole, at its own proportions', (
     tester,
   ) async {
-    repo.event = buildEvent();
+    // A fixed 3:4 box cropped the last line off every card of another shape.
+    repo.event = buildEvent(inviteMediaUrl: 'https://cdn.test/invite.png');
     await pump(tester);
 
-    expect(find.text('Design one to send'), findsOneWidget);
+    final image = tester.widget<WishtickImage>(find.byType(WishtickImage));
+    expect(image.url, 'https://cdn.test/invite.png');
+    expect(image.fit, BoxFit.fitWidth);
+    expect(
+      find.ancestor(
+        of: find.byType(WishtickImage),
+        matching: find.byType(AspectRatio),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a PDF invitation is not drawn as a broken image', (
+    tester,
+  ) async {
+    repo.event = buildEvent(inviteMediaUrl: 'https://cdn.test/invite.pdf');
+    await pump(tester);
+
+    expect(find.byType(WishtickImage), findsNothing);
+  });
+
+  testWidgets('Quick Suggestions is only what the design has on it', (
+    tester,
+  ) async {
+    repo.event = buildEvent(status: EventStatus.published);
+    await pump(tester);
+
+    // Wishlist first, then guests — the design's order.
+    expect(find.text('View Wishlist'), findsOneWidget);
+    expect(find.text('Guest List'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('View Wishlist')).dy,
+      lessThan(tester.getTopLeft(find.text('Guest List')).dy),
+    );
+
+    // Inviting moved to the bar; nothing about the invitation's design was
+    // ever a row here.
+    expect(find.text('Invite WishMates'), findsNothing);
+    expect(find.text('Share Invitation Link'), findsNothing);
+    expect(find.text('Invitation'), findsNothing);
+    expect(find.text('Change the design'), findsNothing);
+  });
+
+  testWidgets('the bar carries an invite action, which opens every way in', (
+    tester,
+  ) async {
+    repo.event = buildEvent(status: EventStatus.published);
+    await pump(tester);
+
+    await tester.tap(find.byIcon(Icons.person_add_alt_1_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invite people'), findsOneWidget);
+    expect(find.text('Invite WishMates'), findsOneWidget);
+    // For the friends who are not on Wishtick yet, which is most of them on
+    // the day a host starts.
+    expect(find.text('Invite from Contacts'), findsOneWidget);
+    expect(find.text('Share Invitation Link'), findsOneWidget);
+  });
+
+  testWidgets('Invite WishMates opens the WishMates picker', (tester) async {
+    repo.event = buildEvent(status: EventStatus.published);
+    await pump(tester);
+
+    await tester.tap(find.byIcon(Icons.person_add_alt_1_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invite WishMates'));
+    await tester.pumpAndSettle();
+
+    // The picker replaced the sheet rather than stacking on it.
+    expect(find.text('Invite people'), findsNothing);
+    expect(find.text('Share with WishMates'), findsOneWidget);
+    expect(find.text('Priyal Sharma'), findsOneWidget);
+  });
+
+  testWidgets('Share Invitation Link opens the share screen', (tester) async {
+    repo.event = buildEvent(status: EventStatus.published);
+    await pumpRouted(tester);
+
+    await tester.tap(find.byIcon(Icons.person_add_alt_1_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Share Invitation Link'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('share evt_1'), findsOneWidget);
+  });
+
+  testWidgets('a draft cannot be shared yet, and the sheet says so', (
+    tester,
+  ) async {
+    // The server refuses invites for a draft. A dead row carrying the reason
+    // beats a tap that fails — and beats an action that simply vanishes,
+    // which would teach the host nothing about when it comes back.
+    repo.event = buildEvent(status: EventStatus.draft);
+    await pump(tester);
+
+    await tester.tap(find.byIcon(Icons.person_add_alt_1_outlined));
+    await tester.pumpAndSettle();
+
+    expect(rowTap(tester, 'Invite WishMates'), isNull);
+    expect(rowTap(tester, 'Invite from Contacts'), isNull);
+    expect(rowTap(tester, 'Share Invitation Link'), isNull);
+    expect(find.text('Only a published event can be shared'), findsNWidgets(3));
   });
 
   testWidgets('a failed load offers a retry rather than spinning forever', (

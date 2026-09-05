@@ -72,7 +72,11 @@ class WishlistsController extends Notifier<WishlistsState> {
     }
   }
 
-  Future<bool> create({
+  /// The new list, or null with [WishlistsState.error] set.
+  ///
+  /// Returned rather than only added to the state, because a caller may need
+  /// exactly this one — the event wizard links the list it just made.
+  Future<Wishlist?> create({
     required String title,
     String? description,
     String? occasionLabel,
@@ -94,10 +98,10 @@ class WishlistsController extends Notifier<WishlistsState> {
         wishlists: [...?state.wishlists, created],
         busy: false,
       );
-      return true;
+      return created;
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: _message(e));
-      return false;
+      return null;
     }
   }
 

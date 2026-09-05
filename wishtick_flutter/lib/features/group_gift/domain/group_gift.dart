@@ -281,6 +281,10 @@ class GroupGiftInviteDetail {
     required this.percentFunded,
     required this.contributorCount,
     required this.contributors,
+    required this.suggestedAmountsMinor,
+    required this.hostName,
+    this.deadline,
+    this.hostUpiId,
   });
 
   factory GroupGiftInviteDetail.fromJson(Map<String, dynamic> json) =>
@@ -300,6 +304,14 @@ class GroupGiftInviteDetail {
               ),
             )
             .toList(),
+        suggestedAmountsMinor:
+            (json['suggestedAmountsMinor'] as List<dynamic>? ?? const [])
+                .cast<int>(),
+        hostName: json['hostName'] as String? ?? 'A friend',
+        hostUpiId: json['hostUpiId'] as String?,
+        deadline: json['deadline'] == null
+            ? null
+            : DateTime.parse(json['deadline'] as String),
       );
 
   final GroupGiftInvite invite;
@@ -311,6 +323,30 @@ class GroupGiftInviteDetail {
   final int percentFunded;
   final int contributorCount;
   final List<GroupGiftInviteContributor> contributors;
+
+  /// The chips the contribute sheet offers. Carried on the invitation because
+  /// paying is how it is accepted — the invitee cannot read the group itself
+  /// until they are in it.
+  final List<int> suggestedAmountsMinor;
+
+  /// Who started the collection, and where the money goes. Both are needed by
+  /// the confirmation screen the moment a contribution lands.
+  final String hostName;
+  final String? hostUpiId;
+
+  final DateTime? deadline;
+
+  /// Whole days until the deadline; null when the gift has none.
+  int? daysToDeadline({DateTime? now}) {
+    final end = deadline;
+    if (end == null) return null;
+    final today = now ?? DateTime.now();
+    return DateTime(
+      end.year,
+      end.month,
+      end.day,
+    ).difference(DateTime(today.year, today.month, today.day)).inDays;
+  }
 
   /// What is still missing, never negative.
   int get remainingMinor {

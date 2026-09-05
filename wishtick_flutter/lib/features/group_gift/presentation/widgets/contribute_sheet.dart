@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/format/currency.dart';
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/theme_extensions.dart';
-import '../../domain/group_gift.dart';
 import 'group_gift_widgets.dart';
 
 /// What the contribute sheet hands back.
@@ -14,22 +13,26 @@ typedef ContributionDraft = ({int amountMinor, String? message});
 /// A *pledge*, not a payment — Wishtick never holds the money. The button says
 /// "Pay ₹2000" because that is what the member is about to do, on their own
 /// UPI app, into the host's account.
+/// Takes the chips rather than the whole gift: an invitee pays from the
+/// invitation screen, before they are a member and before they can read the
+/// group at all, and the chips are the only thing this sheet ever needed.
 Future<ContributionDraft?> showContributeSheet(
   BuildContext context, {
-  required GroupGift gift,
+  required List<int> suggestedAmountsMinor,
 }) {
   return showModalBottomSheet<ContributionDraft>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _ContributeSheet(gift: gift),
+    builder: (_) =>
+        _ContributeSheet(suggestedAmountsMinor: suggestedAmountsMinor),
   );
 }
 
 class _ContributeSheet extends StatefulWidget {
-  const _ContributeSheet({required this.gift});
+  const _ContributeSheet({required this.suggestedAmountsMinor});
 
-  final GroupGift gift;
+  final List<int> suggestedAmountsMinor;
 
   @override
   State<_ContributeSheet> createState() => _ContributeSheetState();
@@ -65,7 +68,7 @@ class _ContributeSheetState extends State<_ContributeSheet> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final amount = _amountMinor;
-    final chips = widget.gift.suggestedAmountsMinor;
+    final chips = widget.suggestedAmountsMinor;
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),

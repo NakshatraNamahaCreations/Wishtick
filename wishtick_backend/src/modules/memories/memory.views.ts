@@ -35,7 +35,6 @@ export interface MemoryCapsuleView {
   person: PublicIdentity | null;
 
   relation: string | null;
-  description: string | null;
   occasion: string;
   occasionDate: Date | null;
   includeYear: boolean;
@@ -45,6 +44,17 @@ export interface MemoryCapsuleView {
   unlockedAt: Date | null;
   timezone: string;
   wishCount: number;
+
+  /**
+   * How many of those wishes the viewer wrote.
+   *
+   * A count, not a boolean: it decides both whether the button reads "Add a
+   * Wish" or "Add Another Wish", and whether there is anything of the viewer's
+   * own to preview. Safe to show while sealed — it counts only the viewer's
+   * own work, which they already know about.
+   */
+  myWishCount: number;
+
   /** First names only — the metadata that IS visible while locked. */
   contributors: string[];
   hostId: string;
@@ -117,7 +127,6 @@ export const toMemoryCapsuleView = (
     personName: capsule.personName,
     person: opts.person ?? null,
     relation: capsule.relation,
-    description: capsule.description,
     occasion: capsule.occasion,
     occasionDate: capsule.occasionDate,
     includeYear: capsule.includeYear,
@@ -127,6 +136,10 @@ export const toMemoryCapsuleView = (
     unlockedAt: capsule.unlockedAt,
     timezone: capsule.timezone,
     wishCount: capsule.wishCount,
+    myWishCount:
+      opts.viewerId === null
+        ? 0
+        : wishes.filter((w) => w.contributorId?.toString() === opts.viewerId).length,
     contributors: contributorNames(wishes),
     hostId: capsule.hostId.toString(),
     isHost,

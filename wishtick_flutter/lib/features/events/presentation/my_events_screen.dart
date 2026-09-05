@@ -219,6 +219,7 @@ class _HostedGrid extends ConsumerWidget {
                 // ever had multi-select behaves.
                 onLongPress: () => onToggle(event.id),
                 footnote: _rsvpLine(event),
+                badgeCount: event.pendingWishlistCount,
               ),
           ],
         );
@@ -266,7 +267,9 @@ class _InvitedGrid extends ConsumerWidget {
               _EventCard(
                 title: event.title,
                 startsAt: event.startsAt,
-                imageUrl: event.coverUrl,
+                // The invitation first, as on the host's own card above: an
+                // event made in the app has one and no cover.
+                imageUrl: event.artworkUrl,
                 footnote: event.hasAnswered
                     ? 'You said ${event.myRsvp.label.toLowerCase()}'
                     : 'RSVP pending',
@@ -424,6 +427,7 @@ class _EventCard extends StatelessWidget {
     this.onLongPress,
     this.selected = false,
     this.footnote,
+    this.badgeCount = 0,
   });
 
   final String title;
@@ -433,6 +437,9 @@ class _EventCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final bool selected;
   final String? footnote;
+
+  /// Guest wishlists waiting on an answer. Zero draws nothing.
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -471,6 +478,14 @@ class _EventCard extends StatelessWidget {
                   right: AppSpacing.sm,
                   child: _SelectionTick(selected: selected),
                 ),
+                // Hidden while picking cards to delete: the tick takes that
+                // corner, and a count is not what the host is reading then.
+                if (badgeCount > 0 && !selected)
+                  Positioned(
+                    top: AppSpacing.sm,
+                    left: AppSpacing.sm,
+                    child: _PendingBadge(count: badgeCount),
+                  ),
               ],
             ),
           ),
@@ -498,6 +513,43 @@ class _EventCard extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// "2 waiting" on an event whose host has guest wishlists to answer.
+///
+/// The queue is at the foot of the event's page, and nothing used to say it
+/// was there — so an offer sat unanswered and the guest was never told why.
+class _PendingBadge extends StatelessWidget {
+  const _PendingBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Semantics(
+      label:
+          '$count guest ${count == 1 ? 'wishlist' : 'wishlists'} waiting '
+          'for your answer',
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xxs,
+        ),
+        decoration: BoxDecoration(
+          color: colors.accent,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Text(
+          '$count waiting',
+          style: context.text.labelSmall?.copyWith(
+            color: colors.onAccent,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }

@@ -145,10 +145,22 @@ abstract final class AppRoutes {
   /// "Tell us about your event" (`257:755`) — step 2.
   static const createEventDetails = '/events/create/details';
 
-  /// "Choose a Template" (`263:900`).
+  /// "Choose a Template" (`263:900`), "Upload Invitation" (`2248:70`) and
+  /// "Preview Your Invite" (`263:1014`) for the event being created.
+  ///
+  /// No id in these, because there is no event yet: the whole wizard,
+  /// invitation included, lives in the create controller until the preview's
+  /// button is pressed. That press is what creates the event, and it lands on
+  /// [eventShare] — the first path with an id in it.
+  static const createEventInvite = '/events/create/invite';
+  static const createEventInviteUpload = '/events/create/invite/upload';
+  static const createEventInvitePreview = '/events/create/invite/preview';
+
   /// The host's own view of one event, from "My Events".
   static String eventDetail(String id) => '/events/$id';
 
+  /// "Choose a Template" (`263:900`) for an event that already exists —
+  /// changing the design from the event page.
   static String eventInviteTemplates(String id) => '/events/$id/invite';
 
   /// "Upload Invitation" (`2248:70`) — the other answer to the method sheet.
@@ -156,6 +168,11 @@ abstract final class AppRoutes {
 
   /// "Preview Your Invite" (`263:1014`).
   static String eventInvitePreview(String id) => '/events/$id/invite/preview';
+
+  /// "Share Your Invite" — where both invitation flows end. Nested under
+  /// [eventDetail] so backing out of it lands on the event, not on a wizard
+  /// step that no longer applies.
+  static String eventShare(String id) => '/events/$id/share';
 
   /// The guest list (`4099:1256`).
   static String eventGuests(String id) => '/events/$id/guests';
@@ -171,11 +188,26 @@ abstract final class AppRoutes {
   /// "Create Memory" (`4104:1539`) — step 1.
   static const createMemory = '/memories/create';
 
-  /// "When should this Memory Unlock?" (`2198:73`) — step 2.
+  /// "How would you like to add the wish?" — step 2, where the host picks how
+  /// to record their own first wish.
+  static const createMemoryWishKind = '/memories/create/wish';
+
+  /// Composing that wish, and previewing it — the two screens between picking
+  /// a kind and sealing the memory.
+  static const createMemoryWishCompose = '/memories/create/wish/compose';
+  static const createMemoryWishPreview = '/memories/create/wish/preview';
+
+  /// "When should this Memory Unlock?" (`2198:73`) — the last step.
   static const createMemoryUnlock = '/memories/create/unlock';
 
   /// One capsule — sealed, or its story once open.
   static String memory(String id) => '/memories/$id';
+
+  /// "How would you like to add the wish?" for a capsule that already exists.
+  static String memoryWishKind(String id) => '/memories/$id/wishes/kind';
+
+  /// The viewer's own wishes, readable while the capsule is still sealed.
+  static String memoryMyWishes(String id) => '/memories/$id/wishes/mine';
 
   /// The add-a-wish flow (`2073:55`, `2078:233`, `2074:129`, audio).
   static String memoryAddWish(String id) => '/memories/$id/wishes/add';

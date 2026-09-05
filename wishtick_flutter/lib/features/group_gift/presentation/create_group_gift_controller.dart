@@ -26,6 +26,7 @@ class CreateGroupGiftState {
     this.upiId = '',
     this.title = '',
     this.message = '',
+    this.deadline,
     this.error,
     this.busy = false,
     this.created,
@@ -45,6 +46,13 @@ class CreateGroupGiftState {
   final String upiId;
   final String title;
   final String message;
+
+  /// When the money has to be in by — what the countdown on Home and on the
+  /// invitation reads off. Required: a group gift with no date reads as an
+  /// open-ended ask, and the cards have nowhere to put a deadline that is not
+  /// there.
+  final DateTime? deadline;
+
   final String? error;
   final bool busy;
 
@@ -58,6 +66,7 @@ class CreateGroupGiftState {
       !busy &&
       title.trim().isNotEmpty &&
       upiId.trim().isNotEmpty &&
+      deadline != null &&
       (goalAmountMinor ?? 0) > 0;
 
   /// The chips as the contribute sheet will see them: the host's three plus
@@ -80,6 +89,7 @@ class CreateGroupGiftState {
     String? upiId,
     String? title,
     String? message,
+    DateTime? deadline,
     String? error,
     bool? busy,
     GroupGift? created,
@@ -95,6 +105,7 @@ class CreateGroupGiftState {
     upiId: upiId ?? this.upiId,
     title: title ?? this.title,
     message: message ?? this.message,
+    deadline: deadline ?? this.deadline,
     error: clearError ? null : (error ?? this.error),
     busy: busy ?? this.busy,
     created: created ?? this.created,
@@ -140,6 +151,16 @@ class CreateGroupGiftController extends Notifier<CreateGroupGiftState> {
 
   void setMessage(String value) => state = state.copyWith(message: value);
 
+  /// Stored as the last moment of the chosen day.
+  ///
+  /// The picker hands back midnight and the server refuses a deadline that has
+  /// already passed, so "today" would come back rejected for being nine hours
+  /// ago. The countdown counts calendar days either way.
+  void setDeadline(DateTime day) => state = state.copyWith(
+    deadline: DateTime(day.year, day.month, day.day, 23, 59, 59),
+    clearError: true,
+  );
+
   Future<GroupGift?> submit() async {
     if (!state.canSubmit) return null;
     state = state.copyWith(busy: true, clearError: true);
@@ -154,6 +175,7 @@ class CreateGroupGiftController extends Notifier<CreateGroupGiftState> {
             contributionMode: state.mode,
             suggestedAmountsMinor: state.allSuggestedAmountsMinor,
             message: state.message.trim().isEmpty ? null : state.message.trim(),
+            deadline: state.deadline,
             idempotencyKey: _idempotencyKey,
           );
       state = state.copyWith(busy: false, created: gift);

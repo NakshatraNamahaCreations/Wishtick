@@ -4,12 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wishtick_flutter/core/theme/app_palette.dart';
 import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/features/wishlist/data/wishlist_repository.dart';
+import 'package:wishtick_flutter/features/wishlist/domain/wishlist.dart';
+import 'package:wishtick_flutter/features/wishlist/domain/wishlist_item.dart';
 import 'package:wishtick_flutter/features/wishlist/presentation/save_to_wishlist_screen.dart';
 import 'package:wishtick_flutter/features/wishlist/presentation/widgets/pick_tile.dart';
 
 import '../../helpers/wishlist_fakes.dart';
 
-/// Figma `280:584` — the occasion picker is 8 photo tiles, not icons.
+/// Saving a product to a chosen wishlist.
+///
+/// The list is picked before this screen opens and already carries who it is
+/// for and what the occasion is, so the screen no longer asks for either —
+/// it inherits them.
 void main() {
   Widget screen() => ProviderScope(
     overrides: [
@@ -39,48 +45,98 @@ void main() {
     await tester.pumpWidget(screen());
   }
 
-  const expectedImages = {
-    'Birthday': 'assets/images/Celebrations_images/Birthday.png',
-    'Anniversary': 'assets/images/Celebrations_images/Anniversary.png',
-    'Wedding': 'assets/images/Celebrations_images/Wedding.png',
-    'Housewarming': 'assets/images/Celebrations_images/House_Warming.png',
-    'Baby Shower': 'assets/images/Celebrations_images/Mom_to_Be.png',
-    'Special Moments': 'assets/images/Celebrations_images/Best_Wishes.png',
-    'Festival': 'assets/images/Celebrations_images/Rakhi.png',
-    'Just Because': 'assets/images/Celebrations_images/Just_Because.png',
-  };
+  /// The same screen, with a repository to assert on.
+  ///
+  /// Seeded with the list being saved into: the screen refreshes it once the
+  /// item is in, and a fake that has never heard of it throws mid-save.
+  Future<FakeWishlistRepository> pumpWith(
+    WidgetTester tester,
+    Wishlist wishlist,
+  ) async {
+    final repo = FakeWishlistRepository(wishlists: [wishlist]);
+    tester.view
+      ..physicalSize = const Size(393, 2000)
+      ..devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [wishlistRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: SaveToWishlistScreen(
+            wishlist: wishlist,
+            productTitle: 'Nike Air Max Sneakers',
+            productSubtitle: null,
+            productImageUrl: null,
+            amountMinor: 1099900,
+            productUrl: 'https://example.com/product',
+            category: null,
+            provider: null,
+            externalId: null,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return repo;
+  }
 
-  testWidgets('every occasion tile is a photo, not an icon', (tester) async {
+  /// Saves, and hands back what the item was created with.
+  Future<WishlistItem> save(
+    WidgetTester tester,
+    FakeWishlistRepository r,
+  ) async {
+    // The button, not the app bar title, which says the same words.
+    final button = find.widgetWithText(ElevatedButton, 'Save to Wishlist');
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    return r.items.last;
+  }
+
+  testWidgets('does not ask again for what the wishlist already knows', (
+    tester,
+  ) async {
     await pump(tester);
 
-    for (final entry in expectedImages.entries) {
-      expect(
-        find.byWidgetPredicate(
-          (w) => w is Image && (w.image as AssetImage).assetName == entry.value,
-        ),
-        findsOneWidget,
-        reason: '${entry.key} should render ${entry.value}',
-      );
-    }
-    expect(find.byType(PickTile), findsNWidgets(expectedImages.length));
-    // No PickTile renders an Icon — the screen's other icons (importance
-    // rows) are outside this widget entirely.
-    for (final tile in tester.widgetList<PickTile>(find.byType(PickTile))) {
-      expect(tile.icon, isNull);
-    }
+    // The list is chosen before this screen opens, and it carries both.
+    expect(find.text('Who is this gift for?'), findsNothing);
+    expect(find.text("What's the occasion?"), findsNothing);
+    expect(find.byType(PickTile), findsNothing);
+    expect(find.widgetWithText(TextField, "Person's Name *"), findsNothing);
+    expect(find.widgetWithText(TextField, 'Relation *'), findsNothing);
   });
 
-  testWidgets('tapping an occasion tile selects it', (tester) async {
-    await pump(tester);
-
-    await tester.ensureVisible(find.text('Birthday'));
-    await tester.tap(find.text('Birthday'));
-    await tester.pump();
-
-    final tile = tester.widget<PickTile>(
-      find.ancestor(of: find.text('Birthday'), matching: find.byType(PickTile)),
+  // Not asking is not the same as not recording: the item still carries who
+  // and what for, taken from the list rather than typed a second time.
+  testWidgets('inherits the recipient and occasion from the wishlist', (
+    tester,
+  ) async {
+    final repo = await pumpWith(
+      tester,
+      buildWishlist(title: 'Siya Kapoor', occasionLabel: 'Birthday'),
     );
-    expect(tile.selected, isTrue);
+
+    final item = await save(tester, repo);
+
+    expect(item.recipientName, 'Siya Kapoor');
+    expect(item.occasionKey, 'birthday');
+  });
+
+  // Free text the taxonomy has never heard of is a fine occasion for a list,
+  // and a fine thing for an item to carry no key for.
+  testWidgets('carries no occasion key when the list has free text', (
+    tester,
+  ) async {
+    final repo = await pumpWith(
+      tester,
+      buildWishlist(title: 'Siya', occasionLabel: 'Passed the bar'),
+    );
+
+    final item = await save(tester, repo);
+
+    expect(item.recipientName, 'Siya');
+    expect(item.occasionKey, isNull);
   });
 
   testWidgets('tapping a quick suggestion chip fills the note field', (

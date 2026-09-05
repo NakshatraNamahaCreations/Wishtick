@@ -199,6 +199,7 @@ class WishtickEventDetail {
     this.share,
     this.rsvpCounts,
     this.forSelf = false,
+    this.pendingWishlistCount = 0,
   });
 
   final String id;
@@ -245,6 +246,13 @@ class WishtickEventDetail {
 
   final RsvpCounts? rsvpCounts;
 
+  /// Guest wishlists waiting on this host's answer.
+  ///
+  /// The queue itself sits at the foot of the event's own page, which a host
+  /// had no reason to scroll to — so this rides on the event to badge the
+  /// card in "My Events" and point them at it.
+  final int pendingWishlistCount;
+
   bool get canManage => share != null;
 
   factory WishtickEventDetail.fromJson(Map<String, dynamic> json) =>
@@ -284,6 +292,7 @@ class WishtickEventDetail {
             ? null
             : RsvpCounts.fromJson(json['rsvpCounts'] as Map<String, dynamic>),
         forSelf: json['forSelf'] as bool? ?? false,
+        pendingWishlistCount: json['pendingWishlistCount'] as int? ?? 0,
       );
 }
 

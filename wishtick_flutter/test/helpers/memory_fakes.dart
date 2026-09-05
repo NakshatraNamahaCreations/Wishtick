@@ -29,11 +29,11 @@ MemoryCapsule buildCapsule({
   MemoryStatus status = MemoryStatus.collecting,
   DateTime? unlockAt,
   int wishCount = 0,
+  int myWishCount = 0,
   List<String> contributors = const [],
   List<MemoryWish> wishes = const [],
   bool isHost = true,
   String? coverUrl,
-  String? description = 'Join us as we make this birthday unforgettable.',
 }) => MemoryCapsule(
   id: id,
   title: title,
@@ -54,13 +54,13 @@ MemoryCapsule buildCapsule({
   unlockAt: unlockAt ?? DateTime.now().add(const Duration(days: 5, hours: 2)),
   timezone: 'Asia/Kolkata',
   wishCount: wishCount,
+  myWishCount: myWishCount,
   contributors: contributors,
   hostId: 'user_1',
   isHost: isHost,
   includeYear: false,
   createdAt: DateTime.utc(2026, 7, 1),
   wishes: wishes,
-  description: description,
   coverUrl: coverUrl,
   share: isHost
       ? const MemoryShare(slug: 'abc123', url: 'https://wt.test/m/abc123')
@@ -118,7 +118,6 @@ class FakeMemoriesRepository implements MemoriesRepository {
     required DateTime unlockAt,
     required String timezone,
     String? relation,
-    String? description,
     DateTime? occasionDate,
     bool? includeYear,
     String? coverMediaId,
@@ -131,7 +130,6 @@ class FakeMemoriesRepository implements MemoriesRepository {
       'unlockAt': unlockAt,
       'timezone': timezone,
       'relation': relation,
-      'description': description,
       'occasionDate': occasionDate,
       'includeYear': includeYear,
       'coverMediaId': coverMediaId,
@@ -147,7 +145,6 @@ class FakeMemoriesRepository implements MemoriesRepository {
     DateTime? unlockAt,
     String? timezone,
     String? relation,
-    String? description,
     DateTime? occasionDate,
     bool? includeYear,
     String? coverMediaId,
@@ -188,6 +185,13 @@ class FakeMemoriesRepository implements MemoriesRepository {
   @override
   Future<List<MemoryWish>> wishes(String capsuleId) async =>
       _byId(capsuleId).wishes;
+
+  /// What `myWishes` answers. Set it to exercise the sealed-capsule preview,
+  /// which is the one read the time-lock deliberately does not cover.
+  List<MemoryWish> ownWishes = [];
+
+  @override
+  Future<List<MemoryWish>> myWishes(String capsuleId) async => ownWishes;
 
   @override
   Future<void> removeWish(String capsuleId, String wishId) async {}

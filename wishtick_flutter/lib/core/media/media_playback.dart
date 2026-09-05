@@ -1,5 +1,15 @@
 import 'package:dio/dio.dart';
 
+/// Whether a media reference points at a server rather than at a file on this
+/// device.
+///
+/// The app deliberately passes both through the same `url` parameters: media
+/// picked but not yet uploaded is a local path, and the same widget has to draw
+/// it. `WishtickImage` has always branched this way; the players now do too, so
+/// one rule decides it everywhere.
+bool isRemoteMedia(String? url) =>
+    url != null && (url.startsWith('http://') || url.startsWith('https://'));
+
 /// Whether a stored media link can be played right now.
 enum PlaybackReadiness {
   /// Play it.

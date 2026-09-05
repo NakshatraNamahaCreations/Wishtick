@@ -119,6 +119,20 @@ export class MemoriesController {
     return this.wishes.list(id, userId);
   }
 
+  @Get(':id/wishes/mine')
+  @ApiOperation({
+    summary: 'Your own wishes on this capsule — readable even while it is sealed',
+    description:
+      'Showing somebody their own message reveals nothing about anyone else, so this ' +
+      'is not subject to the time-lock. It is what replaced opening a capsule early.',
+  })
+  listMyWishes(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ): Promise<MemoryWishView[]> {
+    return this.wishes.listMine(id, userId);
+  }
+
   @Delete(':id/wishes/:wishId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Withdraw your own wish, or any wish if you are the host' })

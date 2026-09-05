@@ -75,9 +75,6 @@ export class MemoryCapsule {
   @Prop({ type: String, default: null, trim: true, maxlength: 60 })
   relation!: string | null;
 
-  @Prop({ type: String, default: null, trim: true, maxlength: 400 })
-  description!: string | null;
-
   /** An `occasion` taxonomy key — the eight tiles on `4104:1539`. */
   @Prop({ type: String, required: true, trim: true, maxlength: 60 })
   occasion!: string;

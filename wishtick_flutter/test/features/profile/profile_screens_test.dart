@@ -66,7 +66,10 @@ void main() {
 
       expect(find.text('My Profile'), findsOneWidget);
       expect(find.text('Ananya'), findsOneWidget);
-      expect(find.text('ananya@example.com'), findsOneWidget);
+      // The handle, not a contact address: it is what other people find
+      // this account by, and the one line its owner cannot act on.
+      expect(find.text('@ananya'), findsOneWidget);
+      expect(find.text('ananya@example.com'), findsNothing);
       // The counters come from the very lists their rows link to.
       expect(find.text('2'), findsOneWidget);
       expect(find.text('1'), findsOneWidget);

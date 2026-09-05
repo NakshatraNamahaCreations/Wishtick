@@ -154,6 +154,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
+                // Shown, never edited. A handle is how other people already
+                // found this account — WishMates, search, a shared link — so
+                // changing it here would quietly break every one of those,
+                // and there is no rename endpoint behind it in any case.
+                _UsernameField(username: me.value?.username),
+                const SizedBox(height: AppSpacing.xl),
                 LabelledField(
                   label: 'Email ID',
                   required: true,
@@ -390,6 +396,56 @@ class _SelectAvatarCard extends StatelessWidget {
               color: colors.primary,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The account's `@handle`, shown but not editable.
+///
+/// Read-only rather than absent: it is the thing other people find this
+/// account by, so leaving it off the page it obviously belongs on reads as a
+/// gap. Read-only rather than editable because every WishMate link, search
+/// result and shared handle already points at it, and nothing behind this
+/// screen can rename one.
+class _UsernameField extends StatelessWidget {
+  const _UsernameField({required this.username});
+
+  final String? username;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final claimed = username != null && username!.isNotEmpty;
+
+    return LabelledField(
+      label: 'Username',
+      child: InputDecorator(
+        decoration: InputDecoration(
+          // Filled and un-outlined so it reads as a fact about the account
+          // rather than an empty box somebody should be typing in.
+          filled: true,
+          fillColor: colors.surfaceAlt,
+          enabled: false,
+          prefixIcon: const Icon(Icons.alternate_email, size: AppSizes.iconMd),
+          suffixIcon: claimed
+              ? Icon(
+                  Icons.lock_outline,
+                  size: AppSizes.iconSm,
+                  color: colors.textMuted,
+                )
+              : null,
+          helperText: claimed
+              ? 'This is how WishMates find you. It cannot be changed.'
+              : 'Claim one from your profile to be findable by WishMates.',
+          helperMaxLines: 2,
+        ),
+        child: Text(
+          claimed ? '@${username!}' : 'Not set yet',
+          style: context.text.bodyLarge?.copyWith(
+            color: claimed ? colors.textPrimary : colors.textMuted,
+          ),
         ),
       ),
     );

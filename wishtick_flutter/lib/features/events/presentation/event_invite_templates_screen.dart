@@ -17,6 +17,7 @@ import '../../auth/presentation/session_controller.dart';
 import '../data/events_repository.dart';
 import '../domain/event.dart';
 import '../domain/invite_design.dart';
+import 'create_event_controller.dart';
 import 'event_providers.dart';
 import 'invite_designer_screen.dart';
 import 'widgets/invite_canvas.dart';
@@ -36,9 +37,12 @@ import 'widgets/invite_method_sheet.dart';
 /// The server template path is not used from here any more; what the server
 /// stores is the PNG the designer exports, exactly as for a hand-made card.
 class EventInviteTemplatesScreen extends ConsumerStatefulWidget {
-  const EventInviteTemplatesScreen({required this.eventId, super.key});
+  const EventInviteTemplatesScreen({this.eventId, super.key});
 
-  final String eventId;
+  /// Null while the event is still being created. The facts on the previews
+  /// then come from the wizard, and the finished card waits there too: the
+  /// event is made only once the host has seen the preview and gone on.
+  final String? eventId;
 
   @override
   ConsumerState<EventInviteTemplatesScreen> createState() =>
@@ -68,7 +72,12 @@ class _EventInviteTemplatesScreenState
         // Replaces rather than stacks: the two are alternatives, and backing
         // out of the upload screen should return to the event, not to a
         // template grid the host said no to.
-        context.pushReplacement(AppRoutes.eventInviteUpload(widget.eventId));
+        final id = widget.eventId;
+        context.pushReplacement(
+          id == null
+              ? AppRoutes.createEventInviteUpload
+              : AppRoutes.eventInviteUpload(id),
+        );
       }
     });
   }
@@ -81,21 +90,38 @@ class _EventInviteTemplatesScreenState
   InviteFacts _facts(AsyncValue<WishtickEventDetail> event) {
     final e = event.value;
     if (e == null) return InviteFacts.placeholder;
-
-    // The host is whoever is signed in and designing this — the event carries
-    // no host name of its own for its owner. Left off entirely when the event
-    // is the host's own: the headline already names them.
-    final me = ref.read(sessionProvider).user?.name?.trim();
-    final host = e.forSelf || me == null || me.isEmpty ? null : 'Hosted by $me';
-
     return InviteFacts(
       title: e.title,
       // The same format the event page uses for the same date, so the card
       // and the screen it came from never disagree about when.
-      dateLine: DateFormat('EEE, d MMM • h:mm a').format(e.startsAt),
+      dateLine: _dateLine.format(e.startsAt),
       venue: e.venue,
-      host: host,
+      host: _hostLine(forSelf: e.forSelf),
     );
+  }
+
+  static final _dateLine = DateFormat('EEE, d MMM • h:mm a');
+
+  /// The same facts, read from the wizard — for an event that does not exist
+  /// yet. Step 2 is complete by the time this screen opens, so a missing date
+  /// is a deep link into the middle of the wizard, and gets the placeholder.
+  InviteFacts _draftFacts(CreateEventState draft) {
+    final startsAt = draft.startsAt;
+    if (startsAt == null) return InviteFacts.placeholder;
+    return InviteFacts(
+      title: draft.title.trim(),
+      dateLine: _dateLine.format(startsAt),
+      venue: draft.venue.trim(),
+      host: _hostLine(forSelf: draft.forSelf),
+    );
+  }
+
+  /// "Hosted by" whoever is signed in and designing this — the event carries
+  /// no host name of its own for its owner. Left off entirely when the event
+  /// is the host's own: the headline already names them.
+  String? _hostLine({required bool forSelf}) {
+    final me = ref.read(sessionProvider).user?.name?.trim();
+    return forSelf || me == null || me.isEmpty ? null : 'Hosted by $me';
   }
 
   /// The design the picker is currently showing — selected background, selected
@@ -111,22 +137,50 @@ class _EventInviteTemplatesScreenState
     );
   }
 
+  /// Set by [_saveCard] once the exported card has landed where it belongs.
+  /// The designer pops with its design either way, so this — not the pop —
+  /// is what says the preview has something to show.
+  bool _saved = false;
+
   Future<void> _next(InviteFacts facts) async {
     final design = _composed(facts);
     if (design == null || _busy) return;
-    await Navigator.of(context).push<InviteDesign>(
+    _saved = false;
+    final result = await Navigator.of(context).push<InviteDesign>(
       MaterialPageRoute(
         builder: (_) =>
             InviteDesignerScreen(initial: design, onDone: _saveCard),
       ),
     );
+    // Null is the designer backed out of. A design with nothing saved is an
+    // export that failed, and the error for it is already on this screen.
+    if (result == null || !_saved || !mounted) return;
+    final id = widget.eventId;
+    await context.push<void>(
+      id == null
+          ? AppRoutes.createEventInvitePreview
+          : AppRoutes.eventInvitePreview(id),
+    );
   }
 
-  /// Uploads the finished card through the same `event_invite` media path an
-  /// uploaded file uses, and lands it in the same `inviteMediaUrl`. There is
-  /// deliberately no third kind of invitation: a design *is* artwork, and
+  /// Lands the finished card where the preview will find it.
+  ///
+  /// For an event being created that is the wizard: nothing goes up until the
+  /// host has seen the preview and pressed on, and the upload happens then,
+  /// with the event. For an existing event it is the same `event_invite`
+  /// media path an uploaded file uses, into the same `inviteMediaUrl`. There
+  /// is deliberately no third kind of invitation: a design *is* artwork, and
   /// everywhere the invitation is shown already knows how to show artwork.
   Future<void> _saveCard(Uint8List png, InviteDesign design) async {
+    final id = widget.eventId;
+    if (id == null) {
+      ref
+          .read(createEventProvider.notifier)
+          .setInvitation(png, 'invitation.png');
+      _saved = true;
+      return;
+    }
+
     setState(() {
       _busy = true;
       _error = null;
@@ -143,11 +197,11 @@ class _EventInviteTemplatesScreenState
           );
       await ref
           .read(eventsRepositoryProvider)
-          .update(widget.eventId, inviteMediaId: media.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Invitation saved.')));
+          .update(id, inviteMediaId: media.id);
+      // The preview reads the event, and has to see this card rather than
+      // the one the screen was opened with.
+      ref.invalidate(eventDetailProvider(id));
+      _saved = true;
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Could not save that invitation. Try again.');
@@ -160,7 +214,10 @@ class _EventInviteTemplatesScreenState
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final facts = _facts(ref.watch(eventDetailProvider(widget.eventId)));
+    final id = widget.eventId;
+    final facts = id == null
+        ? _draftFacts(ref.watch(createEventProvider))
+        : _facts(ref.watch(eventDetailProvider(id)));
 
     final backgrounds = InviteBackgrounds.forType(_filter);
     final layouts = InviteLayouts.forType(_filter);

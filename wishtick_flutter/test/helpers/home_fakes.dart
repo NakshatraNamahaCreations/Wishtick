@@ -37,13 +37,16 @@ WishtickEvent buildEvent({
   String title = "Siya's Birthday",
   int daysFromNow = 3,
   bool isHosting = false,
+  String? coverUrl,
+  String? inviteMediaUrl,
 }) => WishtickEvent(
   id: id,
   title: title,
   type: EventType.birthday,
   startsAt: DateTime.now().add(Duration(days: daysFromNow)),
   timezone: 'Asia/Kolkata',
-  coverUrl: null,
+  coverUrl: coverUrl,
+  inviteMediaUrl: inviteMediaUrl,
   isHosting: isHosting,
 );
 

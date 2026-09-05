@@ -69,6 +69,10 @@ class EventsRepository {
 
   /// Creates a draft. Nothing is sent and no reminders are scheduled until
   /// [publish].
+  ///
+  /// [inviteMediaId] is a confirmed `event_invite` upload — the card goes up
+  /// before the event exists, so it is attached here rather than by a second
+  /// call that would leave a moment with an event and no invitation.
   Future<WishtickEventDetail> create({
     required String title,
     required EventType type,
@@ -82,6 +86,7 @@ class EventsRepository {
     bool? forSelf,
     EventVisibility? visibility,
     String? coverMediaId,
+    String? inviteMediaId,
     List<String>? wishlistIds,
     InviteTemplateChoice? inviteTemplate,
   }) async {
@@ -100,6 +105,7 @@ class EventsRepository {
         'forSelf': ?forSelf,
         'visibility': ?visibility?.wireValue,
         'coverMediaId': ?coverMediaId,
+        'inviteMediaId': ?inviteMediaId,
         'wishlistIds': ?wishlistIds,
         'inviteTemplate': ?inviteTemplate?.toJson(),
       },
@@ -299,6 +305,25 @@ class EventsRepository {
       body: {
         'recipients': userIds.map((id) => {'userId': id}).toList(),
       },
+    );
+    return BulkInviteResult.fromJson(json);
+  }
+
+  /// Invites people by phone number, for a host picking from their contacts.
+  ///
+  /// The friends who are not on Wishtick yet, which on the day a host starts
+  /// is most of them. Each number becomes a guest-list row addressed to the
+  /// number; it binds to an account the first time somebody with that number,
+  /// verified, opens the event's link.
+  ///
+  /// [phones] must already be E.164 — see `normalizeToE164`.
+  Future<BulkInviteResult> inviteByPhone(
+    String eventId,
+    List<String> phones,
+  ) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/events/$eventId/invites/by-phone',
+      body: {'phones': phones},
     );
     return BulkInviteResult.fromJson(json);
   }

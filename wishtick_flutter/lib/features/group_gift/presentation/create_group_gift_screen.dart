@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/format/currency.dart';
 import '../../../core/router/app_routes.dart';
@@ -187,6 +188,17 @@ class _CreateGroupGiftScreenState extends ConsumerState<CreateGroupGiftScreen> {
                 ),
 
                 const SizedBox(height: AppSpacing.lg),
+                const GroupGiftFieldLabel(
+                  'Contribution Deadline',
+                  required: true,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                _DeadlineField(
+                  value: state.deadline,
+                  onChanged: notifier.setDeadline,
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
                 const GroupGiftFieldLabel('Message (Optional)'),
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
@@ -226,6 +238,68 @@ class _CreateGroupGiftScreenState extends ConsumerState<CreateGroupGiftScreen> {
                 onPressed: state.canSubmit ? _submit : null,
               ),
             ),
+    );
+  }
+}
+
+/// When the money has to be in by.
+///
+/// The countdown on Home's chip-in card and on the invitation both read off
+/// this, so it is asked for rather than left blank: a group gift with no date
+/// gives those cards nothing to say.
+class _DeadlineField extends StatelessWidget {
+  const _DeadlineField({required this.value, required this.onChanged});
+
+  final DateTime? value;
+  final ValueChanged<DateTime> onChanged;
+
+  /// A year out. Long enough for an anniversary being saved up for, short
+  /// enough that the wheel is not a scroll through the next decade.
+  static const _horizonDays = 365;
+
+  Future<void> _pick(BuildContext context) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: value ?? today.add(const Duration(days: 7)),
+      // Today is allowed: "Today" is something the countdown knows how to say,
+      // and a same-day collection is a real thing to ask for.
+      firstDate: today,
+      lastDate: today.add(const Duration(days: _horizonDays)),
+    );
+    if (picked != null) onChanged(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final chosen = value;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      onTap: () => unawaited(_pick(context)),
+      child: InputDecorator(
+        decoration: const InputDecoration(),
+        child: Row(
+          children: [
+            Icon(
+              Icons.calendar_today_outlined,
+              size: AppSizes.iconMd,
+              color: colors.textSecondary,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              chosen == null
+                  ? 'Pick a date'
+                  : DateFormat('d MMMM yyyy').format(chosen),
+              style: context.text.bodyMedium?.copyWith(
+                color: chosen == null ? colors.textMuted : colors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

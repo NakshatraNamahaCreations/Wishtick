@@ -20,6 +20,7 @@ import '../../group_gift/presentation/settlement_controller.dart';
 import '../../home/presentation/home_controller.dart';
 import '../../memories/presentation/add_wish_controller.dart';
 import '../../memories/presentation/create_memory_controller.dart';
+import '../../memories/presentation/my_wishes_screen.dart';
 import '../../notifications/presentation/notification_providers.dart';
 import '../../notifications/presentation/thank_you_controller.dart';
 import '../../onboarding/presentation/onboarding_flow_controller.dart';
@@ -110,6 +111,9 @@ void invalidateSessionScopedProviders(Ref ref) {
   // Memories
   ref.invalidate(createMemoryProvider);
   ref.invalidate(addWishProvider);
+  // Sharper than most: these are wishes the time-lock hides from everybody but
+  // the one person who wrote them.
+  ref.invalidate(myWishesProvider);
 
   // Onboarding — including the half-filled wizard, which is per-person.
   ref.invalidate(onboardingOptionsProvider);

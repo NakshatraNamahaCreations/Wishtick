@@ -12,6 +12,7 @@ import {
   IsOptional,
   IsString,
   Length,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -84,6 +85,16 @@ export class CreateEventDto {
   @IsOptional()
   @IsMongoId()
   coverMediaId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'A confirmed media id you own (purpose: event_invite) — your own invitation. Taken at ' +
+      'create, not only on update, because the app uploads the card before the event exists: ' +
+      'the event is made only once the host has seen the preview and gone on to share it.',
+  })
+  @IsOptional()
+  @IsMongoId()
+  inviteMediaId?: string | null;
 
   @ApiPropertyOptional({ type: [String], description: 'Wishlists you own, shown on the invite' })
   @IsOptional()
@@ -255,6 +266,34 @@ export class BulkInviteDto {
   // contact export, and every entry is a real message with a real cost.
   @ArrayMaxSize(200)
   recipients!: InviteRecipientDto[];
+}
+
+/**
+ * Numbers picked out of the host's contacts.
+ *
+ * Loose validation on purpose: a contacts list is full of numbers written
+ * every possible way, and the server normalises rather than refuses. What it
+ * will not take is something that cannot be a phone number at all.
+ */
+export class InviteByPhoneDto {
+  @ApiProperty({
+    type: [String],
+    description:
+      'Phone numbers in E.164 (`+919876543210`). The client resolves each ' +
+      'contact against the device region before sending; the server only ' +
+      'strips spacing and adds the leading +.',
+    example: ['+919876543210', '+919812345678'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  // The same ceiling as a WishMate bulk invite: past this it is a contacts
+  // export rather than a guest list, and every entry is a real invitation.
+  @ArrayMaxSize(200)
+  @Matches(/^\+?[0-9\s()-]{6,20}$/, {
+    each: true,
+    message: 'Each recipient must be a phone number',
+  })
+  phones!: string[];
 }
 
 export class RsvpDto {

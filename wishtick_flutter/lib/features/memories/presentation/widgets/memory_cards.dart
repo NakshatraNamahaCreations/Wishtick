@@ -112,17 +112,6 @@ class MemoryCard extends StatelessWidget {
                         height: 1.15,
                       ),
                     ),
-                    if (capsule.description != null) ...[
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        capsule.description!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.text.bodyMedium?.copyWith(
-                          color: colors.textOnDark.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: AppSpacing.md),
                     Row(
                       children: [

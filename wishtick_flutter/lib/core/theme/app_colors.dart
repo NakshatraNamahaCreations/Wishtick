@@ -2,6 +2,51 @@ import 'package:flutter/material.dart';
 
 import 'app_palette.dart';
 
+/// The third-party marks on the share grid (`288:780`).
+///
+/// One token rather than a field each: they are one row presented together,
+/// and nothing else in the app refers to WhatsApp green. Brand colours are
+/// their owners' and do not follow the theme — see
+/// [AppPalette.whatsAppGreen] — so [WishtickColors.lerp] hands the whole
+/// object across rather than blending it. Only "More Apps", the one tile that
+/// is ours, is themed.
+@immutable
+class ShareBrandColors {
+  const ShareBrandColors({
+    required this.link,
+    required this.whatsApp,
+    required this.instagram,
+    required this.facebook,
+    required this.snapchat,
+    required this.onSnapchat,
+    required this.telegram,
+    required this.x,
+    required this.onBrand,
+    required this.moreFill,
+    required this.moreInk,
+  });
+
+  /// "Copy link" — ours, but drawn in the export's blue so it sits in the
+  /// row as an equal rather than as the odd one out in brand plum.
+  final Color link;
+  final Color whatsApp;
+
+  /// Gradient stops, top-left to bottom-right.
+  final List<Color> instagram;
+  final Color facebook;
+  final Color snapchat;
+
+  /// The ghost is drawn dark on the yellow; every other mark is [onBrand].
+  final Color onSnapchat;
+  final Color telegram;
+  final Color x;
+
+  /// The glyph on every coloured disc but Snapchat's.
+  final Color onBrand;
+  final Color moreFill;
+  final Color moreInk;
+}
+
 /// Semantic colour tokens for Wishtick.
 ///
 /// Widgets read these via `context.colors.<token>` — never [AppPalette], and
@@ -12,6 +57,7 @@ import 'app_palette.dart';
 class WishtickColors extends ThemeExtension<WishtickColors> {
   const WishtickColors({
     required this.brightness,
+    required this.shareBrand,
     required this.primary,
     required this.onPrimary,
     required this.primaryDeep,
@@ -68,6 +114,9 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   });
 
   final Brightness brightness;
+
+  /// The share grid's third-party marks. See [ShareBrandColors].
+  final ShareBrandColors shareBrand;
 
   /// Brand plum. Primary buttons, active nav, selected chips.
   final Color primary;
@@ -251,6 +300,23 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
 
   static const light = WishtickColors(
     brightness: Brightness.light,
+    shareBrand: ShareBrandColors(
+      link: AppPalette.shareLinkBlue,
+      whatsApp: AppPalette.whatsAppGreen,
+      instagram: [
+        AppPalette.instagramViolet,
+        AppPalette.instagramPink,
+        AppPalette.instagramOrange,
+      ],
+      facebook: AppPalette.facebookBlue,
+      snapchat: AppPalette.snapchatYellow,
+      onSnapchat: AppPalette.black,
+      telegram: AppPalette.telegramBlue,
+      x: AppPalette.black,
+      onBrand: AppPalette.white,
+      moreFill: AppPalette.shareMoreFill,
+      moreInk: AppPalette.ink,
+    ),
     // Sampled from the frame exports: the Continue pill and the selected
     // gender tile are both #522651. The Color System page calls #3F0E4C the
     // CTA colour, but the shipped screens do not use it — so [primaryDeep]
@@ -335,6 +401,25 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   /// luminance.
   static const dark = WishtickColors(
     brightness: Brightness.dark,
+    // The brands keep their colours; only the neutral "More Apps" disc steps
+    // onto the dark ramp, or it would glow on the dark card.
+    shareBrand: ShareBrandColors(
+      link: AppPalette.shareLinkBlue,
+      whatsApp: AppPalette.whatsAppGreen,
+      instagram: [
+        AppPalette.instagramViolet,
+        AppPalette.instagramPink,
+        AppPalette.instagramOrange,
+      ],
+      facebook: AppPalette.facebookBlue,
+      snapchat: AppPalette.snapchatYellow,
+      onSnapchat: AppPalette.black,
+      telegram: AppPalette.telegramBlue,
+      x: AppPalette.black,
+      onBrand: AppPalette.white,
+      moreFill: AppPalette.darkSurfaceAlt,
+      moreInk: AppPalette.darkTextPrimary,
+    ),
     primary: AppPalette.plum,
     onPrimary: AppPalette.ivory,
     primaryDeep: AppPalette.plumDeep,
@@ -414,6 +499,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   @override
   WishtickColors copyWith({
     Brightness? brightness,
+    ShareBrandColors? shareBrand,
     List<Color>? inviteInks,
     Color? artworkCanvas,
     Color? primary,
@@ -470,6 +556,7 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
   }) {
     return WishtickColors(
       brightness: brightness ?? this.brightness,
+      shareBrand: shareBrand ?? this.shareBrand,
       inviteInks: inviteInks ?? this.inviteInks,
       artworkCanvas: artworkCanvas ?? this.artworkCanvas,
       primary: primary ?? this.primary,
@@ -532,6 +619,8 @@ class WishtickColors extends ThemeExtension<WishtickColors> {
     Color c(Color a, Color b) => Color.lerp(a, b, t)!;
     return WishtickColors(
       brightness: t < 0.5 ? brightness : other.brightness,
+      // Handed across, not blended: brand marks are not ours to tint.
+      shareBrand: t < 0.5 ? shareBrand : other.shareBrand,
       // Handed across, not blended: these are the host's ink, and a card
       // half-way through a theme animation must not repaint itself.
       inviteInks: t < 0.5 ? inviteInks : other.inviteInks,

@@ -13,10 +13,11 @@ import 'create_event_controller.dart';
 /// The description counter on `257:755` reads "12/40".
 const _kDescriptionMax = 400;
 
-/// "Tell us about your event" (`257:755`) — step 2 of two.
+/// "Tell us about your event" (`257:755`) — step 2.
 ///
-/// Submitting creates the event as a **draft**: nothing is sent and no
-/// reminders are scheduled until the invitation is designed and published.
+/// Next goes on to the invitation and sends nothing: the event is created
+/// only once the host has seen the finished card and gone on to share it —
+/// see [CreateEventController.publish].
 class CreateEventDetailsScreen extends ConsumerStatefulWidget {
   const CreateEventDetailsScreen({super.key});
 
@@ -85,11 +86,7 @@ class _CreateEventDetailsScreenState
         .setTime(TimeOfDayValue(picked.hour, picked.minute));
   }
 
-  Future<void> _next() async {
-    final event = await ref.read(createEventProvider.notifier).submit();
-    if (event == null || !mounted) return;
-    await context.push<void>(AppRoutes.eventInviteTemplates(event.id));
-  }
+  void _next() => context.push<void>(AppRoutes.createEventInvite);
 
   @override
   Widget build(BuildContext context) {
@@ -219,17 +216,8 @@ class _CreateEventDetailsScreenState
           child: SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: state.step2Complete && !state.busy ? _next : null,
-              child: state.busy
-                  ? SizedBox(
-                      width: AppSizes.iconMd,
-                      height: AppSizes.iconMd,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colors.onPrimary,
-                      ),
-                    )
-                  : const Text('Next'),
+              onPressed: state.step2Complete ? _next : null,
+              child: const Text('Next'),
             ),
           ),
         ),

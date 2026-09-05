@@ -21,6 +21,7 @@ class InvitedEvent {
     required this.hostName,
     required this.myRsvp,
     required this.inviteToken,
+    this.inviteMediaUrl,
   });
 
   final String id;
@@ -29,6 +30,10 @@ class InvitedEvent {
   final DateTime startsAt;
   final String timezone;
   final String? coverUrl;
+
+  /// The card the host made — what their invite page shows. Most events have
+  /// this and no cover, which is why the card draws it first: see [artworkUrl].
+  final String? inviteMediaUrl;
   final String? hostName;
   final RsvpResponse myRsvp;
 
@@ -37,6 +42,9 @@ class InvitedEvent {
 
   bool get hasAnswered => myRsvp != RsvpResponse.pending;
 
+  /// What to draw on the card: the invitation, else the cover, else nothing.
+  String? get artworkUrl => inviteMediaUrl ?? coverUrl;
+
   factory InvitedEvent.fromJson(Map<String, dynamic> json) => InvitedEvent(
     id: json['id'] as String,
     title: json['title'] as String? ?? '',
@@ -44,6 +52,7 @@ class InvitedEvent {
     startsAt: DateTime.parse(json['startsAt'] as String),
     timezone: json['timezone'] as String? ?? 'Asia/Kolkata',
     coverUrl: json['coverUrl'] as String?,
+    inviteMediaUrl: json['inviteMediaUrl'] as String?,
     hostName: json['hostName'] as String?,
     myRsvp: RsvpResponse.fromWire(json['myRsvp'] as String?),
     inviteToken: json['inviteToken'] as String?,

@@ -8,8 +8,10 @@ import 'package:wishtick_flutter/core/theme/app_theme.dart';
 import 'package:wishtick_flutter/features/group_gift/data/group_gift_repository.dart';
 import 'package:wishtick_flutter/features/group_gift/domain/group_gift.dart';
 import 'package:wishtick_flutter/features/group_gift/presentation/group_gift_invite_detail_screen.dart';
+import 'package:wishtick_flutter/features/home/data/home_repository.dart';
 
 import '../../helpers/group_gift_fakes.dart';
+import '../../helpers/home_fakes.dart';
 
 /// What you are being asked to chip in for, and by whom.
 ///
@@ -47,6 +49,10 @@ void main() {
           builder: (_, _) => const Scaffold(body: Text('the invitations')),
         ),
         GoRoute(
+          path: AppRoutes.groupGiftContributed(':id'),
+          builder: (_, _) => const Scaffold(body: Text('the confirmation')),
+        ),
+        GoRoute(
           path: '/group-gifts/:id',
           builder: (_, _) => const Scaffold(body: Text('the group')),
         ),
@@ -55,7 +61,12 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         key: UniqueKey(),
-        overrides: [groupGiftRepositoryProvider.overrideWithValue(repo)],
+        overrides: [
+          groupGiftRepositoryProvider.overrideWithValue(repo),
+          // Answering refreshes Home — the chip-in card there is the same
+          // invitation — so Home's repository has to be a fake here too.
+          homeRepositoryProvider.overrideWithValue(FakeHomeRepository()),
+        ],
         child: MaterialApp.router(
           theme: theme ?? AppTheme.light,
           routerConfig: router,
@@ -125,17 +136,100 @@ void main() {
     expect(find.text('Rohan'), findsNothing);
   });
 
-  testWidgets('accepting answers the server and opens the group', (
+  // Paying is the yes. There is no bare Accept: the server takes a
+  // contribution from an invitee as their answer, so a separate button would
+  // only be a second way to say the same thing.
+  testWidgets('Contribute to Gift pays, which is how the invite is accepted', (
     tester,
   ) async {
     final repo = withDetail();
     await pump(tester, repo);
 
-    await tester.tap(find.text('Accept'));
+    await tester.tap(find.text('Contribute to Gift'));
+    await tester.pumpAndSettle();
+    // The chips come off the invitation, since the invitee cannot read the
+    // group they would otherwise come from.
+    // ₹2,000, not ₹1,000: Rohan's contribution row behind the sheet says
+    // ₹1,000 too, and the finder would not know which one was meant.
+    await tester.tap(find.text('₹2,000'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pay ₹2,000'));
     await tester.pumpAndSettle();
 
-    expect(repo.respondedTo, [('inv_1', true)]);
-    expect(find.text('the group'), findsOneWidget);
+    expect(
+      repo.calls.where((c) => c.startsWith('contribute:200000:')),
+      hasLength(1),
+    );
+    // Not answered a second time by hand — the payment did it.
+    expect(repo.respondedTo, isEmpty);
+    expect(find.text('the confirmation'), findsOneWidget);
+  });
+
+  // Closing the sheet without paying is not an answer either.
+  testWidgets('backing out of the sheet pays nothing and answers nothing', (
+    tester,
+  ) async {
+    final repo = withDetail();
+    await pump(tester, repo);
+
+    await tester.tap(find.text('Contribute to Gift'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    expect(repo.calls.where((c) => c.startsWith('contribute:')), isEmpty);
+    expect(repo.respondedTo, isEmpty);
+    expect(find.text('Rohan asked you to chip in'), findsOneWidget);
+  });
+
+  // "Maybe Later" is deliberately not an answer: the invitation stays pending
+  // and the card stays on Home, to be decided another time.
+  testWidgets('Maybe Later goes back without answering', (tester) async {
+    final repo = withDetail();
+    await pump(tester, repo);
+
+    await tester.tap(find.text('Maybe Later'));
+    await tester.pumpAndSettle();
+
+    expect(repo.respondedTo, isEmpty);
+    expect(repo.calls.where((c) => c.startsWith('contribute:')), isEmpty);
+    expect(find.text('the invitations'), findsOneWidget);
+  });
+
+  // The countdown the design puts on the header (`316:536` — "2 days left").
+  testWidgets('says how long is left to pay', (tester) async {
+    await pump(
+      tester,
+      withDetail(
+        buildInviteDetail(
+          deadline: DateTime.now().add(const Duration(days: 2)),
+        ),
+      ),
+    );
+
+    expect(find.text('2 days left'), findsOneWidget);
+  });
+
+  testWidgets('says nothing about a deadline there is none of', (tester) async {
+    await pump(tester, withDetail());
+
+    expect(find.textContaining('left'), findsNothing);
+  });
+
+  // A countdown that has run out is worse than no countdown: '-3 days left'
+  // is nonsense, and 'today' would be a lie.
+  testWidgets('says nothing once the deadline has gone by', (tester) async {
+    await pump(
+      tester,
+      withDetail(
+        buildInviteDetail(
+          deadline: DateTime.now().subtract(const Duration(days: 3)),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('left'), findsNothing);
+    expect(find.textContaining('Last day'), findsNothing);
   });
 
   // "When clicked on Decline show confirmation alert dialog." Declining cannot
@@ -144,7 +238,7 @@ void main() {
     final repo = withDetail();
     await pump(tester, repo);
 
-    await tester.tap(find.text('Decline'));
+    await tester.tap(find.text('Not Interested? Decline Invitation'));
     await tester.pumpAndSettle();
 
     expect(find.byType(AlertDialog), findsOneWidget);
@@ -157,7 +251,7 @@ void main() {
     final repo = withDetail();
     await pump(tester, repo);
 
-    await tester.tap(find.text('Decline'));
+    await tester.tap(find.text('Not Interested? Decline Invitation'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Keep it'));
     await tester.pumpAndSettle();
@@ -174,7 +268,7 @@ void main() {
     final repo = withDetail();
     await pump(tester, repo);
 
-    await tester.tap(find.text('Decline'));
+    await tester.tap(find.text('Not Interested? Decline Invitation'));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
@@ -188,7 +282,7 @@ void main() {
     final repo = withDetail();
     await pump(tester, repo);
 
-    await tester.tap(find.text('Decline'));
+    await tester.tap(find.text('Not Interested? Decline Invitation'));
     await tester.pumpAndSettle();
     // The dialog's own Decline, not the button behind it.
     await tester.tap(
@@ -215,11 +309,18 @@ void main() {
       statusCode: 409,
     );
 
-    await tester.tap(find.text('Accept'));
+    await tester.tap(find.text('Not Interested? Decline Invitation'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Decline'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('This group gift is closed'), findsOneWidget);
-    expect(find.text('the group'), findsNothing);
+    expect(find.text('the invitations'), findsNothing);
   });
 
   testWidgets('a stale invitation says so instead of spinning', (tester) async {
@@ -230,12 +331,13 @@ void main() {
     expect(find.text('Could not load this invitation.'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     // And nothing to press while there is nothing to answer.
-    expect(find.text('Accept'), findsNothing);
+    expect(find.text('Contribute to Gift'), findsNothing);
+    expect(find.text('Not Interested? Decline Invitation'), findsNothing);
   });
 
   testWidgets('renders on a dark page', (tester) async {
     await pump(tester, withDetail(), theme: AppTheme.dark);
     expect(tester.takeException(), isNull);
-    expect(find.text('Accept'), findsOneWidget);
+    expect(find.text('Contribute to Gift'), findsOneWidget);
   });
 }

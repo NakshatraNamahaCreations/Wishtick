@@ -45,6 +45,8 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Wishtick needs access to your photos so you can choose a cover image for your wishlist.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Wishtick needs access to your contacts so you can pick who to invite to your event by name. Only the people you tick are sent, and only to invite them.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

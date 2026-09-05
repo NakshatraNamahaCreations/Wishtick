@@ -159,13 +159,96 @@ describe('Memories (e2e)', () => {
     await ctx.reset();
   });
 
+  describe('upload limits', () => {
+    it('reports the cap a wish composer has to enforce', async () => {
+      const actor = await newUser();
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/media/limits`)
+        .set(auth(actor.token))
+        .expect(200);
+
+      const body = res.body as Envelope<Record<string, { maxBytes: number; mimeTypes: string[] }>>;
+      const wish = body.data[MediaPurpose.MEMORY_WISH];
+
+      // The effective cap, not the policy file's 50 MB: MEDIA_MAX_BYTES clamps
+      // it, and the app has to be told the smaller of the two or it promises an
+      // upload this deployment refuses.
+      expect(wish.maxBytes).toBe(10 * 1024 * 1024);
+      expect(wish.mimeTypes).toContain('video/mp4');
+    });
+
+    it('reports the 20-second ceiling a video wish is held to', async () => {
+      const actor = await newUser();
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/media/limits`)
+        .set(auth(actor.token))
+        .expect(200);
+
+      const body = res.body as Envelope<Record<string, { maxDurationSeconds: number | null }>>;
+
+      // Size and length are independent: a well-compressed five-minute clip
+      // slips under 10 MB, so the byte cap alone would not hold this.
+      expect(body.data[MediaPurpose.MEMORY_WISH].maxDurationSeconds).toBe(20);
+      // A still has nothing to measure.
+      expect(body.data[MediaPurpose.WISHLIST_COVER].maxDurationSeconds).toBeNull();
+    });
+
+    it('is a route of its own, not a media id', async () => {
+      // `@Get('limits')` has to be declared before `@Get(':id')`. The other way
+      // round, Nest reads this as a request for the media called "limits" and
+      // answers 404 — with no compile error to say so.
+      const actor = await newUser();
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/media/limits`)
+        .set(auth(actor.token))
+        .expect(200);
+
+      const body = res.body as Envelope<Record<string, unknown>>;
+      expect(body.data[MediaPurpose.MEMORY_WISH]).toBeDefined();
+    });
+
+    it('agrees with what upload-url actually enforces', async () => {
+      const actor = await newUser();
+      const limits = (
+        await request(app.getHttpServer())
+          .get(`${V1}/media/limits`)
+          .set(auth(actor.token))
+          .expect(200)
+      ).body as Envelope<Record<string, { maxBytes: number }>>;
+      const cap = limits.data[MediaPurpose.MEMORY_WISH].maxBytes;
+
+      // One byte over is refused...
+      const tooBig = await request(app.getHttpServer())
+        .post(`${V1}/media/upload-url`)
+        .set(auth(actor.token))
+        .send({
+          purpose: MediaPurpose.MEMORY_WISH,
+          contentType: 'video/mp4',
+          sizeBytes: cap + 1,
+        })
+        .expect(413);
+      expect((tooBig.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEDIA_TOO_LARGE);
+
+      // ...and the cap itself is allowed, so a client refusing at `>=` would
+      // reject a file the server would have taken.
+      await request(app.getHttpServer())
+        .post(`${V1}/media/upload-url`)
+        .set(auth(actor.token))
+        .send({
+          purpose: MediaPurpose.MEMORY_WISH,
+          contentType: 'video/mp4',
+          sizeBytes: cap,
+        })
+        .expect(201);
+    });
+  });
+
   describe('creating a capsule (4104:1539, 2198:73)', () => {
     it('round-trips the fields the create flow collects', async () => {
       const { host, recipient } = await hostAndRecipient();
       const created = await createMemory(
         host,
         {
-          description: "Let's make her day extra special.",
           occasionDate: '2026-07-17T00:00:00.000Z',
           includeYear: true,
         },

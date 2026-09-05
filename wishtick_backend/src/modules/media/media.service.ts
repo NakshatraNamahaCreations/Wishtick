@@ -31,6 +31,16 @@ export interface MediaView {
   durationSeconds?: number | null;
 }
 
+/** What a client may upload for one purpose. See [MediaService.limits]. */
+export interface PurposeLimit {
+  maxBytes: number;
+  /** Null where a purpose has no duration ceiling, or nothing to measure. */
+  maxDurationSeconds: number | null;
+  mimeTypes: string[];
+}
+
+export type MediaLimitsView = Record<MediaPurpose, PurposeLimit>;
+
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
@@ -41,6 +51,29 @@ export class MediaService {
     @Inject(VIDEO) private readonly video: IVideoProvider,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
+
+  /**
+   * The effective cap and allowlist for every purpose, so a client can refuse an
+   * oversized file at the picker instead of after the bytes have gone up.
+   *
+   * It has to be served rather than hardcoded in the app because the number is
+   * not written down in any one place: it is `min(per-purpose rule, the global
+   * MEDIA_MAX_BYTES)`, and the second half is environment configuration. A
+   * client guessing from [MEDIA_RULES] alone would read 50 MB for a memory wish
+   * and promise the user something this deployment refuses at 10.
+   */
+  limits(): MediaLimitsView {
+    const globalMax = this.config.get('storage.maxBytes', { infer: true });
+    const entries = Object.entries(MEDIA_RULES).map(([purpose, rule]) => [
+      purpose,
+      {
+        maxBytes: Math.min(rule.maxBytes, globalMax),
+        maxDurationSeconds: rule.maxDurationSeconds ?? null,
+        mimeTypes: rule.mimeTypes,
+      },
+    ]);
+    return Object.fromEntries(entries) as MediaLimitsView;
+  }
 
   /** Whether this upload should be handed to the transcoder rather than served flat. */
   private handledByTranscoder(contentType: string | null): boolean {
@@ -230,6 +263,28 @@ export class MediaService {
     }
 
     if (info.state === VideoState.READY) {
+      // The first point the real duration is known. The client checks it at the
+      // picker, which is where a person should be told — but that is a courtesy
+      // to an honest client, not a control, so it is re-checked here against
+      // what the transcoder actually measured.
+      //
+      // Late, unavoidably: the clip has already been uploaded and encoded, and
+      // may already be attached to a wish. Refusing it here turns that wish's
+      // video into a failed one, which is the right outcome for a client that
+      // sent a clip it was told not to.
+      const maxDuration = MEDIA_RULES[media.purpose].maxDurationSeconds;
+      if (maxDuration && info.durationSeconds && info.durationSeconds > maxDuration) {
+        media.status = MediaStatus.FAILED;
+        await media.save();
+        await this.video.delete(media.videoId).catch(() => undefined);
+        await this.storage.delete(media.storageKey).catch(() => undefined);
+        this.logger.warn(
+          `Media ${media._id.toString()} rejected: ${info.durationSeconds}s exceeds the ` +
+            `${maxDuration}s limit for ${media.purpose}`,
+        );
+        return media;
+      }
+
       media.status = MediaStatus.READY;
       media.durationSeconds = info.durationSeconds;
       media.thumbnailFileName = info.thumbnailFileName;

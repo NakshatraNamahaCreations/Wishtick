@@ -69,6 +69,16 @@ export interface GroupGiftInviteDetailView extends GroupGiftInviteView {
   contributorCount: number;
   /** Confirmed contributions, newest first. Anonymous ones keep their name. */
   contributors: InviteContributorView[];
+  /** When the money has to be in by, for the "2 days left" line. */
+  deadline: Date | null;
+  /**
+   * Everything the invitee needs to actually pay, without first being let into
+   * the group: the chips the contribute sheet offers, and who the money goes
+   * to. Paying is how they accept, so it has to be possible from here.
+   */
+  suggestedAmountsMinor: number[];
+  hostName: string;
+  hostUpiId: string | null;
 }
 
 const toView = (
@@ -233,6 +243,7 @@ export class GroupGiftInvitesService {
 
     const names = await this.resolveNames([
       invite.invitedById.toString(),
+      gift.initiatorId.toString(),
       ...contributions.filter((c) => !c.anonymous).map((c) => c.userId.toString()),
     ]);
 
@@ -248,6 +259,10 @@ export class GroupGiftInvitesService {
           ? 0
           : Math.min(100, Math.round((gift.collectedAmountMinor / gift.targetAmountMinor) * 100)),
       contributorCount: gift.contributorCount,
+      deadline: gift.deadline,
+      suggestedAmountsMinor: gift.suggestedAmountsMinor ?? [],
+      hostName: names.get(gift.initiatorId.toString()) ?? 'A friend',
+      hostUpiId: gift.hostUpiId ?? null,
       contributors: contributions.map((c) => ({
         // Anonymity survives the invitation: someone who chose not to be named
         // did not choose to be named to whoever gets asked next.

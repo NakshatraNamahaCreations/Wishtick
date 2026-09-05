@@ -79,7 +79,6 @@ export class MemoriesService {
       // Snapshotted, not resolved on read — see the note on the schema field.
       personName: recipient.displayName ?? recipient.username ?? 'A WishMate',
       relation: dto.relation ?? null,
-      description: dto.description ?? null,
       occasion: dto.occasion,
       occasionDate: dto.occasionDate ? new Date(dto.occasionDate) : null,
       includeYear: dto.includeYear ?? false,
@@ -102,7 +101,6 @@ export class MemoriesService {
 
     if (dto.title !== undefined) capsule.title = dto.title;
     if (dto.relation !== undefined) capsule.relation = dto.relation;
-    if (dto.description !== undefined) capsule.description = dto.description;
     if (dto.occasion !== undefined) capsule.occasion = dto.occasion;
     if (dto.occasionDate !== undefined) {
       capsule.occasionDate = dto.occasionDate ? new Date(dto.occasionDate) : null;

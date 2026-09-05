@@ -38,7 +38,10 @@ class _GroupGiftDetailsScreenState
   }
 
   Future<void> _contribute(GroupGift gift) async {
-    final draft = await showContributeSheet(context, gift: gift);
+    final draft = await showContributeSheet(
+      context,
+      suggestedAmountsMinor: gift.suggestedAmountsMinor,
+    );
     if (draft == null || !mounted) return;
     final ok = await ref
         .read(groupGiftProvider(widget.groupGiftId).notifier)

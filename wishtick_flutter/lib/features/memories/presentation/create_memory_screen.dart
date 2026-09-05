@@ -3,17 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/media/media_repository.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/scroll_more_cue.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
-import '../../../core/widgets/wishtick_image.dart';
 import '../../events/presentation/widgets/relation_picker_sheet.dart';
 import '../../wishmates/domain/wishmate.dart';
 import '../../wishmates/presentation/widgets/person_avatar.dart';
@@ -33,10 +30,6 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
   late final _title = TextEditingController(
     text: ref.read(createMemoryProvider).title,
   );
-  late final _description = TextEditingController(
-    text: ref.read(createMemoryProvider).description,
-  );
-
   final _scrollController = ScrollController();
 
   /// One per required field, so a too-early submit can scroll to the first
@@ -44,9 +37,6 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
   final _fieldKeys = {
     for (final field in MemoryField.values) field: GlobalKey(),
   };
-
-  bool _uploadingCover = false;
-  String? _coverError;
 
   /// Picks the WishMate the memory is for.
   ///
@@ -75,11 +65,11 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
   void _onSaveAndContinue() {
     final state = ref.read(createMemoryProvider);
     if (state.step1Complete) {
-      // Seeded here rather than on step 2, because its date field reads its
-      // initial value once when it is built — a suggestion arriving after
-      // that would never reach the box.
+      // Seeded here rather than on the unlock screen, because its date field
+      // reads its initial value once when it is built — a suggestion arriving
+      // after that would never reach the box.
       ref.read(createMemoryProvider.notifier).suggestUnlockDate();
-      unawaited(context.push<void>(AppRoutes.createMemoryUnlock));
+      unawaited(context.push<void>(AppRoutes.createMemoryWishKind));
       return;
     }
 
@@ -116,7 +106,6 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
   void dispose() {
     _scrollController.dispose();
     _title.dispose();
-    _description.dispose();
     super.dispose();
   }
 
@@ -129,32 +118,6 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
     ref
         .read(createMemoryProvider.notifier)
         .setRelation(choice.key, choice.label);
-  }
-
-  Future<void> _pickCover() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1600,
-    );
-    if (picked == null || !mounted) return;
-
-    setState(() {
-      _uploadingCover = true;
-      _coverError = null;
-    });
-    try {
-      final media = await ref
-          .read(mediaRepositoryProvider)
-          .uploadFile(file: picked, purpose: MediaPurpose.memoryCover);
-      if (!mounted) return;
-      ref
-          .read(createMemoryProvider.notifier)
-          .setCover(mediaId: media.id, localPath: picked.path);
-    } catch (e) {
-      if (mounted) setState(() => _coverError = 'Could not upload that image.');
-    } finally {
-      if (mounted) setState(() => _uploadingCover = false);
-    }
   }
 
   @override
@@ -222,26 +185,6 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
               ],
             ),
             const SizedBox(height: AppSpacing.xl),
-            TextField(
-              controller: _description,
-              textCapitalization: TextCapitalization.sentences,
-              maxLines: 4,
-              maxLength: kMemoryDescriptionMax,
-              decoration: InputDecoration(
-                labelText: 'Description *',
-                errorText: _errorFor(state, MemoryField.description),
-                // A wish, addressed to the person. The old hint was the event
-                // screen's invitation copy ("Join us in celebrating…"), which
-                // asks the reader to turn up somewhere — wrong for a capsule
-                // that renders this line under "For <name>".
-                hintText:
-                    'Wishing you all the happiness in the world today — you '
-                    'deserve every bit of it.',
-              ),
-              onChanged: notifier.setDescription,
-            ),
-
-            const SizedBox(height: AppSpacing.xl),
             _SectionHeading('What is the occasion?'),
             const SizedBox(height: AppSpacing.lg),
             OccasionGrid(
@@ -276,19 +219,6 @@ class _CreateMemoryScreenState extends ConsumerState<CreateMemoryScreen> {
                 ),
               ],
             ),
-
-            const SizedBox(height: AppSpacing.xl),
-            _SectionHeading('Cover Image'),
-            const SizedBox(height: AppSpacing.lg),
-            _CoverRow(
-              localPath: state.coverLocalPath,
-              busy: _uploadingCover,
-              onAdd: _uploadingCover ? null : _pickCover,
-            ),
-            if (_coverError != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              WishtickErrorText(_coverError!),
-            ],
 
             if (state.error != null) ...[
               const SizedBox(height: AppSpacing.lg),
@@ -561,68 +491,7 @@ class _WheelState extends State<_Wheel> {
 }
 
 /// The chosen cover beside a "+" tile, as `4104:1539` lays it out.
-class _CoverRow extends StatelessWidget {
-  const _CoverRow({
-    required this.localPath,
-    required this.busy,
-    required this.onAdd,
-  });
 
-  final String? localPath;
-  final bool busy;
-  final VoidCallback? onAdd;
-
-  static const _height = 132.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return SizedBox(
-      height: _height,
-      child: Row(
-        children: [
-          if (localPath != null) ...[
-            Expanded(
-              flex: 3,
-              child: WishtickImage(
-                url: localPath,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-          ],
-          Expanded(
-            flex: 2,
-            child: Material(
-              color: colors.surfaceAlt,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: InkWell(
-                onTap: onAdd,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                child: Center(
-                  child: busy
-                      ? const SizedBox(
-                          width: AppSizes.iconLg,
-                          height: AppSizes.iconLg,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          Icons.add,
-                          size: AppSizes.iconLg,
-                          color: colors.textMuted,
-                        ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// [TextField.maxLength] keeps the server's cap without drawing a counter the
-/// design does not show.
 Widget? _noCounter(
   BuildContext context, {
   required int currentLength,

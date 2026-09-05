@@ -8,69 +8,17 @@ import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../../home/presentation/widgets/occasion_grid.dart';
 import '../data/wishlist_repository.dart';
 import '../domain/wishlist.dart';
 import '../domain/wishlist_item.dart';
 import 'added_to_wishlist_screen.dart';
-import 'widgets/pick_tile.dart';
 import 'wishlist_detail_controller.dart';
 
 const _kNoteSuggestions = [
   'She loves this',
   'Perfect for her',
   'Best Gift for her birthday',
-];
-
-/// Real taxonomy keys standing in for the mock's 8 occasion tiles — two
-/// (Rakhi, Custom Events) have no exact taxonomy match, so the closest real
-/// occasion (Festival, Special Moments) takes its place rather than a made-up
-/// key the backend would reject. Photos come from the same
-/// `Celebrations_images` set Home's occasion grid uses (Figma `280:584`);
-/// `special_moments` reuses `Best_Wishes.png` — this frame's own "Custom
-/// Events" tile is pixel-identical to it — and `just_because` gets its own
-/// crop since this frame's "Best Wishes" tile is a different photo than
-/// Home's.
-const _kOccasions = [
-  (
-    key: 'birthday',
-    label: 'Birthday',
-    image: 'assets/images/Celebrations_images/Birthday.png',
-  ),
-  (
-    key: 'anniversary',
-    label: 'Anniversary',
-    image: 'assets/images/Celebrations_images/Anniversary.png',
-  ),
-  (
-    key: 'wedding',
-    label: 'Wedding',
-    image: 'assets/images/Celebrations_images/Wedding.png',
-  ),
-  (
-    key: 'housewarming',
-    label: 'Housewarming',
-    image: 'assets/images/Celebrations_images/House_Warming.png',
-  ),
-  (
-    key: 'baby_shower',
-    label: 'Baby Shower',
-    image: 'assets/images/Celebrations_images/Mom_to_Be.png',
-  ),
-  (
-    key: 'special_moments',
-    label: 'Special Moments',
-    image: 'assets/images/Celebrations_images/Best_Wishes.png',
-  ),
-  (
-    key: 'festival',
-    label: 'Festival',
-    image: 'assets/images/Celebrations_images/Rakhi.png',
-  ),
-  (
-    key: 'just_because',
-    label: 'Just Because',
-    image: 'assets/images/Celebrations_images/Just_Because.png',
-  ),
 ];
 
 /// Figma `280:584` — collects who a saved item is for once a wishlist has
@@ -109,40 +57,40 @@ class SaveToWishlistScreen extends ConsumerStatefulWidget {
 }
 
 class _SaveToWishlistScreenState extends ConsumerState<SaveToWishlistScreen> {
-  final _personName = TextEditingController();
-  final _relation = TextEditingController();
   final _notes = TextEditingController();
-  String? _occasionKey;
   ItemImportance _importance = ItemImportance.wouldLove;
 
-  bool _submitted = false;
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    _personName.dispose();
-    _relation.dispose();
     _notes.dispose();
     super.dispose();
   }
 
-  String? get _personNameError {
-    if (!_submitted) return null;
-    return _personName.text.trim().isEmpty
-        ? "Please enter the person's name"
-        : null;
-  }
+  /// Who the gift is for, taken from the list rather than asked again.
+  ///
+  /// The list is chosen before this screen opens and is named after the
+  /// WishMate it is for, so asking a second time was asking the same question
+  /// twice and letting the two answers disagree.
+  String get _inheritedRecipient => widget.wishlist.title;
 
-  String? get _relationError {
-    if (!_submitted) return null;
-    return _relation.text.trim().isEmpty ? 'Please enter your relation' : null;
+  /// The list's occasion, mapped back to a taxonomy key.
+  ///
+  /// Null when its occasion is free text the taxonomy has never heard of —
+  /// "Passed the bar" is a fine reason to give a gift and a fine thing for an
+  /// item to carry no key for.
+  String? get _inheritedOccasionKey {
+    final label = widget.wishlist.occasionLabel?.trim().toLowerCase();
+    if (label == null || label.isEmpty) return null;
+    for (final o in kHomeOccasions) {
+      if (o.label.toLowerCase() == label) return o.key;
+    }
+    return null;
   }
 
   Future<void> _save() async {
-    setState(() => _submitted = true);
-    if (_personNameError != null || _relationError != null) return;
-
     setState(() {
       _busy = true;
       _error = null;
@@ -165,9 +113,8 @@ class _SaveToWishlistScreenState extends ConsumerState<SaveToWishlistScreen> {
         await repo.updateItem(
           widget.wishlist.id,
           item.id,
-          recipientName: _personName.text.trim(),
-          relation: _relation.text.trim(),
-          occasionKey: _occasionKey,
+          recipientName: _inheritedRecipient,
+          occasionKey: _inheritedOccasionKey,
           importance: _importance,
         );
       } else {
@@ -175,9 +122,8 @@ class _SaveToWishlistScreenState extends ConsumerState<SaveToWishlistScreen> {
           widget.wishlist.id,
           title: widget.productTitle,
           notes: notes,
-          recipientName: _personName.text.trim(),
-          relation: _relation.text.trim(),
-          occasionKey: _occasionKey,
+          recipientName: _inheritedRecipient,
+          occasionKey: _inheritedOccasionKey,
           productLink: widget.productUrl,
           priceAmountMinor: widget.amountMinor,
           category: widget.category,
@@ -278,72 +224,6 @@ class _SaveToWishlistScreenState extends ConsumerState<SaveToWishlistScreen> {
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  Text(
-                    'Who is this gift for?',
-                    style: context.text.titleMedium?.copyWith(
-                      color: colors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _personName,
-                          decoration: InputDecoration(
-                            labelText: "Person's Name *",
-                            hintText: 'Ananya',
-                            errorText: _personNameError,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: TextField(
-                          controller: _relation,
-                          decoration: InputDecoration(
-                            labelText: 'Relation *',
-                            hintText: 'Best Friend',
-                            errorText: _relationError,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  Text(
-                    "What's the occasion?",
-                    style: context.text.titleMedium?.copyWith(
-                      color: colors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: EdgeInsets.zero,
-                    mainAxisSpacing: AppSpacing.lg,
-                    crossAxisSpacing: AppSpacing.md,
-                    childAspectRatio: 0.72,
-                    children: [
-                      for (final occasion in _kOccasions)
-                        PickTile(
-                          image: occasion.image,
-                          label: occasion.label,
-                          selected: _occasionKey == occasion.key,
-                          onTap: () => setState(
-                            () => _occasionKey = _occasionKey == occasion.key
-                                ? null
-                                : occasion.key,
-                          ),
-                        ),
-                    ],
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   Text(

@@ -64,6 +64,7 @@ class WishtickEvent {
     required this.timezone,
     required this.coverUrl,
     required this.isHosting,
+    this.inviteMediaUrl,
     this.description,
     this.status,
     this.attendingCount,
@@ -81,6 +82,10 @@ class WishtickEvent {
   final String timezone;
   final String? coverUrl;
 
+  /// The invitation the host made. Most events carry this and no cover, so
+  /// the rail draws it first — see [artworkUrl].
+  final String? inviteMediaUrl;
+
   /// True when this came from `/events/mine`, false from `/events/invited`.
   final bool isHosting;
 
@@ -90,13 +95,16 @@ class WishtickEvent {
   final EventStatus? status;
   final int? attendingCount;
 
-  /// Invited events only. The backend does not populate this yet.
+  /// Invited events only.
   final String? hostName;
   final RsvpResponse? myRsvp;
 
   /// Invited events only — *your* invite token, which is what lets the app
   /// open the invite screen without asking you to find the original link.
   final String? inviteToken;
+
+  /// What to draw on the card: the invitation, else the cover, else nothing.
+  String? get artworkUrl => inviteMediaUrl ?? coverUrl;
 
   /// Whole days until the event; negative once it has passed.
   int daysAway({DateTime? now}) {
@@ -115,6 +123,7 @@ class WishtickEvent {
     startsAt: DateTime.parse(json['startsAt'] as String),
     timezone: json['timezone'] as String? ?? 'Asia/Kolkata',
     coverUrl: json['coverUrl'] as String?,
+    inviteMediaUrl: json['inviteMediaUrl'] as String?,
     isHosting: true,
     description: json['description'] as String?,
     status: EventStatus.fromWire(json['status'] as String?),
@@ -129,6 +138,7 @@ class WishtickEvent {
     startsAt: DateTime.parse(json['startsAt'] as String),
     timezone: json['timezone'] as String? ?? 'Asia/Kolkata',
     coverUrl: json['coverUrl'] as String?,
+    inviteMediaUrl: json['inviteMediaUrl'] as String?,
     isHosting: false,
     hostName: json['hostName'] as String?,
     myRsvp: RsvpResponse.fromWire(json['myRsvp'] as String?),

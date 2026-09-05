@@ -76,7 +76,10 @@ void main() {
   test('404 and 403 are unavailable, so nothing retries them', () async {
     for (final code in [403, 404, 500]) {
       expect(
-        await probePlayback('https://api.test/x', client: _dioWith(_StubAdapter(code))),
+        await probePlayback(
+          'https://api.test/x',
+          client: _dioWith(_StubAdapter(code)),
+        ),
         PlaybackReadiness.unavailable,
         reason: 'status $code',
       );

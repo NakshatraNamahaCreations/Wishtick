@@ -62,7 +62,9 @@ void main() {
         t.container,
       ).create(title: 'New Wishlist', visibility: WishlistVisibility.public);
 
-      expect(ok, isTrue);
+      // The list itself comes back, not a bare true — the event wizard links
+      // the one it just made.
+      expect(ok?.title, 'New Wishlist');
       expect(stateOf(t.container).wishlists?.map((w) => w.title), [
         'Existing',
         'New Wishlist',
@@ -83,7 +85,7 @@ void main() {
         t.container,
       ).create(title: 'New Wishlist', visibility: WishlistVisibility.public);
 
-      expect(ok, isFalse);
+      expect(ok, isNull);
       expect(stateOf(t.container).error, isNotNull);
       expect(stateOf(t.container).wishlists, hasLength(1));
     });

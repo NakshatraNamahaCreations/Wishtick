@@ -102,6 +102,18 @@ void main() {
     },
   );
 
+  // The card is a photograph with the copy laid into the empty gold down its
+  // left. Drawn any shorter than the artwork's own 552x450, `cover` starts
+  // eating the balloons off the top of it.
+  testWidgets("the chip-in card keeps its artwork's proportions", (
+    tester,
+  ) async {
+    await pump(tester, groupGifts: [buildGroupGift(id: 'gg_1')]);
+
+    final size = tester.getSize(find.byType(GroupGiftCard));
+    expect(size.height, closeTo(size.width * 450 / 552, 3));
+  });
+
   testWidgets('a fully funded gift is left off the rail — its "Chip in" '
       'button could no longer do anything', (tester) async {
     await pump(

@@ -9,7 +9,12 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import { Public } from 'src/common/decorators/public.decorator';
 import { ConfirmUploadDto, CreateUploadUrlDto } from './dto/media.dto';
-import { MediaService, type MediaView, type UploadTicket } from './media.service';
+import {
+  MediaService,
+  type MediaLimitsView,
+  type MediaView,
+  type UploadTicket,
+} from './media.service';
 
 /** Issuing URLs is cheap, but an unbounded loop would fill a bucket for free. */
 const UPLOAD_URL_THROTTLE = { default: { limit: 30, ttl: 60_000 } };
@@ -49,6 +54,24 @@ export class MediaController {
   })
   confirm(@CurrentUser('id') userId: string, @Body() dto: ConfirmUploadDto): Promise<MediaView> {
     return this.media.confirm(userId, dto.mediaId);
+  }
+
+  /**
+   * Declared before `:id` on purpose — Nest matches routes in declaration
+   * order, so with these the other way round `/media/limits` is read as a
+   * request for the media whose id is "limits".
+   */
+  @Get('limits')
+  @ApiOperation({
+    summary: 'What may be uploaded, per purpose',
+    description:
+      'The effective size cap and mime allowlist for each purpose, so a client can refuse ' +
+      'an oversized file at the picker rather than after the upload. The cap is the ' +
+      "per-purpose rule clamped by this deployment's global MEDIA_MAX_BYTES, which is why " +
+      'it cannot be hardcoded in the app.',
+  })
+  limits(): MediaLimitsView {
+    return this.media.limits();
   }
 
   @Get(':id')

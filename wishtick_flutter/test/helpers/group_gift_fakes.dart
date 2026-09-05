@@ -50,6 +50,8 @@ GroupGift buildGroupGift({
   String? hostUpiId = 'rohanr1@okaxis',
   String? thankYouNote,
   String? recipientName = 'Siya',
+  String? message,
+  DateTime? deadline,
   GroupGiftShare? share,
 }) => GroupGift(
   id: id,
@@ -77,6 +79,8 @@ GroupGift buildGroupGift({
   createdAt: DateTime(2026, 8, 1),
   thankYouNote: thankYouNote,
   recipientName: recipientName,
+  message: message,
+  deadline: deadline,
   share: share,
 );
 
@@ -122,11 +126,19 @@ GroupGiftInviteDetail buildInviteDetail({
   int collectedAmountMinor = 100000,
   int contributorCount = 1,
   List<GroupGiftInviteContributor>? contributors,
+  List<int> suggestedAmountsMinor = const [50000, 100000, 200000],
+  String hostName = 'Rohan',
+  String? hostUpiId = 'rohanr1@okaxis',
+  DateTime? deadline,
 }) => GroupGiftInviteDetail(
   invite: invite ?? buildInvite(),
   itemTitle: itemTitle,
   imageUrl: imageUrl,
   currency: 'INR',
+  suggestedAmountsMinor: suggestedAmountsMinor,
+  hostName: hostName,
+  hostUpiId: hostUpiId,
+  deadline: deadline,
   targetAmountMinor: targetAmountMinor,
   collectedAmountMinor: collectedAmountMinor,
   percentFunded: targetAmountMinor == 0
@@ -215,6 +227,7 @@ class FakeGroupGiftRepository implements GroupGiftRepository {
       'contributionMode': contributionMode,
       'suggestedAmountsMinor': suggestedAmountsMinor,
       'message': message,
+      'deadline': deadline,
       'idempotencyKey': idempotencyKey,
     });
     return _guard(gift);

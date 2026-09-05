@@ -17,6 +17,7 @@ import '../../features/events/presentation/event_guest_detail_screen.dart';
 import '../../features/events/presentation/event_guests_screen.dart';
 import '../../features/events/presentation/event_invite_preview_screen.dart';
 import '../../features/events/presentation/event_invite_templates_screen.dart';
+import '../../features/events/presentation/event_share_screen.dart';
 import '../../features/events/presentation/invite_screen.dart';
 import '../../features/events/presentation/my_events_screen.dart';
 import '../../features/events/presentation/public_event_screen.dart';
@@ -46,11 +47,15 @@ import '../../features/group_gift/presentation/group_gift_thank_you_screen.dart'
 import '../../features/home/presentation/delivery_location_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/memories/presentation/add_wish_screen.dart';
+import '../../features/memories/presentation/choose_wish_kind_screen.dart';
 import '../../features/memories/presentation/create_memory_screen.dart';
 import '../../features/memories/presentation/create_memory_unlock_screen.dart';
+import '../../features/memories/presentation/create_memory_wish_preview_screen.dart';
+import '../../features/memories/presentation/create_memory_wish_screen.dart';
 import '../../features/memories/presentation/memories_tab_screen.dart';
 import '../../features/memories/presentation/memory_detail_screen.dart';
 import '../../features/memories/presentation/memory_experience_screen.dart';
+import '../../features/memories/presentation/my_wishes_screen.dart';
 import '../../features/notifications/presentation/notification_center_screen.dart';
 import '../../features/notifications/presentation/notification_settings_screen.dart';
 import '../../features/notifications/presentation/thank_you_compose_screen.dart';
@@ -545,16 +550,49 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const CreateEventDetailsScreen(),
       ),
+      // The invitation steps of the same wizard, with no event id because
+      // there is no event yet: the picker, the upload and the preview all
+      // read the draft, and the preview's button is what creates the event.
+      // Declared before `/events/:id` so "create" is never read as an id.
+      GoRoute(
+        path: AppRoutes.createEventInvite,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const EventInviteTemplatesScreen(),
+        routes: [
+          GoRoute(
+            path: 'upload',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => const UploadInvitationScreen(),
+          ),
+          GoRoute(
+            path: 'preview',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => const EventInvitePreviewScreen(),
+          ),
+        ],
+      ),
       // Declared after the more specific `/events/:id/...` routes below would
       // be ambiguous, so it sits here and they stay siblings rather than its
       // children — a child route would put the detail screen underneath the
       // guest list in the back stack, which is not where it came from when
       // reached by deep link.
+      //
+      // Share is the one exception, and a child on purpose: the wizard `go`es
+      // there having replaced its own steps, and the event page is exactly
+      // what should be underneath it.
       GoRoute(
         path: '/events/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) =>
             EventDetailScreen(eventId: state.pathParameters['id']!),
+        routes: [
+          GoRoute(
+            path: 'share',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                EventShareScreen(eventId: state.pathParameters['id']!),
+          ),
+        ],
       ),
       GoRoute(
         path: '/events/:id/invite',
@@ -600,6 +638,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const CreateMemoryScreen(),
       ),
       GoRoute(
+        path: AppRoutes.createMemoryWishKind,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const ChooseWishKindScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.createMemoryWishCompose,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const CreateMemoryWishScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.createMemoryWishPreview,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const CreateMemoryWishPreviewScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.createMemoryUnlock,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const CreateMemoryUnlockScreen(),
@@ -610,6 +663,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) =>
             MemoryDetailScreen(memoryId: state.pathParameters['id']!),
         routes: [
+          GoRoute(
+            path: 'wishes/kind',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                ChooseWishKindScreen(memoryId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: 'wishes/mine',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                MyWishesScreen(memoryId: state.pathParameters['id']!),
+          ),
           GoRoute(
             path: 'wishes/add',
             parentNavigatorKey: _rootNavigatorKey,

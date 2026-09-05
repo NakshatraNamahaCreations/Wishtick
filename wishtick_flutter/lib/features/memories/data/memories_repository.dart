@@ -59,7 +59,6 @@ class MemoriesRepository {
     required DateTime unlockAt,
     required String timezone,
     String? relation,
-    String? description,
     DateTime? occasionDate,
     bool? includeYear,
     String? coverMediaId,
@@ -73,7 +72,6 @@ class MemoriesRepository {
         'unlockAt': unlockAt.toUtc().toIso8601String(),
         'timezone': timezone,
         'relation': ?relation,
-        'description': ?description,
         'occasionDate': ?occasionDate?.toUtc().toIso8601String(),
         'includeYear': ?includeYear,
         'coverMediaId': ?coverMediaId,
@@ -90,7 +88,6 @@ class MemoriesRepository {
     DateTime? unlockAt,
     String? timezone,
     String? relation,
-    String? description,
     DateTime? occasionDate,
     bool? includeYear,
     String? coverMediaId,
@@ -103,7 +100,6 @@ class MemoriesRepository {
         'unlockAt': ?unlockAt?.toUtc().toIso8601String(),
         'timezone': ?timezone,
         'relation': ?relation,
-        'description': ?description,
         'occasionDate': ?occasionDate?.toUtc().toIso8601String(),
         'includeYear': ?includeYear,
         'coverMediaId': ?coverMediaId,
@@ -140,6 +136,21 @@ class MemoriesRepository {
       },
     );
     return MemoryWish.fromJson(json);
+  }
+
+  /// The caller's own wishes, readable whether or not the capsule has opened.
+  ///
+  /// Not subject to the time-lock: showing somebody the words they wrote
+  /// themselves reveals nothing about anyone else. This is what the host gets
+  /// instead of the old "Open it now", which forced the capsule open for
+  /// everybody and could not be undone.
+  Future<List<MemoryWish>> myWishes(String capsuleId) async {
+    final json = await _api.get<List<dynamic>>(
+      '/memories/$capsuleId/wishes/mine',
+    );
+    return json
+        .map((e) => MemoryWish.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// The wishes inside.

@@ -120,6 +120,27 @@ const CONTENT: Record<NotificationType, (p: Record<string, unknown>) => Content>
     lines: [`${s(p, 'eventTitle', 'Your event')} is ${s(p, 'whenText', 'coming up')}.`],
     cta: { label: 'View the event', url: s(p, 'url') },
   }),
+  [NotificationType.EVENT_WISHLIST_OFFERED]: (p) => ({
+    subject: `${who(p, 'guestName')} offered a wishlist for ${s(p, 'eventTitle', 'your event')}`,
+    title: 'A guest offered a wishlist',
+    lines: [
+      `${who(p, 'guestName')} offered ${s(p, 'wishlistTitle', 'their wishlist')} for ${s(p, 'eventTitle', 'your event')}.`,
+      'It shows on the invitation once you accept it.',
+    ],
+    cta: { label: 'Review it', url: s(p, 'url') },
+  }),
+  [NotificationType.EVENT_WISHLIST_ANSWERED]: (p) => ({
+    subject: p.approved
+      ? `Your wishlist is on ${s(p, 'eventTitle', 'the event')}`
+      : `Your wishlist was not added to ${s(p, 'eventTitle', 'the event')}`,
+    title: p.approved ? 'Your wishlist was accepted' : 'Your wishlist was declined',
+    lines: [
+      p.approved
+        ? `${s(p, 'wishlistTitle', 'Your wishlist')} is now showing on ${s(p, 'eventTitle', 'the event')}.`
+        : `The host did not add ${s(p, 'wishlistTitle', 'your wishlist')} to ${s(p, 'eventTitle', 'the event')}.`,
+    ],
+    cta: { label: 'View the event', url: s(p, 'url') },
+  }),
   [NotificationType.ITEM_PRICE_DROP]: (p) => ({
     subject: `Price drop: ${s(p, 'itemTitle', 'a wishlist item')}`,
     title: 'A wishlist item dropped in price',

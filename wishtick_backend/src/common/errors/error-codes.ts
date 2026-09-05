@@ -175,6 +175,16 @@ export enum ErrorCode {
   INVITE_LIMIT_REACHED = 'INVITE_LIMIT_REACHED',
   INVITE_TEMPLATE_UNKNOWN = 'INVITE_TEMPLATE_UNKNOWN',
   CANNOT_INVITE_HOST = 'CANNOT_INVITE_HOST',
+  /**
+   * The link is for a private event and the caller is not on its guest list.
+   *
+   * Distinct from EVENT_NOT_FOUND on purpose. A private event's link used to
+   * 404 so a stranger could not learn it existed, but a host now sends that
+   * link to phone numbers, and the people who receive it need to be told why
+   * it will not open rather than shown a dead page. The slug is still
+   * unguessable, so what leaks is only "the link you were sent is real".
+   */
+  EVENT_INVITE_REQUIRED = 'EVENT_INVITE_REQUIRED',
   WISHLIST_NOT_LINKABLE = 'WISHLIST_NOT_LINKABLE',
 
   // Products / affiliate
@@ -190,6 +200,7 @@ export enum ErrorCode {
   // Media
   MEDIA_TYPE_NOT_ALLOWED = 'MEDIA_TYPE_NOT_ALLOWED',
   MEDIA_TOO_LARGE = 'MEDIA_TOO_LARGE',
+  MEDIA_TOO_LONG = 'MEDIA_TOO_LONG',
   MEDIA_NOT_FOUND = 'MEDIA_NOT_FOUND',
   MEDIA_NOT_UPLOADED = 'MEDIA_NOT_UPLOADED',
   MEDIA_SIGNATURE_INVALID = 'MEDIA_SIGNATURE_INVALID',

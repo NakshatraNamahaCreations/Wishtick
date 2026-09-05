@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/media/media_repository.dart';
+
 enum EventType {
   birthday('birthday'),
   anniversary('anniversary'),
@@ -50,6 +52,13 @@ enum RsvpResponse {
 
   /// The three a guest can actually pick. `pending` is a state, not an answer.
   static const answerable = [yes, maybe, no];
+
+  /// Whether this counts as coming.
+  ///
+  /// The server lets only these two offer a wishlist to the event, so the app
+  /// has to agree: it used to offer the row to anyone who had answered at all,
+  /// and a guest who had declined got a "not found" error for their trouble.
+  bool get isAttending => this == yes || this == maybe;
 }
 
 @immutable
@@ -63,6 +72,8 @@ class InviteEvent {
     required this.description,
     required this.coverUrl,
     required this.status,
+    this.venue,
+    this.inviteMediaUrl,
   });
 
   final String title;
@@ -74,7 +85,26 @@ class InviteEvent {
   final String? coverUrl;
   final EventStatus status;
 
+  /// Where it is happening. The invitation used to show a time and no place:
+  /// the server has sent this for a while, and this view was not reading it.
+  final String? venue;
+
+  /// The card the host made (`2248:70`). Most events carry this and no cover,
+  /// so it is what the invitation draws — see [artworkUrl].
+  final String? inviteMediaUrl;
+
   bool get isCancelled => status == EventStatus.cancelled;
+
+  /// The artwork to show the guest: the host's invitation, else the event's
+  /// cover, else nothing. Null for a file no widget can draw — an MP4 or a
+  /// PDF invitation — which the screen describes in words instead.
+  String? get artworkUrl {
+    final invitation = inviteMediaUrl;
+    if (invitation != null && MediaRepository.isDrawableImage(invitation)) {
+      return invitation;
+    }
+    return coverUrl;
+  }
 
   factory InviteEvent.fromJson(Map<String, dynamic> json) => InviteEvent(
     title: json['title'] as String,
@@ -86,6 +116,8 @@ class InviteEvent {
     timezone: json['timezone'] as String?,
     description: json['description'] as String?,
     coverUrl: json['coverUrl'] as String?,
+    venue: json['venue'] as String?,
+    inviteMediaUrl: json['inviteMediaUrl'] as String?,
     status: EventStatus.fromWire(json['status'] as String?),
   );
 }

@@ -31,6 +31,30 @@ View the event: https://app.wishtick.test/x",
 }
 `;
 
+exports[`NotificationRenderer renders in-app/text/sms content for every notification type: event_wishlist_answered 1`] = `
+{
+  "sms": "Your wishlist was declined — https://app.wishtick.test/x",
+  "subject": "Your wishlist was not added to Aarav's Birthday",
+  "text": "The host did not add Birthday list to Aarav's Birthday.
+
+View the event: https://app.wishtick.test/x",
+  "title": "Your wishlist was declined",
+}
+`;
+
+exports[`NotificationRenderer renders in-app/text/sms content for every notification type: event_wishlist_offered 1`] = `
+{
+  "sms": "A guest offered a wishlist — https://app.wishtick.test/x",
+  "subject": "Someone offered a wishlist for Aarav's Birthday",
+  "text": "Someone offered Birthday list for Aarav's Birthday.
+
+It shows on the invitation once you accept it.
+
+Review it: https://app.wishtick.test/x",
+  "title": "A guest offered a wishlist",
+}
+`;
+
 exports[`NotificationRenderer renders in-app/text/sms content for every notification type: gift_fulfilled 1`] = `
 {
   "sms": "A gift was delivered — https://app.wishtick.test/x",

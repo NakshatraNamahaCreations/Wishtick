@@ -303,7 +303,7 @@ class _HelpPill extends StatelessWidget {
   }
 }
 
-/// Avatar, name and contact line.
+/// Avatar, name and `@handle`.
 class _Identity extends StatelessWidget {
   const _Identity({required this.me});
 
@@ -312,6 +312,7 @@ class _Identity extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final handle = me?.handle;
 
     return Column(
       children: [
@@ -328,11 +329,21 @@ class _Identity extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        if (me?.contactLine != null) ...[
+        if (handle != null) ...[
           const SizedBox(height: AppSpacing.xs),
           Text(
-            me!.contactLine!,
+            handle,
             style: context.text.bodyMedium?.copyWith(color: colors.textMuted),
+          ),
+        ] else if (me != null) ...[
+          // An account that never claimed one. Offering the claim beats
+          // falling back to the phone number: a handle is the gate on the
+          // whole of WishMates, so this is the one place worth asking from.
+          const SizedBox(height: AppSpacing.xs),
+          TextButton(
+            onPressed: () =>
+                unawaited(context.push<bool>(AppRoutes.usernameClaim)),
+            child: const Text('Add a username'),
           ),
         ],
       ],

@@ -47,6 +47,14 @@ export interface EventView {
   /** Host-only. A guest list is not public information. */
   share?: { slug: string; url: string };
   rsvpCounts?: RsvpCounts;
+  /**
+   * Guest wishlists waiting on the host's answer. Host-only.
+   *
+   * Carried on the event itself so "My Events" can badge the card: the queue
+   * lives at the foot of one event's page, and a host with no reason to scroll
+   * there never learned an offer had arrived.
+   */
+  pendingWishlistCount?: number;
 }
 
 /** What an invited user sees in their own list of invitations. */
@@ -57,6 +65,11 @@ export interface InvitedEventView {
   startsAt: Date;
   timezone: string;
   coverUrl: string | null;
+  /**
+   * The card the host made. Most events have this and no cover, so a list
+   * that carried only `coverUrl` showed a blank tile for nearly every party.
+   */
+  inviteMediaUrl: string | null;
   hostName: string | null;
   myRsvp: RsvpResponse;
   inviteToken: string;
@@ -67,14 +80,18 @@ export interface InviteView {
   /**
    * Who was invited.
    *
-   * Replaces the old `email` / `phone` / `name` trio. An invitation is now
-   * always addressed to an account, so the guest list can show the same face,
-   * name and handle the rest of the app shows, instead of whatever address the
-   * host happened to type. Null only for an account that has since been
-   * deleted — the invite outlives the profile.
+   * An invitation addressed to an account carries the same face, name and
+   * handle the rest of the app shows. Null for an account since deleted — the
+   * invite outlives the profile — and for a guest invited by number who has
+   * not opened the link yet, where [invitedPhone] is all there is to show.
    */
   person: PublicIdentity | null;
   invitedUserId: string | null;
+  /**
+   * The number the host invited from their contacts, before anybody claimed
+   * the row. Null for a WishMate invite, which had an account from the start.
+   */
+  invitedPhone: string | null;
   rsvp: RsvpResponse;
   plusOnes: number;
   message: string | null;
@@ -135,7 +152,12 @@ export interface PublicInviteView {
 
 export const toEventView = (
   event: EventDocument,
-  opts: { isHost: boolean; shareBaseUrl?: string; rsvpCounts?: RsvpCounts },
+  opts: {
+    isHost: boolean;
+    shareBaseUrl?: string;
+    rsvpCounts?: RsvpCounts;
+    pendingWishlistCount?: number;
+  },
 ): EventView => {
   const view: EventView = {
     id: event._id.toString(),
@@ -170,6 +192,11 @@ export const toEventView = (
       view.share = { slug: event.shareSlug, url: `${opts.shareBaseUrl}/e/${event.shareSlug}` };
     }
     if (opts.rsvpCounts) view.rsvpCounts = opts.rsvpCounts;
+    // Zero is meaningful — it is what clears a badge — so this is sent
+    // whenever it was counted, unlike the optional blocks above.
+    if (opts.pendingWishlistCount !== undefined) {
+      view.pendingWishlistCount = opts.pendingWishlistCount;
+    }
   }
   return view;
 };
@@ -181,6 +208,10 @@ export const toInviteView = (
   id: invite._id.toString(),
   person,
   invitedUserId: invite.invitedUserId?.toString() ?? null,
+  // What the host invited when there was no account to point at. The guest
+  // list shows it until somebody claims the row, so a phone invite reads as a
+  // real guest rather than as a nameless "Guest".
+  invitedPhone: invite.invitedPhone ?? null,
   rsvp: invite.rsvp,
   plusOnes: invite.plusOnes,
   message: invite.message,

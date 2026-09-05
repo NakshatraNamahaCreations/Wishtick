@@ -72,15 +72,22 @@ export class InvitesService {
       throw new AppException(ErrorCode.EVENT_NOT_FOUND, 'Event not found', 404);
     }
 
-    // PRIVATE means invitees only — the host decides who comes, so a link
-    // cannot add anybody. PUBLIC and INVITE_ONLY are both defined as reachable
-    // by whoever holds the link.
-    if (event.visibility === EventVisibility.PRIVATE) {
-      throw new AppException(ErrorCode.EVENT_NOT_FOUND, 'Event not found', 404);
-    }
-
     if (event.hostId.toString() === userId) {
       throw new AppException(ErrorCode.CANNOT_INVITE_HOST, 'You are hosting this event.', 400);
+    }
+
+    // PRIVATE means invitees only — the host decides who comes, so holding the
+    // link is not enough. It is enough to have been invited *by number*: a
+    // host inviting from their contacts has no account to point at yet, and
+    // this is where that row finds its person.
+    if (event.visibility === EventVisibility.PRIVATE) {
+      const claimed = await this.claimPhoneInvite(event, userId);
+      if (claimed) return claimed;
+      throw new AppException(
+        ErrorCode.EVENT_INVITE_REQUIRED,
+        'This event is private, and you are not on its guest list.',
+        403,
+      );
     }
 
     const existing = await this.model
@@ -110,6 +117,151 @@ export class InvitesService {
       token: InvitesService.newToken(),
       rsvp: RsvpResponse.PENDING,
     });
+  }
+
+  /**
+   * Binds a phone-addressed invite to the account now opening the link.
+   *
+   * The host invited a number from their contacts; this is the moment that row
+   * learns whose it is. Returns null when nothing on the guest list matches,
+   * which is what makes "you are not invited" answerable.
+   *
+   * **Only a verified number claims.** An account can carry an unverified
+   * phone, and honouring one would let anybody type a friend's number onto
+   * their profile and walk into a private event.
+   */
+  private async claimPhoneInvite(
+    event: EventDocument,
+    userId: string,
+  ): Promise<EventInviteDocument | null> {
+    const user = await this.users.findById(userId);
+    if (!user?.phone || !user.phoneVerifiedAt) return null;
+
+    const phone = UsersService.normalizePhone(user.phone);
+    const invitedUserId = new Types.ObjectId(userId);
+
+    // Already claimed on an earlier tap. Idempotent, like the rest of join:
+    // a link gets opened again after an install and must land on the same row.
+    const mine = await this.model
+      .findOne({ eventId: event._id, invitedUserId })
+      .exec();
+    if (mine) {
+      if (mine.revokedAt !== null) return null;
+      return mine;
+    }
+
+    // Claim it in one atomic update, conditioned on still being unclaimed, so
+    // two devices opening the link at once cannot both take the same row.
+    const claimed = await this.model
+      .findOneAndUpdate(
+        {
+          eventId: event._id,
+          invitedPhone: phone,
+          invitedUserId: null,
+          revokedAt: null,
+        },
+        { $set: { invitedUserId } },
+        { new: true },
+      )
+      .exec();
+    if (claimed) {
+      this.logger.log(`Phone invite ${claimed._id.toString()} claimed by ${userId}`);
+    }
+    return claimed;
+  }
+
+  /**
+   * Invites people by phone number, for a host picking from their contacts.
+   *
+   * Numbers rather than user ids because the point is the friends who are not
+   * on Wishtick yet: there is nothing to look up, so the number is the address
+   * until somebody verified signs in with it — see [claimPhoneInvite].
+   *
+   * A number that already belongs to an account is bound straight away, so the
+   * guest list names them from the start rather than showing a bare number
+   * until they happen to open the link.
+   */
+  async inviteByPhone(
+    eventId: string,
+    hostId: string,
+    phones: string[],
+  ): Promise<BulkInviteResult> {
+    const event = await this.events.findOwnedOrFail(eventId, hostId);
+    if (event.status !== EventStatus.PUBLISHED) {
+      throw new AppException(
+        ErrorCode.EVENT_NOT_PUBLISHED,
+        'Publish the event before inviting anyone',
+        409,
+      );
+    }
+
+    const result: BulkInviteResult = {
+      created: [],
+      duplicates: 0,
+      skipped: 0,
+      total: phones.length,
+    };
+
+    // Normalised first, then de-duplicated: a contacts list routinely holds
+    // the same person twice, written two different ways.
+    const normalized = [...new Set(phones.map((p) => UsersService.normalizePhone(p)))];
+    result.duplicates += phones.length - normalized.length;
+
+    const existingCount = await this.model.countDocuments({ eventId: event._id }).exec();
+    if (existingCount + normalized.length > MAX_INVITES_PER_EVENT) {
+      throw new AppException(
+        ErrorCode.INVITE_LIMIT_REACHED,
+        `An event can have at most ${MAX_INVITES_PER_EVENT} guests`,
+        409,
+      );
+    }
+
+    for (const phone of normalized) {
+      // The host's own number: inviting yourself to your own party is a
+      // mis-tap, not an error worth failing the whole batch over.
+      const account = await this.users.findByPhone(phone);
+      if (account && account._id.toString() === hostId) {
+        result.skipped++;
+        continue;
+      }
+
+      const invitedUserId = account ? account._id : null;
+      const already = await this.model
+        .findOne({
+          eventId: event._id,
+          revokedAt: null,
+          ...(invitedUserId ? { $or: [{ invitedUserId }, { invitedPhone: phone }] } : { invitedPhone: phone }),
+        })
+        .exec();
+      if (already) {
+        result.duplicates++;
+        continue;
+      }
+
+      try {
+        const invite = await this.model.create({
+          eventId: event._id,
+          invitedUserId,
+          invitedPhone: phone,
+          token: InvitesService.newToken(),
+          rsvp: RsvpResponse.PENDING,
+        });
+        result.created.push(toInviteView(invite));
+      } catch (err) {
+        // Either unique index fired: the same number invited twice at once.
+        if (InvitesService.isDuplicateKey(err)) {
+          result.duplicates++;
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    this.logger.log(
+      `Invited ${result.created.length} by phone to event ${eventId} ` +
+        `(${result.duplicates} duplicate, ${result.skipped} skipped)`,
+    );
+    return result;
   }
 
   // ── Read ──────────────────────────────────────────────────────────────────
@@ -163,6 +315,30 @@ export class InvitesService {
     return invites.map((invite) =>
       toInviteView(invite, byUser.get(invite.invitedUserId?.toString() ?? '') ?? null),
     );
+  }
+
+  /**
+   * Display names for a set of hosts, in one lookup — for a guest's own list
+   * of invitations, which used to say nothing about who was inviting them.
+   *
+   * Resolved the way [withPeople] resolves guests: the profile's display name,
+   * else the signup name, else nothing. Keyed by user id.
+   */
+  async hostNamesFor(hostIds: string[]): Promise<Map<string, string | null>> {
+    const names = new Map<string, string | null>();
+    const unique = [...new Set(hostIds)];
+    if (unique.length === 0) return names;
+
+    for (const person of await this.wishmates.identitiesOf(unique)) {
+      names.set(person.userId, person.displayName?.trim() || null);
+    }
+    const missing = unique.filter((id) => !names.has(id));
+    if (missing.length > 0) {
+      for (const user of await this.users.findManyByIds(missing)) {
+        names.set(user._id.toString(), user.name?.trim() || null);
+      }
+    }
+    return names;
   }
 
   /**

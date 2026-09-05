@@ -43,6 +43,10 @@ void main() {
     testWidgets('tapping the box focuses it, not the calendar', (tester) async {
       await pump(tester);
 
+      // The form gained a row above this one, so it starts below the fold:
+      // a tap outside the viewport is silently dropped.
+      await tester.ensureVisible(fieldWithHint('dd/mm/yyyy'));
+      await tester.pumpAndSettle();
       await tester.tap(fieldWithHint('dd/mm/yyyy'));
       await tester.pump();
 
@@ -52,6 +56,8 @@ void main() {
     testWidgets('only the calendar icon opens the picker', (tester) async {
       await pump(tester);
 
+      await tester.ensureVisible(find.byIcon(Icons.calendar_today_outlined));
+      await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.calendar_today_outlined));
       await tester.pumpAndSettle();
 

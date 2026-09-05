@@ -25,6 +25,7 @@ import { envValidationSchema } from 'src/config/env.validation';
 import { MIGRATIONS, MigrationRunner } from 'src/infra/migrations';
 import { QUEUE } from 'src/infra/queue/queue.constants';
 import { StorageModule } from 'src/infra/storage/storage.module';
+import { VideoModule } from 'src/infra/video/video.module';
 import { AdminModule } from 'src/modules/admin/admin.module';
 import { AnalyticsModule } from 'src/modules/analytics/analytics.module';
 import { AnalyticsRollupProcessor } from 'src/modules/analytics/analytics.processor';
@@ -154,6 +155,11 @@ export async function createTestApp(
       // Faking it here would leave the presign → PUT → confirm path — the part
       // most likely to break — exercised by nothing.
       StorageModule,
+      // Global in the real app, so nothing below names it — but this list is
+      // not AppModule's, and MediaService injects the VIDEO token from it.
+      // Without it no suite that boots MediaModule gets past DI.
+      // VIDEO_DRIVER defaults to `storage`, so this is the passthrough adapter.
+      VideoModule,
       UsersModule,
       AuthModule,
       TaxonomyModule,
