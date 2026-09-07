@@ -60,19 +60,28 @@ class FirebasePushService implements PushService {
   @override
   Stream<String> onTokenRefresh() => _messaging.onTokenRefresh;
 
+  /// The `data` block for routing, plus the `notification` block for the text.
+  ///
+  /// The text matters only in the foreground, where the app draws the
+  /// notification itself, but reading it here keeps every message the same
+  /// shape whichever stream it arrives on.
+  static PushMessage _toMessage(RemoteMessage m) => PushMessage.fromData(
+    m.data,
+    title: m.notification?.title,
+    body: m.notification?.body,
+  );
+
   @override
   Stream<PushMessage> onForegroundMessage() =>
-      FirebaseMessaging.onMessage.map((m) => PushMessage.fromData(m.data));
+      FirebaseMessaging.onMessage.map(_toMessage);
 
   @override
   Stream<PushMessage> onMessageOpened() async* {
     // The notification that launched a terminated app is not on the stream —
     // it happened before anything subscribed — so it is replayed first.
     final initial = await _messaging.getInitialMessage();
-    if (initial != null) yield PushMessage.fromData(initial.data);
+    if (initial != null) yield _toMessage(initial);
 
-    yield* FirebaseMessaging.onMessageOpenedApp.map(
-      (m) => PushMessage.fromData(m.data),
-    );
+    yield* FirebaseMessaging.onMessageOpenedApp.map(_toMessage);
   }
 }

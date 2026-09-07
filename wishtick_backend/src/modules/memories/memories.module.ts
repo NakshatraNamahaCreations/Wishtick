@@ -7,9 +7,11 @@ import { UsersModule } from 'src/modules/users/users.module';
 import { WishmatesModule } from 'src/modules/wishmates/wishmates.module';
 import { MemoriesController, PublicMemoriesController } from './memories.controller';
 import { MemoriesService } from './memories.service';
+import { MemoryRepliesService } from './memory-replies.service';
 import { MemoryUnlockRegistrar } from './memory-unlock.registrar';
 import { MemoryWishesService } from './memory-wishes.service';
 import { MemoryCapsule, MemoryCapsuleSchema } from './schemas/memory-capsule.schema';
+import { MemoryReply, MemoryReplySchema } from './schemas/memory-reply.schema';
 import { MemoryWish, MemoryWishSchema } from './schemas/memory-wish.schema';
 
 @Module({
@@ -17,6 +19,7 @@ import { MemoryWish, MemoryWishSchema } from './schemas/memory-wish.schema';
     MongooseModule.forFeature([
       { name: MemoryCapsule.name, schema: MemoryCapsuleSchema },
       { name: MemoryWish.name, schema: MemoryWishSchema },
+      { name: MemoryReply.name, schema: MemoryReplySchema },
     ]),
     // The delayed unlock job rides the shared scheduler. Nothing here is
     // compiled, so unlike reels there is no second, heavier queue.
@@ -29,7 +32,7 @@ import { MemoryWish, MemoryWishSchema } from './schemas/memory-wish.schema';
     WishmatesModule,
   ],
   controllers: [MemoriesController, PublicMemoriesController],
-  providers: [MemoriesService, MemoryWishesService, MemoryUnlockRegistrar],
+  providers: [MemoriesService, MemoryWishesService, MemoryRepliesService, MemoryUnlockRegistrar],
   exports: [MemoriesService],
 })
 export class MemoriesModule {}

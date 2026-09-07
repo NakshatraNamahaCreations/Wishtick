@@ -5,13 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// A push notification as the app cares about it.
 ///
-/// Only the two fields the backend actually routes on. FCM carries a title and
-/// body too, but the system draws those itself when the app is in the
-/// background — what the app needs is *where to go* when the notification is
-/// tapped.
+/// [type] and [refId] are what the backend routes on and travel in FCM's `data`
+/// block. [title] and [body] come from its `notification` block, which the
+/// system draws itself in the background — the app needs them only for a
+/// message that arrives while it is open, where Android draws nothing and the
+/// app has to.
 @immutable
 class PushMessage {
-  const PushMessage({required this.type, this.refId});
+  const PushMessage({required this.type, this.refId, this.title, this.body});
 
   /// One of `NotificationType` on the server — `gift_reserved`,
   /// `event_reminder`, and so on.
@@ -20,18 +21,33 @@ class PushMessage {
   /// The id of whatever the notification is about, when it is about one thing.
   final String? refId;
 
+  /// What the notification says. Absent on a data-only message, and on every
+  /// message read straight from [PushMessage.fromData].
+  final String? title;
+  final String? body;
+
   /// FCM data values are always strings, so nothing here is parsed further.
-  factory PushMessage.fromData(Map<String, dynamic> data) => PushMessage(
+  factory PushMessage.fromData(
+    Map<String, dynamic> data, {
+    String? title,
+    String? body,
+  }) => PushMessage(
     type: data['type']?.toString() ?? '',
     refId: data['refId']?.toString(),
+    title: title,
+    body: body,
   );
 
   @override
   bool operator ==(Object other) =>
-      other is PushMessage && other.type == type && other.refId == refId;
+      other is PushMessage &&
+      other.type == type &&
+      other.refId == refId &&
+      other.title == title &&
+      other.body == body;
 
   @override
-  int get hashCode => Object.hash(type, refId);
+  int get hashCode => Object.hash(type, refId, title, body);
 
   @override
   String toString() => 'PushMessage($type, $refId)';

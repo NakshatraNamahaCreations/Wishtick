@@ -11,6 +11,7 @@ import '../../../core/widgets/circle_back_button.dart';
 import '../domain/memory.dart';
 import 'add_wish_controller.dart';
 import 'create_memory_controller.dart';
+import 'reply_controller.dart';
 
 /// "How would you like to add the wish?" — the host's own first wish, chosen
 /// between naming the memory and sealing it.
@@ -21,7 +22,15 @@ import 'create_memory_controller.dart';
 /// contributor flow offers, so a host and a guest are answering the same
 /// question in the same words.
 class ChooseWishKindScreen extends ConsumerWidget {
-  const ChooseWishKindScreen({this.memoryId, super.key});
+  const ChooseWishKindScreen({this.memoryId, super.key}) : isReply = false;
+
+  /// The recipient of [memoryId] answering the people who filled it.
+  ///
+  /// Same four cards, different draft and a different word in the heading — a
+  /// reply is composed exactly the way a wish is, so cloning this screen to
+  /// change one noun would have bought two screens that drift apart.
+  const ChooseWishKindScreen.reply({required String this.memoryId, super.key})
+    : isReply = true;
 
   /// The capsule being contributed to, or null while one is being created.
   ///
@@ -30,6 +39,8 @@ class ChooseWishKindScreen extends ConsumerWidget {
   /// still making. Branching here keeps one screen for one question, rather
   /// than two screens that would drift.
   final String? memoryId;
+
+  final bool isReply;
 
   /// Ordered as the design lays them out: the two typed/still kinds first, the
   /// two recorded ones below.
@@ -71,7 +82,9 @@ class ChooseWishKindScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
     final id = memoryId;
-    final selected = id == null
+    final selected = isReply
+        ? ref.watch(replyProvider).kind
+        : id == null
         ? ref.watch(createMemoryProvider).wishKind
         : ref.watch(addWishProvider(id)).kind;
 
@@ -85,7 +98,9 @@ class ChooseWishKindScreen extends ConsumerWidget {
             children: [
               const SizedBox(height: AppSpacing.xl),
               Text(
-                'How would you like to\nadd the wish?',
+                isReply
+                    ? 'How would you like\nto reply?'
+                    : 'How would you like to\nadd the wish?',
                 textAlign: TextAlign.center,
                 style: context.text.headlineSmall?.copyWith(
                   color: colors.textPrimary,
@@ -110,7 +125,14 @@ class ChooseWishKindScreen extends ConsumerWidget {
                         icon: option.icon,
                         selected: selected == option.kind,
                         onTap: () {
-                          if (id == null) {
+                          if (isReply) {
+                            ref
+                                .read(replyProvider.notifier)
+                                .setKind(option.kind);
+                            unawaited(
+                              context.push<void>(AppRoutes.memoryReply(id!)),
+                            );
+                          } else if (id == null) {
                             ref
                                 .read(createMemoryProvider.notifier)
                                 .setWishKind(option.kind);

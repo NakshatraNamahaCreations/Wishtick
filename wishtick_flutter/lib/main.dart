@@ -12,6 +12,7 @@ import 'core/dev/dev_mode.dart';
 import 'core/dev/dev_repositories.dart';
 import 'core/media/media_repository.dart';
 import 'core/push/firebase_push_service.dart';
+import 'core/push/local_notifications.dart';
 import 'core/push/push_service.dart';
 import 'core/theme/theme_controller.dart';
 import 'features/addresses/data/addresses_repository.dart';
@@ -75,8 +76,15 @@ Future<void> main() async {
         // Left unoverridden when Firebase did not start, in which case the
         // provider stays null and PushRegistrar is never built — the app runs
         // exactly as before, without push.
-        if (pushEnabled)
+        if (pushEnabled) ...[
           pushServiceProvider.overrideWithValue(FirebasePushService()),
+          // Draws the ones that arrive while the app is open, which FCM hands
+          // to the app rather than the tray. Gated on the same flag: without
+          // Firebase there is nothing to draw.
+          localNotificationsProvider.overrideWithValue(
+            FlutterLocalNotifications(),
+          ),
+        ],
         // A rejected refresh token must sign the user out, not just clear
         // storage — see session_controller.dart.
         sessionExpiryOverride,

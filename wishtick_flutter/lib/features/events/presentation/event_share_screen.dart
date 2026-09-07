@@ -7,12 +7,14 @@ import 'package:intl/intl.dart';
 
 import '../../../core/media/media_repository.dart';
 import '../../../core/router/app_routes.dart';
+import '../../../core/share/share_messages.dart' as messages;
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/share_via_grid.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../../auth/presentation/session_controller.dart';
 import '../../wishlist/data/wishlist_repository.dart';
 import '../../wishlist/domain/wishlist.dart';
 import '../data/events_repository.dart';
@@ -41,13 +43,6 @@ class EventShareScreen extends ConsumerWidget {
 
   /// "19 Jul 2026 · 8:00 PM", as the design writes it.
   static final _dateLine = DateFormat('d MMM yyyy · h:mm a');
-
-  String _message(WishtickEventDetail e) {
-    final venue = e.venue?.trim();
-    final where = venue == null || venue.isEmpty ? '' : ' at $venue';
-    return "You're invited to ${e.title} on ${_dateLine.format(e.startsAt.toLocal())}"
-        '$where. See the invitation on Wishtick';
-  }
 
   Future<void> _attachWishlist(
     BuildContext context,
@@ -154,7 +149,15 @@ class EventShareScreen extends ConsumerWidget {
                       context,
                       target,
                       url: share!,
-                      message: _message(e),
+                      message: messages
+                          .eventInvite(
+                            title: e.title,
+                            startsAt: e.startsAt,
+                            slug: e.share!.slug,
+                            venue: e.venue,
+                            senderName: ref.watch(sessionProvider).user?.name,
+                          )
+                          .text,
                       subject: e.title,
                     ),
                   ),

@@ -64,3 +64,12 @@ export const MEMORY_WISH_TEXT_MAX = 100;
 
 /** A capsule cannot collect forever; the scheduler would hold a job for years. */
 export const MEMORY_MAX_UNLOCK_YEARS = 5;
+
+/**
+ * How many people one reply may be addressed to.
+ *
+ * Generous — a capsule holds up to 60 wishes, and someone with several opened
+ * memories could legitimately want to thank everyone at once. It is here to
+ * bound the notification fan-out, not to second-guess the sender.
+ */
+export const MEMORY_REPLY_MAX_RECIPIENTS = 100;

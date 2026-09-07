@@ -174,6 +174,55 @@ class MemoriesRepository {
     );
     return json['reactionCount'] as int? ?? 0;
   }
+
+  // ── Replies ─────────────────────────────────────────────────────────────
+
+  /// Everyone who has sent the caller a memory, across all their opened ones.
+  ///
+  /// The only source of a legal addressee — the server refuses anyone absent
+  /// from it, so a reply cannot become a way to message an arbitrary account.
+  Future<List<ReplyAudienceEntry>> replyAudience() async {
+    final json = await _api.get<List<dynamic>>('/memories/reply-audience');
+    return json
+        .map((e) => ReplyAudienceEntry.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Sends one reply to everyone named. [mediaId] is required for every kind
+  /// but text, and must have been uploaded with the `memory_reply` purpose.
+  Future<MemoryReply> sendReply({
+    required MemoryWishKind kind,
+    required List<String> recipientIds,
+    String? text,
+    String? mediaId,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/memories/replies',
+      body: {
+        'kind': kind.wireValue,
+        'recipientIds': recipientIds,
+        'text': ?text,
+        'mediaId': ?mediaId,
+      },
+    );
+    return MemoryReply.fromJson(json);
+  }
+
+  /// The replies on one memory that the caller may see.
+  ///
+  /// Empty rather than an error for someone with no part in the capsule: this
+  /// hangs off a screen anyone signed in can open, and a 403 here would be a
+  /// side channel telling them a reply exists.
+  Future<List<MemoryReply>> replies(String capsuleId) async {
+    final json = await _api.get<List<dynamic>>('/memories/$capsuleId/replies');
+    return json
+        .map((e) => MemoryReply.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// The author withdrawing their own reply. It vanishes for every recipient.
+  Future<void> removeReply(String replyId) =>
+      _api.delete<void>('/memories/replies/$replyId');
 }
 
 final memoriesRepositoryProvider = Provider<MemoriesRepository>((ref) {

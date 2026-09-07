@@ -181,6 +181,15 @@ const CONTENT: Record<NotificationType, (p: Record<string, unknown>) => Content>
     ],
     cta: { label: 'Open the memory', url: s(p, 'url') },
   }),
+  [NotificationType.MEMORY_REPLY]: (p) => ({
+    subject: `${s(p, 'authorName', 'Someone')} replied to your memory 💌`,
+    title: `${s(p, 'authorName', 'Someone')} wrote back`,
+    lines: [
+      `They replied to ${s(p, 'capsuleTitle', 'the memory')} you sent them.`,
+      'Tap to see what they said.',
+    ],
+    cta: { label: 'Read the reply', url: s(p, 'url') },
+  }),
   [NotificationType.CONTENT_REMOVED]: (p) => ({
     subject: 'A note about your content',
     title: 'Your content was removed',

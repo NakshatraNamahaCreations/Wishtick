@@ -7,6 +7,15 @@
       good. Nothing is written back, so there is no WRITE_CONTACTS here.
     -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!--
+      Android 13+ asks before any notification can be shown; 12 and below grant
+      it implicitly. firebase_messaging's own manifest already merges this in,
+      so the APK has had it all along — declaring it here is what makes it
+      reviewable from this file rather than from a build artefact. The prompt
+      itself is raised by PushRegistrar.onSignedIn(), which treats a refusal as
+      an answer rather than an error.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="wishtick_flutter"
         android:name="${applicationName}"
@@ -74,6 +83,32 @@
                 <data android:scheme="wishtick"/>
             </intent-filter>
         </activity>
+        <!--
+          How the system draws a notification that arrives while the app is
+          backgrounded or dead — the case the app never sees, so nothing in
+          Dart can style it.
+
+          The channel id must match kNotificationChannelId in
+          lib/core/push/local_notifications.dart. Same channel for both paths
+          means one entry in the OS notification settings; two ids would give
+          the reader two switches for one kind of notification, and muting one
+          would look like muting both. Without this line Android 8+ files
+          background notifications under a "Miscellaneous" fallback instead.
+
+          The icon is drawn as a silhouette — Android keeps the alpha and
+          discards the colour — so it has to be a white-on-transparent mark,
+          not the launcher icon, which would come out a white square.
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="wishtick_default" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_accent" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

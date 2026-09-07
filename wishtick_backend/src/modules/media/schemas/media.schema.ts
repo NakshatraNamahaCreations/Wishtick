@@ -28,6 +28,18 @@ export enum MediaPurpose {
    */
   MEMORY_WISH = 'memory_wish',
   /**
+   * The recipient's reply to a memory they were given — the same photo, video
+   * or voice note envelope as MEMORY_WISH, travelling the other way.
+   *
+   * Its own purpose rather than reusing MEMORY_WISH for the reason THANK_YOU is
+   * separate too: a wish belongs to a capsule and is kept as long as the capsule
+   * is, while a reply belongs to the person who sent it. Sharing a purpose would
+   * mean a retention sweep or a revocation on one could not help touching the
+   * other, and `getReadyOwned` could no longer tell a reply's upload from a
+   * wish's when deciding what may be attached where.
+   */
+  MEMORY_REPLY = 'memory_reply',
+  /**
    * Sprint 9 — a thank-you note's photo, voice note or video (`2015:271`,
    * `2015:382`, `2209:104`). Separate from MEMORY_WISH so that revoking one
    * flow's uploads never touches the other, and so the retention sweep can

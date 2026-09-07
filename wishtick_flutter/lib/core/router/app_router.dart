@@ -56,6 +56,8 @@ import '../../features/memories/presentation/memories_tab_screen.dart';
 import '../../features/memories/presentation/memory_detail_screen.dart';
 import '../../features/memories/presentation/memory_experience_screen.dart';
 import '../../features/memories/presentation/my_wishes_screen.dart';
+import '../../features/memories/presentation/reply_compose_screen.dart';
+import '../../features/memories/presentation/reply_recipients_screen.dart';
 import '../../features/notifications/presentation/notification_center_screen.dart';
 import '../../features/notifications/presentation/notification_settings_screen.dart';
 import '../../features/notifications/presentation/thank_you_compose_screen.dart';
@@ -680,6 +682,27 @@ final routerProvider = Provider<GoRouter>((ref) {
             parentNavigatorKey: _rootNavigatorKey,
             builder: (context, state) =>
                 AddWishScreen(memoryId: state.pathParameters['id']!),
+          ),
+          // `reply/kind` and `reply/recipients` are declared before the bare
+          // `reply`, so the longer paths are not shadowed by it.
+          GoRoute(
+            path: 'reply/kind',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => ChooseWishKindScreen.reply(
+              memoryId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: 'reply/recipients',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                ReplyRecipientsScreen(memoryId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: 'reply',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) =>
+                ReplyComposeScreen(memoryId: state.pathParameters['id']!),
           ),
           GoRoute(
             path: 'experience',

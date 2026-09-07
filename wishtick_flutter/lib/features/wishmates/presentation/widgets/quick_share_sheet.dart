@@ -7,8 +7,10 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/network/api_exception.dart';
 import '../../../../core/router/deep_links.dart';
+import '../../../../core/share/share_messages.dart' as share;
 import '../../../../core/theme/app_dimens.dart';
 import '../../../../core/theme/theme_extensions.dart';
+import '../../../auth/presentation/session_controller.dart';
 import '../../../events/data/events_repository.dart';
 import '../../../group_gift/data/group_gift_repository.dart';
 import '../../../wishlist/data/wishlist_repository.dart';
@@ -34,8 +36,14 @@ sealed class ShareTarget {
   /// sheet says so instead of offering a link that cannot work.
   String? get shareUrl;
 
-  /// The line under the title of a shareable thing, used as the message body.
-  String get shareMessage;
+  /// What goes out with the link, from [senderName].
+  ///
+  /// A method rather than a getter because it needs the sender: a forwarded
+  /// message loses its chat header, so who it is from has to be in the words.
+  /// Every implementation defers to `core/share/share_messages.dart`, which is
+  /// what keeps one thing from being described two different ways depending on
+  /// which button was pressed.
+  String shareMessage(String? senderName);
 
   /// Invites these WishMates and answers how many were actually invited.
   ///
@@ -79,7 +87,9 @@ class WishlistShareTarget extends ShareTarget {
       isPublic && slug != null ? AppLinks.publicWishlist(slug!) : null;
 
   @override
-  String get shareMessage => 'Take a look at my wishlist "$title" on Wishtick';
+  String shareMessage(String? senderName) => share
+      .wishlist(title: title, slug: slug ?? '', senderName: senderName)
+      .text;
 
   @override
   Future<int> invite(WidgetRef ref, List<String> userIds) async {
@@ -99,12 +109,21 @@ class EventShareTarget extends ShareTarget {
   const EventShareTarget({
     required this.eventId,
     required this.title,
+    required this.startsAt,
     required this.slug,
     required this.isPublic,
+    this.venue,
   });
 
   final String eventId;
   final String title;
+
+  /// When and where it is. Carried so this sheet can send the same long
+  /// invitation the event's own share screen does — it used to send only the
+  /// title, and a reader had to open the link to find out whether they were
+  /// free that day.
+  final DateTime startsAt;
+  final String? venue;
   final String? slug;
   final bool isPublic;
 
@@ -116,7 +135,15 @@ class EventShareTarget extends ShareTarget {
       isPublic && slug != null ? AppLinks.publicEvent(slug!) : null;
 
   @override
-  String get shareMessage => 'You’re invited to $title';
+  String shareMessage(String? senderName) => share
+      .eventInvite(
+        title: title,
+        startsAt: startsAt,
+        slug: slug ?? '',
+        venue: venue,
+        senderName: senderName,
+      )
+      .text;
 
   @override
   Future<int> invite(WidgetRef ref, List<String> userIds) async {
@@ -148,7 +175,9 @@ class GroupGiftShareTarget extends ShareTarget {
   String? get shareUrl => url;
 
   @override
-  String get shareMessage => 'Chip in with me for $title on Wishtick';
+  String shareMessage(String? senderName) => share
+      .groupGift(title: title, url: url ?? '', senderName: senderName)
+      .text;
 
   @override
   Future<int> invite(WidgetRef ref, List<String> userIds) async {
@@ -247,8 +276,12 @@ class _QuickShareSheetState extends ConsumerState<QuickShareSheet> {
   }
 
   Future<void> _shareLink(String url) => SharePlus.instance.share(
-    ShareParams(text: '${widget.target.shareMessage}\n$url'),
+    ShareParams(text: '${widget.target.shareMessage(_senderName)}\n$url'),
   );
+
+  /// Who the message says it is from. Null before a name has been filled in,
+  /// which the copy handles rather than printing an empty space.
+  String? get _senderName => ref.read(sessionProvider).user?.name;
 
   @override
   Widget build(BuildContext context) {

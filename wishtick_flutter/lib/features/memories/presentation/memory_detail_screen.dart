@@ -5,14 +5,18 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/router/app_routes.dart';
+import '../../../core/share/share_messages.dart' as messages;
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../../auth/presentation/session_controller.dart';
 import '../domain/memory.dart';
 import 'memory_providers.dart';
+import 'reply_controller.dart';
 import 'widgets/memory_cards.dart';
+import 'widgets/wish_preview_card.dart';
 
 /// A capsule while it is still sealed — the countdown, who has contributed, and
 /// the two things the host can do about it.
@@ -35,10 +39,15 @@ class _MemoryDetailScreenState extends ConsumerState<MemoryDetailScreen> {
     if (url == null) return;
     await SharePlus.instance.share(
       ShareParams(
-        text:
-            'Add a wish to ${capsule.title} — it opens for '
-            '${capsule.personName} on '
-            '${DateFormat('d MMM').format(capsule.unlockAt.toLocal())}.\n$url',
+        text: messages
+            .memoryContribute(
+              title: capsule.title,
+              unlockAt: capsule.unlockAt,
+              slug: capsule.share!.slug,
+              personName: capsule.personName,
+              senderName: ref.read(sessionProvider).user?.name,
+            )
+            .combined,
         subject: capsule.title,
       ),
     );
@@ -152,8 +161,114 @@ class _MemoryDetailScreenState extends ConsumerState<MemoryDetailScreen> {
                 ),
               ),
             ],
+            // Only once it has opened, and only for the person it was for:
+            // there is nothing to answer until the wishes are readable, and
+            // nobody else is being written to.
+            if (memory.isOpen && memory.isRecipient) ...[
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () =>
+                      context.push<void>(AppRoutes.memoryReplyKind(memory.id)),
+                  child: const Text('Reply to everyone'),
+                ),
+              ),
+            ],
+
+            _RepliesSection(memoryId: memory.id),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The replies hanging off this memory.
+///
+/// Renders nothing at all when there are none — including while it is loading
+/// and if the fetch fails. A heading over an empty space would ask the reader to
+/// wonder what is missing, and this is a secondary panel on somebody else's
+/// screen: it earns its space only when it has something in it.
+class _RepliesSection extends ConsumerWidget {
+  const _RepliesSection({required this.memoryId});
+
+  final String memoryId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final replies = ref.watch(memoryRepliesProvider(memoryId)).value;
+    if (replies == null || replies.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpacing.section),
+        Text(
+          replies.length == 1 ? 'A reply' : '${replies.length} replies',
+          style: context.text.titleSmall?.copyWith(
+            color: context.headlineBrandColor,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        for (final reply in replies) ...[
+          _ReplyCard(reply: reply),
+          const SizedBox(height: AppSpacing.md),
+        ],
+      ],
+    );
+  }
+}
+
+/// One reply: who wrote it, what they attached, and what they said.
+class _ReplyCard extends StatelessWidget {
+  const _ReplyCard({required this.reply});
+
+  final MemoryReply reply;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            reply.isMine
+                ? (reply.recipientCount == 1
+                      ? 'You replied'
+                      : 'You replied to ${reply.recipientCount} people')
+                : reply.authorName,
+            style: context.text.titleSmall?.copyWith(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (reply.mediaUrl != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            WishPreviewCard(
+              kind: reply.kind,
+              mediaUrl: reply.mediaUrl,
+              text: '',
+            ),
+          ],
+          if (reply.text != null && reply.text!.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              reply.text!,
+              style: context.text.bodyMedium?.copyWith(
+                color: colors.textSecondary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

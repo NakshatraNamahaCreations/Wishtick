@@ -174,6 +174,19 @@ exports[`NotificationRenderer renders in-app/text/sms content for every notifica
 }
 `;
 
+exports[`NotificationRenderer renders in-app/text/sms content for every notification type: memory_reply 1`] = `
+{
+  "sms": "Someone wrote back — https://app.wishtick.test/x",
+  "subject": "Someone replied to your memory 💌",
+  "text": "They replied to the memory you sent them.
+
+Tap to see what they said.
+
+Read the reply: https://app.wishtick.test/x",
+  "title": "Someone wrote back",
+}
+`;
+
 exports[`NotificationRenderer renders in-app/text/sms content for every notification type: memory_unlocked 1`] = `
 {
   "sms": "Password changed is open — https://app.wishtick.test/x",

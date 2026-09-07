@@ -25,6 +25,11 @@ enum MediaPurpose {
   /// stills and video.
   memoryWish('memory_wish'),
 
+  /// The recipient's reply to a memory — the same envelope as [memoryWish],
+  /// travelling the other way. Its own purpose so retention and revocation on
+  /// one never touch the other.
+  memoryReply('memory_reply'),
+
   /// A thank-you note's photo, voice note or video (`2015:271`, `2015:382`).
   /// Same envelope as [memoryWish] — one person recording one short reply —
   /// but its own purpose so retention and revocation stay separable.

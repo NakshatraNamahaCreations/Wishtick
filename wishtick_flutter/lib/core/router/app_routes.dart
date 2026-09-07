@@ -212,6 +212,16 @@ abstract final class AppRoutes {
   /// The add-a-wish flow (`2073:55`, `2078:233`, `2074:129`, audio).
   static String memoryAddWish(String id) => '/memories/$id/wishes/add';
 
+  /// "How would you like to reply?" — the recipient answering back.
+  static String memoryReplyKind(String id) => '/memories/$id/reply/kind';
+
+  /// Composing the reply itself.
+  static String memoryReply(String id) => '/memories/$id/reply';
+
+  /// Choosing who the composed reply goes to.
+  static String memoryReplyRecipients(String id) =>
+      '/memories/$id/reply/recipients';
+
   /// The full experience (`2078:357`) — a story, one wish per segment.
   static String memoryExperience(String id) => '/memories/$id/experience';
 

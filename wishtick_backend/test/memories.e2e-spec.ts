@@ -42,6 +42,7 @@ interface MemoryView {
   wishCount: number;
   contributors: string[];
   isHost: boolean;
+  isRecipient: boolean;
   coverUrl: string | null;
   wishes: { id: string; kind: string; text: string | null; mediaUrl: string | null }[];
   share?: { slug: string; url: string };
@@ -240,6 +241,221 @@ describe('Memories (e2e)', () => {
           sizeBytes: cap,
         })
         .expect(201);
+    });
+  });
+
+  describe('replying to a memory you were given', () => {
+    /** A host, a friend who wrote a wish, and an opened capsule for `recipient`. */
+    const openedMemoryWithAWish = async (): Promise<{
+      host: Actor;
+      friend: Actor;
+      recipient: Actor;
+      memory: MemoryView;
+    }> => {
+      const { host, recipient } = await hostAndRecipient();
+      const friend = await newUser();
+      const memory = await createMemory(host, {}, recipient);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(friend.token))
+        .send({ kind: 'text', text: 'Many happy returns' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/unlock`)
+        .set(auth(host.token))
+        .expect(200);
+      return { host, friend, recipient, memory };
+    };
+
+    const audienceOf = async (actor: Actor): Promise<Record<string, unknown>[]> =>
+      (
+        (
+          await request(app.getHttpServer())
+            .get(`${V1}/memories/reply-audience`)
+            .set(auth(actor.token))
+            .expect(200)
+        ).body as Envelope<Record<string, unknown>[]>
+      ).data;
+
+    it('offers the host and everyone who wrote a wish', async () => {
+      const { host, friend, recipient } = await openedMemoryWithAWish();
+
+      const audience = audienceOf(recipient);
+      const ids = (await audience).map((e) => (e.person as { userId: string }).userId);
+
+      expect(ids).toHaveLength(2);
+      expect(ids).toEqual(expect.arrayContaining([host.userId, friend.userId]));
+      // The host is marked as such, so the picker can say "Made" vs "Wrote in".
+      const hostRow = (await audience).find(
+        (e) => (e.person as { userId: string }).userId === host.userId,
+      );
+      expect(hostRow?.isHost).toBe(true);
+    });
+
+    it('offers nobody while the capsule is still sealed', async () => {
+      const { host, recipient } = await hostAndRecipient();
+      const memory = await createMemory(host, {}, recipient);
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/${memory.id}/wishes`)
+        .set(auth(host.token))
+        .send({ kind: 'text', text: 'Shh' })
+        .expect(201);
+
+      // Naming the contributors of a sealed capsule would give away both that
+      // it exists and who is behind it — the two things the lock is for.
+      expect(await audienceOf(recipient)).toHaveLength(0);
+    });
+
+    it('never offers you yourself', async () => {
+      const { recipient } = await openedMemoryWithAWish();
+      const ids = (await audienceOf(recipient)).map((e) => (e.person as { userId: string }).userId);
+      expect(ids).not.toContain(recipient.userId);
+    });
+
+    it('sends one reply to several people at once', async () => {
+      const { host, friend, recipient, memory } = await openedMemoryWithAWish();
+
+      const sent = (
+        await request(app.getHttpServer())
+          .post(`${V1}/memories/replies`)
+          .set(auth(recipient.token))
+          .send({
+            kind: 'text',
+            text: 'Thank you both so much!',
+            recipientIds: [host.userId, friend.userId],
+          })
+          .expect(201)
+      ).body as Envelope<{ recipientCount: number; isMine: boolean }>;
+
+      expect(sent.data.recipientCount).toBe(2);
+      expect(sent.data.isMine).toBe(true);
+
+      // Both of them see it on the memory's own screen.
+      for (const actor of [host, friend]) {
+        const seen = (
+          await request(app.getHttpServer())
+            .get(`${V1}/memories/${memory.id}/replies`)
+            .set(auth(actor.token))
+            .expect(200)
+        ).body as Envelope<{ text: string; isMine: boolean }[]>;
+        expect(seen.data).toHaveLength(1);
+        expect(seen.data[0].text).toBe('Thank you both so much!');
+        expect(seen.data[0].isMine).toBe(false);
+      }
+    });
+
+    it('refuses to address somebody who has sent you nothing', async () => {
+      const { recipient } = await openedMemoryWithAWish();
+      const stranger = await newUser();
+
+      const res = await request(app.getHttpServer())
+        .post(`${V1}/memories/replies`)
+        .set(auth(recipient.token))
+        .send({ kind: 'text', text: 'Hello', recipientIds: [stranger.userId] })
+        .expect(403);
+
+      // The whole point of deriving the audience server-side: a reply must not
+      // become a way to message an arbitrary account.
+      expect((res.body as Envelope<unknown>).error?.code).toBe(ErrorCode.MEMORY_REPLY_NO_AUDIENCE);
+    });
+
+    it('drops a stranger from a list that also names a real sender', async () => {
+      const { host, recipient, memory } = await openedMemoryWithAWish();
+      const stranger = await newUser();
+
+      const sent = (
+        await request(app.getHttpServer())
+          .post(`${V1}/memories/replies`)
+          .set(auth(recipient.token))
+          .send({
+            kind: 'text',
+            text: 'Thanks!',
+            recipientIds: [host.userId, stranger.userId],
+          })
+          .expect(201)
+      ).body as Envelope<{ recipientCount: number }>;
+
+      // A slightly stale client is not worth refusing outright; only an empty
+      // result is an error.
+      expect(sent.data.recipientCount).toBe(1);
+
+      const strangerSees = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/${memory.id}/replies`)
+          .set(auth(stranger.token))
+          .expect(200)
+      ).body as Envelope<unknown[]>;
+      expect(strangerSees.data).toHaveLength(0);
+    });
+
+    it('is not readable by someone with no part in the memory', async () => {
+      const { host, recipient, memory } = await openedMemoryWithAWish();
+      const bystander = await newUser();
+      await request(app.getHttpServer())
+        .post(`${V1}/memories/replies`)
+        .set(auth(recipient.token))
+        .send({ kind: 'text', text: 'Private thanks', recipientIds: [host.userId] })
+        .expect(201);
+
+      const seen = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/${memory.id}/replies`)
+          .set(auth(bystander.token))
+          .expect(200)
+      ).body as Envelope<unknown[]>;
+      expect(seen.data).toHaveLength(0);
+    });
+
+    it('lets the author read back and withdraw their own reply', async () => {
+      const { host, recipient, memory } = await openedMemoryWithAWish();
+      const sent = (
+        await request(app.getHttpServer())
+          .post(`${V1}/memories/replies`)
+          .set(auth(recipient.token))
+          .send({ kind: 'text', text: 'Thank you', recipientIds: [host.userId] })
+          .expect(201)
+      ).body as Envelope<{ id: string }>;
+
+      const own = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/${memory.id}/replies`)
+          .set(auth(recipient.token))
+          .expect(200)
+      ).body as Envelope<{ isMine: boolean }[]>;
+      expect(own.data).toHaveLength(1);
+      expect(own.data[0].isMine).toBe(true);
+
+      await request(app.getHttpServer())
+        .delete(`${V1}/memories/replies/${sent.data.id}`)
+        .set(auth(recipient.token))
+        .expect(204);
+
+      // Withdrawn for everyone at once, not just for the author.
+      const hostSees = (
+        await request(app.getHttpServer())
+          .get(`${V1}/memories/${memory.id}/replies`)
+          .set(auth(host.token))
+          .expect(200)
+      ).body as Envelope<unknown[]>;
+      expect(hostSees.data).toHaveLength(0);
+    });
+
+    it('only the recipient of a memory is flagged as such', async () => {
+      const { host, recipient, memory } = await openedMemoryWithAWish();
+
+      const seenBy = async (actor: Actor): Promise<MemoryView> =>
+        (
+          (
+            await request(app.getHttpServer())
+              .get(`${V1}/memories/${memory.id}`)
+              .set(auth(actor.token))
+              .expect(200)
+          ).body as Envelope<MemoryView>
+        ).data;
+
+      // `isRecipient` is what gates the Reply button on the client.
+      expect((await seenBy(recipient)).isRecipient).toBe(true);
+      expect((await seenBy(host)).isRecipient).toBe(false);
     });
   });
 

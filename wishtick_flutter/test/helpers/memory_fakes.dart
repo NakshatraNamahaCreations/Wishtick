@@ -33,6 +33,7 @@ MemoryCapsule buildCapsule({
   List<String> contributors = const [],
   List<MemoryWish> wishes = const [],
   bool isHost = true,
+  bool isRecipient = false,
   String? coverUrl,
 }) => MemoryCapsule(
   id: id,
@@ -58,6 +59,7 @@ MemoryCapsule buildCapsule({
   contributors: contributors,
   hostId: 'user_1',
   isHost: isHost,
+  isRecipient: isRecipient,
   includeYear: false,
   createdAt: DateTime.utc(2026, 7, 1),
   wishes: wishes,
@@ -201,4 +203,90 @@ class FakeMemoriesRepository implements MemoriesRepository {
     reactCalls.add(wishId);
     return 1;
   }
+
+  // ── Replies ─────────────────────────────────────────────────────────────
+
+  /// Who `replyAudience` answers with.
+  List<ReplyAudienceEntry> audience = [];
+
+  /// What `replies` answers with, for every capsule.
+  List<MemoryReply> repliesOnCapsule = [];
+
+  final sendReplyCalls = <Map<String, Object?>>[];
+  final removedReplies = <String>[];
+
+  @override
+  Future<List<ReplyAudienceEntry>> replyAudience() async {
+    _maybeThrow();
+    return audience;
+  }
+
+  @override
+  Future<MemoryReply> sendReply({
+    required MemoryWishKind kind,
+    required List<String> recipientIds,
+    String? text,
+    String? mediaId,
+  }) async {
+    _maybeThrow();
+    sendReplyCalls.add({
+      'kind': kind,
+      'recipientIds': recipientIds,
+      'text': text,
+      'mediaId': mediaId,
+    });
+    return buildReply(
+      id: 'reply_new',
+      kind: kind,
+      text: text,
+      recipientCount: recipientIds.length,
+      isMine: true,
+    );
+  }
+
+  @override
+  Future<List<MemoryReply>> replies(String capsuleId) async => repliesOnCapsule;
+
+  @override
+  Future<void> removeReply(String replyId) async => removedReplies.add(replyId);
 }
+
+MemoryReply buildReply({
+  required String id,
+  String authorName = 'Ananya',
+  MemoryWishKind kind = MemoryWishKind.text,
+  String? text = 'Thank you all!',
+  String? mediaUrl,
+  int recipientCount = 1,
+  bool isMine = false,
+}) => MemoryReply(
+  id: id,
+  authorName: authorName,
+  kind: kind,
+  text: text,
+  mediaUrl: mediaUrl,
+  durationMs: 0,
+  recipientCount: recipientCount,
+  isMine: isMine,
+  createdAt: DateTime.utc(2026, 7, 20),
+);
+
+ReplyAudienceEntry buildAudienceEntry({
+  required String userId,
+  String displayName = 'Jayanth',
+  bool isHost = true,
+  String capsuleId = 'm1',
+  String capsuleTitle = "Ananya's Birthday",
+}) => ReplyAudienceEntry(
+  person: PersonIdentity(
+    userId: userId,
+    username: displayName.toLowerCase(),
+    displayName: displayName,
+    photoUrl: null,
+    online: false,
+    lastSeenAt: null,
+  ),
+  isHost: isHost,
+  capsuleId: capsuleId,
+  capsuleTitle: capsuleTitle,
+);

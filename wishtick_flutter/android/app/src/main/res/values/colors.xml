@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The tint Android applies to a notification's small icon and to the app
+      name in the shade. AppPalette.pink (#E94E85) — the accent token, not the
+      plum brand colour, because the shade is dark on most devices and the plum
+      reads as near-black against it.
+
+      Kept in step with `accent` in lib/core/theme/app_colors.dart by hand:
+      Android resources cannot read Dart, and this is the only place the palette
+      escapes it.
+    -->
+    <color name="notification_accent">#E94E85</color>
+</resources>

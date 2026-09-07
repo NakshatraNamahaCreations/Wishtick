@@ -15,6 +15,7 @@ import {
   GROUP_GIFT_INVITED,
   GROUP_GIFT_JOINED,
   GROUP_GIFT_PURCHASED,
+  MEMORY_REPLY_SENT,
   MEMORY_UNLOCKED,
   REEL_RELEASED,
   USER_REGISTERED,
@@ -27,6 +28,7 @@ import {
   type GroupGiftInvitedEvent,
   type GroupGiftJoinedEvent,
   type GroupGiftPurchasedEvent,
+  type MemoryReplySentEvent,
   type MemoryUnlockedEvent,
   type ReelReleasedEvent,
   type UserRegisteredEvent,
@@ -36,6 +38,7 @@ import {
   EVENT_REMINDER_DUE,
   type EventReminderDueEvent,
 } from 'src/modules/events/event-reminders.processor';
+import { reminderWhenText } from 'src/modules/events/event-reminders.service';
 import {
   PRODUCT_OUT_OF_STOCK,
   PRODUCT_PRICE_CHANGED,
@@ -265,7 +268,7 @@ export class NotificationListener {
           refId: `${e.eventId}:${e.offset}`,
           payload: {
             eventTitle: e.title,
-            whenText: e.offset,
+            whenText: reminderWhenText(e.offset),
             url: `${this.web}/events/${e.eventId}`,
           },
         });
@@ -311,13 +314,16 @@ export class NotificationListener {
   }
 
   /**
-   * A capsule opened. Everyone who put something in it is told, plus the host —
-   * the recipient it was made for may not have an account at all.
+   * A capsule opened. Everyone who put something in it is told, plus the host,
+   * plus the person it was made for — who is the whole point of it and used to
+   * be the only one left out.
    */
   @OnEvent(MEMORY_UNLOCKED)
   async onMemoryUnlocked(e: MemoryUnlockedEvent): Promise<void> {
     await this.guard('memory-unlocked', async () => {
-      const audience = [...new Set([e.hostId, ...e.contributorIds])];
+      const audience = [
+        ...new Set([e.hostId, ...e.contributorIds, ...(e.recipientId ? [e.recipientId] : [])]),
+      ];
       for (const userId of audience) {
         await this.notifications.enqueue({
           userId,
@@ -326,6 +332,29 @@ export class NotificationListener {
           payload: {
             title: e.title,
             wishCount: e.wishCount,
+            url: `${this.web}/memories/${e.capsuleId}`,
+          },
+        });
+      }
+    });
+  }
+
+  /**
+   * The recipient of an opened capsule wrote back. Everyone they addressed is
+   * told, and the deep link lands on the capsule the reply hangs off — which is
+   * where it is read.
+   */
+  @OnEvent(MEMORY_REPLY_SENT)
+  async onMemoryReplySent(e: MemoryReplySentEvent): Promise<void> {
+    await this.guard('memory-reply-sent', async () => {
+      for (const userId of new Set(e.recipientIds)) {
+        await this.notifications.enqueue({
+          userId,
+          type: NotificationType.MEMORY_REPLY,
+          refId: e.replyId,
+          payload: {
+            authorName: e.authorName,
+            capsuleTitle: e.capsuleTitle,
             url: `${this.web}/memories/${e.capsuleId}`,
           },
         });

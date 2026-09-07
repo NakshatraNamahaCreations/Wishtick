@@ -1,6 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -11,7 +14,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { IsTimezone } from 'src/common/validators/is-timezone.validator';
-import { MemoryWishKind, MEMORY_WISH_TEXT_MAX } from '../memory.types';
+import { MEMORY_REPLY_MAX_RECIPIENTS, MemoryWishKind, MEMORY_WISH_TEXT_MAX } from '../memory.types';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -150,4 +153,48 @@ export class AddMemoryWishDto {
   @MaxLength(80)
   @Transform(trim)
   contributorName?: string;
+}
+
+/**
+ * The recipient of an opened capsule writing back.
+ *
+ * Deliberately the same shape as [AddMemoryWishDto] plus an addressee list —
+ * it is composed on the same screen, in the same four kinds.
+ */
+export class SendMemoryReplyDto {
+  @ApiProperty({ enum: MemoryWishKind })
+  @IsEnum(MemoryWishKind)
+  kind!: MemoryWishKind;
+
+  @ApiPropertyOptional({
+    maxLength: MEMORY_WISH_TEXT_MAX,
+    description: 'Optional for media replies; required for a text reply',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(MEMORY_WISH_TEXT_MAX)
+  @Transform(trim)
+  text?: string | null;
+
+  @ApiPropertyOptional({ description: 'A confirmed media id you own (purpose: memory_reply)' })
+  @IsOptional()
+  @IsMongoId()
+  mediaId?: string | null;
+
+  /**
+   * Who to send it to.
+   *
+   * Every id is checked against the people who actually sent the caller a
+   * memory — the list is a selection from that audience, never a way to
+   * address someone who has not.
+   */
+  @ApiProperty({
+    type: [String],
+    description: 'User ids drawn from GET /memories/reply-audience',
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(MEMORY_REPLY_MAX_RECIPIENTS)
+  @IsMongoId({ each: true })
+  recipientIds!: string[];
 }

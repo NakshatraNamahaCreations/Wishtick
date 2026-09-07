@@ -472,6 +472,9 @@ Future<void> _inviteWishmates(
     EventShareTarget(
       eventId: event.id,
       title: event.title,
+      // So the sheet sends the same long invitation the share screen does.
+      startsAt: event.startsAt,
+      venue: event.venue,
       slug: event.share?.slug,
       // Whether the link admits anyone: it does for public *and* invite-only
       // events; only a private event's link is refused by the server.

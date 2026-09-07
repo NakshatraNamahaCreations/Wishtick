@@ -1,4 +1,4 @@
-import { EventRemindersService, reminderJobId } from './event-reminders.service';
+import { EventRemindersService, reminderJobId, reminderWhenText } from './event-reminders.service';
 import type { EventDocument } from './schemas/event.schema';
 import { Types } from 'mongoose';
 
@@ -98,6 +98,26 @@ describe('EventRemindersService', () => {
     const removed = await service.cancel(event._id.toString());
     expect(removed).toBe(3);
     expect(queue.added).toHaveLength(0);
+  });
+
+  // The offsets are scheduling identifiers, not English. Interpolated raw the
+  // reminder read "Diwali Party is t-1d" — on a lock screen, by SMS, and in an
+  // email subject line.
+  describe('reminderWhenText', () => {
+    it('says the offset the way a person would', () => {
+      expect(reminderWhenText('t-7d')).toBe('in a week');
+      expect(reminderWhenText('t-1d')).toBe('tomorrow');
+      expect(reminderWhenText('t-2h')).toBe('in 2 hours');
+    });
+
+    it('never lets a scheduling key reach the copy', () => {
+      // A job written by an older deploy can carry an offset this build has
+      // never heard of. Whatever comes back must still read as English.
+      for (const offset of ['t-30d', '', 'nonsense']) {
+        expect(reminderWhenText(offset)).not.toContain('t-');
+        expect(reminderWhenText(offset)).toBe('soon');
+      }
+    });
   });
 
   it('uses a colon-free job id', async () => {

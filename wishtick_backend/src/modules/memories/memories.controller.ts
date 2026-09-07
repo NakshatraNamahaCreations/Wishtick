@@ -17,10 +17,22 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import { Public } from 'src/common/decorators/public.decorator';
-import { AddMemoryWishDto, CreateMemoryDto, UpdateMemoryDto } from './dto/memory.dto';
+import {
+  AddMemoryWishDto,
+  CreateMemoryDto,
+  SendMemoryReplyDto,
+  UpdateMemoryDto,
+} from './dto/memory.dto';
 import { MemoriesService } from './memories.service';
+import { MemoryRepliesService } from './memory-replies.service';
 import { MemoryWishesService } from './memory-wishes.service';
-import type { MemoryCapsuleView, MemoryWishView, PublicMemoryView } from './memory.views';
+import type {
+  MemoryCapsuleView,
+  MemoryReplyView,
+  MemoryWishView,
+  PublicMemoryView,
+  ReplyAudienceEntry,
+} from './memory.views';
 
 @ApiTags('memories')
 @Controller('memories')
@@ -29,6 +41,7 @@ export class MemoriesController {
   constructor(
     private readonly memories: MemoriesService,
     private readonly wishes: MemoryWishesService,
+    private readonly replies: MemoryRepliesService,
   ) {}
 
   @Post()
@@ -53,6 +66,47 @@ export class MemoriesController {
   })
   listForMe(@CurrentUser('id') userId: string): Promise<MemoryCapsuleView[]> {
     return this.memories.listForMe(userId);
+  }
+
+  /**
+   * Declared before `:id` — Nest matches in declaration order, and the other
+   * way round this reads as a request for the capsule called "reply-audience".
+   */
+  @Get('reply-audience')
+  @ApiOperation({
+    summary: 'Everyone who has sent you a memory, and may therefore be replied to',
+    description:
+      'The host and every named contributor of each of your opened capsules. This is the ' +
+      'only source of a legal addressee: a reply may not be sent to anyone absent from it, ' +
+      'so it cannot be turned into a way to message an arbitrary account. Sealed capsules ' +
+      'are excluded — naming their contributors would give the surprise away.',
+  })
+  replyAudience(@CurrentUser('id') userId: string): Promise<ReplyAudienceEntry[]> {
+    return this.replies.audience(userId);
+  }
+
+  @Post('replies')
+  @ApiOperation({
+    summary: 'Reply to the people who filled your memories — one reply, many recipients',
+    description:
+      'Ids absent from your reply audience are dropped rather than refused, so a slightly ' +
+      'stale client is not blocked; only an empty result is an error.',
+  })
+  @ApiResponseDoc({ status: 403, description: 'MEMORY_REPLY_NO_AUDIENCE' })
+  @ApiResponseDoc({ status: 400, description: 'MEMORY_WISH_MEDIA_REQUIRED / _TEXT_REQUIRED' })
+  sendReply(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SendMemoryReplyDto,
+  ): Promise<MemoryReplyView> {
+    return this.replies.send(userId, dto);
+  }
+
+  @Delete('replies/:replyId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Withdraw a reply you sent. It vanishes for every recipient.' })
+  @ApiResponseDoc({ status: 404, description: 'MEMORY_REPLY_NOT_FOUND' })
+  removeReply(@CurrentUser('id') userId: string, @Param('replyId') replyId: string): Promise<void> {
+    return this.replies.remove(replyId, userId);
   }
 
   @Get('contributed')
@@ -131,6 +185,21 @@ export class MemoriesController {
     @Param('id') id: string,
   ): Promise<MemoryWishView[]> {
     return this.wishes.listMine(id, userId);
+  }
+
+  @Get(':id/replies')
+  @ApiOperation({
+    summary: 'What the recipient sent back, on this memory',
+    description:
+      'Visible to a viewer who was addressed by the reply AND had a part in this capsule, ' +
+      'or to the author of the reply. That pairing is what stops a reply addressed across ' +
+      'several memories from telling one host that the others exist.',
+  })
+  listReplies(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ): Promise<MemoryReplyView[]> {
+    return this.replies.listForCapsule(id, userId);
   }
 
   @Delete(':id/wishes/:wishId')

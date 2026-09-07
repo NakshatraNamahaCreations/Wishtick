@@ -97,6 +97,32 @@ export const MEDIA_RULES: Record<MediaPurpose, PurposeRule> = {
       'audio/wav': 'wav',
     },
   },
+  // A reply travels back to the people who filled a capsule. Deliberately the
+  // same envelope as the wish it answers — it is composed on the same screen,
+  // and a reply someone may not send at the length they were sent would be a
+  // strange asymmetry.
+  [MediaPurpose.MEMORY_REPLY]: {
+    mimeTypes: [
+      ...IMAGE_TYPES,
+      'video/mp4',
+      'video/quicktime',
+      'audio/mpeg',
+      'audio/mp4',
+      'audio/aac',
+      'audio/wav',
+    ],
+    maxBytes: 50 * MB,
+    maxDurationSeconds: 20,
+    extensions: {
+      ...IMAGE_EXTENSIONS,
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'audio/mpeg': 'mp3',
+      'audio/mp4': 'm4a',
+      'audio/aac': 'aac',
+      'audio/wav': 'wav',
+    },
+  },
   // A thank-you may be a photo, a video or a voice note (`2015:271`,
   // `2015:382`, `2209:104`). Same envelope as a memory wish — one person
   // recording one short reply — so the limits match deliberately.

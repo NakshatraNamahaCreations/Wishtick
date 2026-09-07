@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit",
     "verify:storage": "ts-node -r tsconfig-paths/register -r dotenv/config scripts/verify-storage.ts",
     "verify:video": "ts-node -r tsconfig-paths/register -r dotenv/config scripts/verify-video.ts",
+    "verify:fcm": "ts-node -r tsconfig-paths/register -r dotenv/config scripts/verify-fcm.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

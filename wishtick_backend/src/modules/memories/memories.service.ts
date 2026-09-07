@@ -249,8 +249,6 @@ export class MemoriesService {
     capsule.unlockedAt = new Date();
     await capsule.save();
 
-    // The recipient may have no account at all — that is the point of a
-    // capsule — so the people told are the host and everyone who contributed.
     const contributorIds = (
       await this.wishModel.distinct('contributorId', { capsuleId: capsule._id }).exec()
     )
@@ -261,6 +259,12 @@ export class MemoriesService {
       capsuleId: capsule._id.toString(),
       hostId: capsule.hostId.toString(),
       contributorIds,
+      // The person it was made for. This used to be left out, on the reasoning
+      // that a recipient often had no account — which stopped being true when
+      // `recipientUserId` became a required WishMate. Leaving them out now
+      // means the one person the capsule is FOR is the only one not told it
+      // opened, and they cannot reply to something they never heard about.
+      recipientId: capsule.recipientUserId?.toString() ?? null,
       title: capsule.title,
       wishCount: capsule.wishCount,
     } satisfies MemoryUnlockedEvent);

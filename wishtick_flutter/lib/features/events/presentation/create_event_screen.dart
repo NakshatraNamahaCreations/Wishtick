@@ -4,11 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/router/app_routes.dart';
-import '../../../core/router/deep_links.dart';
+import '../../../core/share/share_messages.dart' as messages;
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/curved_bottom_clipper.dart';
 import '../../../core/widgets/occasion_picker_grid.dart';
+import '../../auth/presentation/session_controller.dart';
 import '../../wishmates/domain/wishmate.dart';
 import '../../wishmates/presentation/wishmates_providers.dart';
 import 'create_event_controller.dart';
@@ -63,9 +64,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   Future<void> _inviteToWishtick() async {
     await SharePlus.instance.share(
       ShareParams(
-        text:
-            'Join me on Wishtick — keep a wishlist so the people who love you '
-            'know what to gift. ${AppLinks.origin}',
+        text: messages
+            .joinWishtick(senderName: ref.read(sessionProvider).user?.name)
+            .combined,
       ),
     );
   }

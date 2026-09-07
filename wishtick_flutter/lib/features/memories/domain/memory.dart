@@ -109,6 +109,90 @@ class MemoryWish {
   );
 }
 
+/// What the person a memory was made for sent back to the people who filled it.
+///
+/// The same four kinds as a wish, composed on the same screen, travelling the
+/// other way — so it reuses [MemoryWishKind] rather than declaring a parallel
+/// enum that would have to be kept in step with it.
+@immutable
+class MemoryReply {
+  const MemoryReply({
+    required this.id,
+    required this.authorName,
+    required this.kind,
+    required this.durationMs,
+    required this.recipientCount,
+    required this.isMine,
+    required this.createdAt,
+    this.authorAvatarUrl,
+    this.text,
+    this.mediaUrl,
+    this.contentType,
+  });
+
+  final String id;
+  final String authorName;
+  final String? authorAvatarUrl;
+  final MemoryWishKind kind;
+  final String? text;
+  final String? mediaUrl;
+  final String? contentType;
+  final int durationMs;
+
+  /// How many people it went to — shown on the author's own copy.
+  final int recipientCount;
+
+  /// Whether the viewer wrote it, rather than received it.
+  final bool isMine;
+
+  final DateTime createdAt;
+
+  Duration get duration => Duration(milliseconds: durationMs);
+
+  factory MemoryReply.fromJson(Map<String, dynamic> json) => MemoryReply(
+    id: json['id'] as String,
+    authorName: json['authorName'] as String? ?? 'A friend',
+    authorAvatarUrl: json['authorAvatarUrl'] as String?,
+    kind: MemoryWishKind.fromWire(json['kind'] as String?),
+    text: json['text'] as String?,
+    mediaUrl: json['mediaUrl'] as String?,
+    contentType: json['contentType'] as String?,
+    durationMs: json['durationMs'] as int? ?? 0,
+    recipientCount: json['recipientCount'] as int? ?? 1,
+    isMine: json['isMine'] as bool? ?? false,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+  );
+}
+
+/// Somebody the viewer may reply to, and the memory that entitles them to it.
+///
+/// The same person can appear more than once — once per memory they sent — so
+/// the picker groups by [PersonIdentity.userId] and lists the titles beneath.
+@immutable
+class ReplyAudienceEntry {
+  const ReplyAudienceEntry({
+    required this.person,
+    required this.isHost,
+    required this.capsuleId,
+    required this.capsuleTitle,
+  });
+
+  final PersonIdentity person;
+
+  /// Whether they created the memory, as opposed to writing a wish in it.
+  final bool isHost;
+  final String capsuleId;
+  final String capsuleTitle;
+
+  factory ReplyAudienceEntry.fromJson(Map<String, dynamic> json) =>
+      ReplyAudienceEntry(
+        person: PersonIdentity.fromJson(json['person'] as Map<String, dynamic>),
+        isHost: json['isHost'] as bool? ?? false,
+        capsuleId: json['capsuleId'] as String,
+        capsuleTitle: json['capsuleTitle'] as String? ?? 'a memory',
+      );
+}
+
 /// The contribute link. Host-only — it is how people are invited in.
 @immutable
 class MemoryShare {
@@ -140,6 +224,7 @@ class MemoryCapsule {
     required this.contributors,
     required this.hostId,
     required this.isHost,
+    this.isRecipient = false,
     required this.includeYear,
     required this.createdAt,
     required this.wishes,
@@ -193,6 +278,10 @@ class MemoryCapsule {
 
   final String hostId;
   final bool isHost;
+
+  /// Whether the viewer is the person it was made for — what gates replying.
+  final bool isRecipient;
+
   final DateTime createdAt;
 
   /// Empty until the capsule opens. That is the time-lock, not a loading state.
@@ -249,6 +338,7 @@ class MemoryCapsule {
         const [],
     hostId: json['hostId'] as String? ?? '',
     isHost: json['isHost'] as bool? ?? false,
+    isRecipient: json['isRecipient'] as bool? ?? false,
     createdAt: DateTime.parse(json['createdAt'] as String),
     wishes:
         (json['wishes'] as List<dynamic>?)

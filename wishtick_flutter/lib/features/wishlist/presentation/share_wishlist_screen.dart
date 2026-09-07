@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_routes.dart';
+import '../../../core/share/share_messages.dart' as messages;
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/share_via_grid.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../../auth/presentation/session_controller.dart';
 import '../data/wishlist_repository.dart';
 import '../domain/wishlist.dart';
 
@@ -73,8 +75,14 @@ class _ShareWishlistScreenState extends ConsumerState<ShareWishlistScreen> {
     }
   }
 
-  String get _message =>
-      'Take a look at my wishlist "${widget.wishlist.title}" on Wishtick';
+  /// One builder for every wishlist share, signed by whoever is sending it.
+  String get _message => messages
+      .wishlist(
+        title: widget.wishlist.title,
+        slug: _share?.slug ?? '',
+        senderName: ref.read(sessionProvider).user?.name,
+      )
+      .text;
 
   Future<void> _onTargetTapped(ShareTarget target) async {
     final url = _share?.url;

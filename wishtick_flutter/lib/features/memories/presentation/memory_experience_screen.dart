@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/share/share_messages.dart' as messages;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/wishtick_error_text.dart';
 import '../../../core/widgets/wishtick_image.dart';
+import '../../auth/presentation/session_controller.dart';
 import '../data/memories_repository.dart';
 import '../domain/memory.dart';
 import 'memory_providers.dart';
@@ -86,7 +88,16 @@ class _MemoryExperienceScreenState
   Future<void> _share(MemoryCapsule capsule) async {
     await SharePlus.instance.share(
       ShareParams(
-        text: '${capsule.title} — ${capsule.wishCount} wishes, now open.',
+        // Carries its link now: this used to be a sentence about something
+        // the reader had no way to go and look at.
+        text: messages
+            .memoryOpened(
+              title: capsule.title,
+              wishCount: capsule.wishCount,
+              slug: capsule.share?.slug ?? '',
+              senderName: ref.read(sessionProvider).user?.name,
+            )
+            .combined,
         subject: capsule.title,
       ),
     );

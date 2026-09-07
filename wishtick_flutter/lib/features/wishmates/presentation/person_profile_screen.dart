@@ -8,8 +8,10 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/router/app_routes.dart';
+import '../../../core/share/share_messages.dart' as messages;
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../auth/presentation/session_controller.dart';
 import '../domain/wishmate.dart';
 import 'widgets/people_you_may_know.dart';
 import 'widgets/person_avatar.dart';
@@ -177,11 +179,18 @@ class _Hero extends ConsumerWidget {
   /// person, and inventing a URL here would put an address into somebody's
   /// WhatsApp that opens nothing. The handle is the part that works — it is
   /// what People Search matches on.
-  Future<void> _share(BuildContext context) async {
+  Future<void> _share(BuildContext context, WidgetRef ref) async {
     final person = profile.person;
     final handle = person.username == null ? person.name : person.handle;
     await SharePlus.instance.share(
-      ShareParams(text: 'Find $handle on Wishtick'),
+      ShareParams(
+        text: messages
+            .person(
+              handle: handle,
+              senderName: ref.read(sessionProvider).user?.name,
+            )
+            .combined,
+      ),
     );
   }
 
@@ -218,7 +227,7 @@ class _Hero extends ConsumerWidget {
               title: const Text('Share this profile'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                unawaited(_share(context));
+                unawaited(_share(context, ref));
               },
             ),
             if (connected)
@@ -291,7 +300,7 @@ class _Hero extends ConsumerWidget {
                 // overflow bare, which is what marks it as the primary of the
                 // pair. Sampled at 22% white over the plum.
                 fill: colors.textOnDark.withValues(alpha: 0.22),
-                onPressed: () => unawaited(_share(context)),
+                onPressed: () => unawaited(_share(context, ref)),
               ),
               _HeroAction(
                 icon: Icons.more_vert,

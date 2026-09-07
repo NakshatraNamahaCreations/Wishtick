@@ -150,9 +150,11 @@ export interface ReelReleasedEvent {
  * flips to `unlocked`, whether by the scheduled job or by the host opening it
  * early.
  *
- * The audience is the host and the contributors, NOT the recipient: a capsule
- * is made *for* a named person who frequently has no account — that is the
- * whole point of it — so there is nobody else to notify.
+ * The audience is the host, the contributors, and the recipient. The recipient
+ * was once left out, because a capsule could be addressed to a typed name with
+ * no account behind it; `recipientUserId` is a required WishMate now, and the
+ * person a memory was made for is the last one who should have to find out it
+ * opened by chance — not least because replying is now something they can do.
  */
 export const MEMORY_UNLOCKED = 'memory.unlocked';
 
@@ -160,8 +162,30 @@ export interface MemoryUnlockedEvent {
   capsuleId: string;
   hostId: string;
   contributorIds: string[];
+  /** Null only for a capsule made before recipients had to be accounts. */
+  recipientId: string | null;
   title: string;
   wishCount: number;
+}
+
+/**
+ * The recipient of an opened capsule replied to the people who filled it.
+ *
+ * Emitted once per send, with every addressee — the notification listener fans
+ * it out. One event rather than one per recipient because the author performed
+ * one action, and a partial fan-out is then visible as a partial failure of one
+ * job rather than as several unrelated ones.
+ */
+export const MEMORY_REPLY_SENT = 'memory.reply_sent';
+
+export interface MemoryReplySentEvent {
+  replyId: string;
+  authorId: string;
+  authorName: string;
+  recipientIds: string[];
+  /** For the deep link — the reply is read on a capsule's own screen. */
+  capsuleId: string;
+  capsuleTitle: string;
 }
 
 /**

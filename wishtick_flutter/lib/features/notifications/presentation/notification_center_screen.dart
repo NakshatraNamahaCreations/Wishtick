@@ -5,13 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/widgets/circle_back_button.dart';
 import '../data/notifications_repository.dart';
 import '../domain/app_notification.dart';
+import 'notification_destination.dart';
 import 'notification_providers.dart';
 
 /// "Notification Center" (`324:1392`).
@@ -52,32 +52,12 @@ class _NotificationCenterScreenState
         }),
       );
     }
-    final destination = _destinationOf(row);
+    // Shared with the push-tap handler, so a notification lands in the same
+    // place whether it was opened from here or from the lock screen.
+    final destination = destinationFor(row.type, row.refId);
     if (destination == null || !mounted) return;
     await context.push<void>(destination);
   }
-
-  /// Where a row goes when tapped.
-  ///
-  /// Unknown types deliberately go nowhere rather than guessing: the server
-  /// adds types faster than the client ships, and a wrong destination is worse
-  /// than an inert row.
-  String? _destinationOf(AppNotification row) => switch (row.type) {
-    'gift_fulfilled' ||
-    'group_gift_fulfilled' => AppRoutes.giftArrival(row.refId),
-    'thank_you' => AppRoutes.thankYou(row.refId),
-    'memory_unlocked' => AppRoutes.memory(row.refId),
-    'event_reminder' => AppRoutes.myEvents,
-    // The refId is a pair, not an id — two members asking the same friend
-    // must collapse to one row — so this goes to the list rather than trying
-    // to address one group.
-    'group_gift_invite' => AppRoutes.groupGiftInvites,
-    'group_gift_funded' ||
-    'group_gift_contribution' ||
-    'group_gift_joined' ||
-    'group_gift_purchased' => AppRoutes.groupGift(row.refId),
-    _ => null,
-  };
 
   @override
   Widget build(BuildContext context) {

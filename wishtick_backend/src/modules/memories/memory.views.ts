@@ -1,6 +1,7 @@
 import type { PublicIdentity } from 'src/modules/wishmates/wishmates.views';
 import { MEMORY_CONTENT_VISIBLE, MemoryStatus } from './memory.types';
 import type { MemoryCapsuleDocument } from './schemas/memory-capsule.schema';
+import type { MemoryReplyDocument } from './schemas/memory-reply.schema';
 import type { MemoryWishDocument } from './schemas/memory-wish.schema';
 
 /** A wish, projected — ONLY ever built for an unlocked capsule. */
@@ -21,6 +22,37 @@ export interface MemoryShareView {
   slug: string;
   url: string;
   expiresAt: Date | null;
+}
+
+/**
+ * A reply, projected.
+ *
+ * Not subject to the time-lock: a reply exists only because a capsule already
+ * opened, and it is the author's own words sent deliberately to these people.
+ */
+export interface MemoryReplyView {
+  id: string;
+  authorName: string;
+  authorAvatarUrl: string | null;
+  kind: string;
+  text: string | null;
+  mediaUrl: string | null;
+  contentType: string | null;
+  durationMs: number;
+  /** How many people it went to, so the author's own copy can say so. */
+  recipientCount: number;
+  /** Whether the caller wrote it, rather than received it. */
+  isMine: boolean;
+  createdAt: Date;
+}
+
+/** Somebody the caller may reply to, and the memory that entitles them to. */
+export interface ReplyAudienceEntry {
+  person: PublicIdentity;
+  /** Their part in it, for the picker's subtitle: "Host" or "Wrote a wish". */
+  isHost: boolean;
+  capsuleId: string;
+  capsuleTitle: string;
 }
 
 export interface MemoryCapsuleView {
@@ -60,6 +92,16 @@ export interface MemoryCapsuleView {
   hostId: string;
   /** Whether the caller created it, so the client need not compare ids. */
   isHost: boolean;
+  /**
+   * Whether the caller is the person it was made for.
+   *
+   * Its own flag rather than leaving the client to compare `person.userId`
+   * against the signed-in id, for the same reason [isHost] is: the capsule view
+   * is the only thing several of these screens fetch, and a client that has to
+   * cross-reference two providers to answer "is this mine" gets it wrong on the
+   * frame where one of them is still loading. It is also what gates replying.
+   */
+  isRecipient: boolean;
   createdAt: Date;
   // Everything below is empty until `unlocked` — the time-lock.
   wishes: MemoryWishView[];
@@ -85,6 +127,23 @@ const firstName = (name: string): string => name.trim().split(/\s+/)[0] || 'A fr
 const contributorNames = (wishes: MemoryWishDocument[]): string[] => [
   ...new Set(wishes.map((w) => firstName(w.contributorName))),
 ];
+
+export const toMemoryReplyView = (
+  reply: MemoryReplyDocument,
+  viewerId: string,
+): MemoryReplyView => ({
+  id: reply._id.toString(),
+  authorName: reply.authorName,
+  authorAvatarUrl: reply.authorAvatarUrl,
+  kind: reply.kind,
+  text: reply.text,
+  mediaUrl: reply.mediaUrl,
+  contentType: reply.contentType,
+  durationMs: reply.durationMs,
+  recipientCount: reply.recipientIds.length,
+  isMine: reply.authorId.toString() === viewerId,
+  createdAt: reply.createdAt,
+});
 
 export const toMemoryWishView = (wish: MemoryWishDocument): MemoryWishView => ({
   id: wish._id.toString(),
@@ -143,6 +202,7 @@ export const toMemoryCapsuleView = (
     contributors: contributorNames(wishes),
     hostId: capsule.hostId.toString(),
     isHost,
+    isRecipient: opts.viewerId !== null && capsule.recipientUserId?.toString() === opts.viewerId,
     createdAt: capsule.createdAt,
     wishes: unlocked ? wishes.map(toMemoryWishView) : [],
   };

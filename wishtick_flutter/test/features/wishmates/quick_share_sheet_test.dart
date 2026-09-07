@@ -72,9 +72,13 @@ void main() {
     slug: 'abc123',
     isPublic: true,
   );
-  const publicEvent = EventShareTarget(
+  final publicEvent = EventShareTarget(
     eventId: 'ev_1',
     title: 'Ananya’s Birthday',
+    // Carried so this sheet sends the same long invitation the event's own
+    // share screen does, rather than just the title.
+    startsAt: DateTime(2026, 9, 5, 19, 20),
+    venue: 'Mysore Socials',
     slug: 'party99',
     isPublic: true,
   );

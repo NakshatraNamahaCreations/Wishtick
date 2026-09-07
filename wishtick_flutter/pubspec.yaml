@@ -54,6 +54,14 @@ dependencies:
   firebase_core: ^3.15.2
   firebase_messaging: ^15.2.10
 
+  # Draws the notification when one arrives while the app is open, which is the
+  # one case FCM does not cover: Android hands a foreground message to the app
+  # instead of the tray, so without this a push that lands mid-session is
+  # silent and invisible. Also owns the notification channel that the manifest's
+  # `default_notification_channel_id` names, so background and foreground
+  # notifications share one set of user-visible settings.
+  flutter_local_notifications: ^19.4.2
+
   # The chat composer's emoji keyboard. Chosen over hand-rolling one: a picker
   # is a categorised, searchable, skin-tone-aware set of ~1800 codepoints with
   # a recents list, and the hard part is knowing which of them the running

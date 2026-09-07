@@ -21,6 +21,7 @@ import '../../home/presentation/home_controller.dart';
 import '../../memories/presentation/add_wish_controller.dart';
 import '../../memories/presentation/create_memory_controller.dart';
 import '../../memories/presentation/my_wishes_screen.dart';
+import '../../memories/presentation/reply_controller.dart';
 import '../../notifications/presentation/notification_providers.dart';
 import '../../notifications/presentation/thank_you_controller.dart';
 import '../../onboarding/presentation/onboarding_flow_controller.dart';
@@ -114,6 +115,11 @@ void invalidateSessionScopedProviders(Ref ref) {
   // Sharper than most: these are wishes the time-lock hides from everybody but
   // the one person who wrote them.
   ref.invalidate(myWishesProvider);
+  // A half-written reply, who it is addressed to, and the replies themselves —
+  // the audience list alone names everyone who has sent this user a memory.
+  ref.invalidate(replyProvider);
+  ref.invalidate(replyAudienceProvider);
+  ref.invalidate(memoryRepliesProvider);
 
   // Onboarding — including the half-filled wizard, which is per-person.
   ref.invalidate(onboardingOptionsProvider);

@@ -30,6 +30,26 @@ const OFFSETS: { key: ReminderOffset; ms: number }[] = [
 ];
 
 /**
+ * The offset as a person would say it.
+ *
+ * The offset keys are scheduling identifiers, not English. Passed to the
+ * renderer raw they were interpolated straight into the copy, so the reminder
+ * read "Diwali Party is t-1d" — on a lock screen, by SMS, and in an email
+ * subject line. Lives here rather than in the renderer because this is the
+ * module that decides what the offsets are.
+ */
+/// Takes a plain string, not [ReminderOffset]: the value reaches the renderer
+/// off a BullMQ payload that a previous deploy may have written, so an offset
+/// this build has never heard of is a real possibility rather than a type
+/// error. It falls back to something that still reads as English.
+export const reminderWhenText = (offset: string): string =>
+  ({
+    't-7d': 'in a week',
+    't-1d': 'tomorrow',
+    't-2h': 'in 2 hours',
+  })[offset] ?? 'soon';
+
+/**
  * Deterministic job id for one reminder.
  *
  * Hyphens, never ':' — BullMQ rejects a custom job id containing a colon
